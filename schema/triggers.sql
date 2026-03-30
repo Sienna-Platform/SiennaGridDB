@@ -512,3 +512,200 @@ FOR EACH ROW
 BEGIN
     DELETE FROM entities WHERE id = OLD.id;
 END;
+
+-- =============================================================================
+-- Unit Registry Immutability Triggers
+-- UPDATE and DELETE are blocked unconditionally.
+-- INSERT is blocked only after the registry is sealed (checksum exists).
+-- =============================================================================
+
+-- system_metadata
+CREATE TRIGGER IF NOT EXISTS prevent_system_metadata_update
+BEFORE UPDATE ON system_metadata
+BEGIN
+    SELECT RAISE(ABORT,
+        'system_metadata is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_system_metadata_delete
+BEFORE DELETE ON system_metadata
+BEGIN
+    SELECT RAISE(ABORT,
+        'system_metadata is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_system_metadata_insert
+BEFORE INSERT ON system_metadata
+WHEN EXISTS (
+    SELECT 1 FROM system_metadata
+    WHERE key = 'unit_conventions_checksum'
+)
+BEGIN
+    SELECT RAISE(ABORT,
+        'system_metadata is sealed. New entries require a schema migration.');
+END;
+
+-- quantity_types
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_update
+BEFORE UPDATE ON quantity_types
+BEGIN
+    SELECT RAISE(ABORT,
+        'quantity_types is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_delete
+BEFORE DELETE ON quantity_types
+BEGIN
+    SELECT RAISE(ABORT,
+        'quantity_types is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_insert
+BEFORE INSERT ON quantity_types
+WHEN EXISTS (
+    SELECT 1 FROM system_metadata
+    WHERE key = 'unit_conventions_checksum'
+)
+BEGIN
+    SELECT RAISE(ABORT,
+        'quantity_types is sealed. New entries require a schema migration.');
+END;
+
+-- unit_conventions
+CREATE TRIGGER IF NOT EXISTS prevent_unit_conventions_update
+BEFORE UPDATE ON unit_conventions
+BEGIN
+    SELECT RAISE(ABORT,
+        'unit_conventions is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_unit_conventions_delete
+BEFORE DELETE ON unit_conventions
+BEGIN
+    SELECT RAISE(ABORT,
+        'unit_conventions is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_unit_conventions_insert
+BEFORE INSERT ON unit_conventions
+WHEN EXISTS (
+    SELECT 1 FROM system_metadata
+    WHERE key = 'unit_conventions_checksum'
+)
+BEGIN
+    SELECT RAISE(ABORT,
+        'unit_conventions is sealed. New entries require a schema migration.');
+END;
+
+-- known_units
+CREATE TRIGGER IF NOT EXISTS prevent_known_units_update
+BEFORE UPDATE ON known_units
+BEGIN
+    SELECT RAISE(ABORT,
+        'known_units is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_known_units_delete
+BEFORE DELETE ON known_units
+BEGIN
+    SELECT RAISE(ABORT,
+        'known_units is immutable. Changes require a schema migration.');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_known_units_insert
+BEFORE INSERT ON known_units
+WHEN EXISTS (
+    SELECT 1 FROM system_metadata
+    WHERE key = 'unit_conventions_checksum'
+)
+BEGIN
+    SELECT RAISE(ABORT,
+        'known_units is sealed. New entries require a schema migration.');
+END;
+
+-- =============================================================================
+-- Unit Convention Validation Triggers
+-- =============================================================================
+
+-- unique policy requires a companion column
+CREATE TRIGGER IF NOT EXISTS validate_unit_convention_companion
+BEFORE INSERT ON unit_conventions
+WHEN NEW.unit_policy = 'unique' AND NEW.companion_column IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'unit_policy unique requires companion_column.');
+END;
+
+-- =============================================================================
+-- Attribute Unit Validation Triggers (registry-linked)
+-- Known attribute names must match registered unit and quantity_type.
+-- Unknown numeric attributes must provide some unit.
+-- Non-numeric attributes pass freely.
+-- =============================================================================
+
+CREATE TRIGGER IF NOT EXISTS validate_attribute_unit_insert
+BEFORE INSERT ON attributes
+BEGIN
+    SELECT CASE
+        -- Known attribute name: must match registered unit
+        WHEN EXISTS (
+            SELECT 1 FROM unit_conventions
+            WHERE table_name = 'attributes' AND column_name = NEW.name
+        ) AND (
+            NEW.unit IS NULL
+            OR NEW.unit != (
+                SELECT unit FROM unit_conventions
+                WHERE table_name = 'attributes' AND column_name = NEW.name
+            )
+            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_type != (
+                SELECT quantity_type FROM unit_conventions
+                WHERE table_name = 'attributes' AND column_name = NEW.name
+            )
+        )
+        THEN RAISE(ABORT,
+            'Known attribute must use the registered unit and quantity_type from unit_conventions.')
+        -- Unknown numeric attribute: must have a unit
+        WHEN NOT EXISTS (
+            SELECT 1 FROM unit_conventions
+            WHERE table_name = 'attributes' AND column_name = NEW.name
+        )
+        AND json_type(NEW.value) IN ('integer', 'real')
+        AND NEW.unit IS NULL
+        THEN RAISE(ABORT,
+            'Numeric attributes require a UCUM unit code. Use 1 for dimensionless.')
+    END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_attribute_unit_update
+BEFORE UPDATE ON attributes
+BEGIN
+    SELECT CASE
+        -- Known attribute name: must match registered unit
+        WHEN EXISTS (
+            SELECT 1 FROM unit_conventions
+            WHERE table_name = 'attributes' AND column_name = NEW.name
+        ) AND (
+            NEW.unit IS NULL
+            OR NEW.unit != (
+                SELECT unit FROM unit_conventions
+                WHERE table_name = 'attributes' AND column_name = NEW.name
+            )
+            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_type != (
+                SELECT quantity_type FROM unit_conventions
+                WHERE table_name = 'attributes' AND column_name = NEW.name
+            )
+        )
+        THEN RAISE(ABORT,
+            'Known attribute must use the registered unit and quantity_type from unit_conventions.')
+        -- Unknown numeric attribute: must have a unit
+        WHEN NOT EXISTS (
+            SELECT 1 FROM unit_conventions
+            WHERE table_name = 'attributes' AND column_name = NEW.name
+        )
+        AND json_type(NEW.value) IN ('integer', 'real')
+        AND NEW.unit IS NULL
+        THEN RAISE(ABORT,
+            'Numeric attributes require a UCUM unit code. Use 1 for dimensionless.')
+    END;
+END;
