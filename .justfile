@@ -15,11 +15,15 @@ create-triggers db=db-name: create-schema
     @echo "Adding triggers to schema"
     @{{sqlite-command}} {{db}} < schema/triggers.sql
 
-create-views db=db-name: create-schema
+create-unit-registry db=db-name: create-triggers
+    @echo "Populating unit registry"
+    @{{sqlite-command}} {{db}} < schema/unit_registry.sql
+
+create-views db=db-name: create-unit-registry
     @echo "Adding views to schema"
     @{{sqlite-command}} {{db}} < schema/views.sql
 
-new-db db=db-name: create-schema create-triggers create-views
+new-db db=db-name: create-schema create-triggers create-unit-registry create-views
     @{{sqlite-command}} {{sqlite-options}} {{db}} "select count(*) from entities;"
 
 format sql-schema:
