@@ -620,7 +620,7 @@ CREATE TRIGGER IF NOT EXISTS validate_attribute_unit_insert
 BEFORE INSERT ON attributes
 BEGIN
     SELECT CASE
-        -- Known attribute name: must match registered unit
+        -- Known attribute name: must match registered unit and quantity_type
         WHEN EXISTS (
             SELECT 1 FROM unit_conventions
             WHERE table_name = 'attributes' AND column_name = NEW.name
@@ -638,15 +638,16 @@ BEGIN
         )
         THEN RAISE(ABORT,
             'Known attribute must use the registered unit and quantity_type from unit_conventions.')
-        -- Unknown numeric attribute: must have a unit
+        -- Unknown attribute with physical value: must have unit and quantity_type
+        -- Physical = anything except boolean, text, or null
         WHEN NOT EXISTS (
             SELECT 1 FROM unit_conventions
             WHERE table_name = 'attributes' AND column_name = NEW.name
         )
-        AND json_type(NEW.value) IN ('integer', 'real')
-        AND NEW.unit IS NULL
+        AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
+        AND (NEW.unit IS NULL OR NEW.quantity_type IS NULL)
         THEN RAISE(ABORT,
-            'Numeric attributes require a UCUM unit code. Use 1 for dimensionless.')
+            'Attributes with numeric or structured values require unit and quantity_type. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.')
     END;
 END;
 
@@ -654,7 +655,7 @@ CREATE TRIGGER IF NOT EXISTS validate_attribute_unit_update
 BEFORE UPDATE ON attributes
 BEGIN
     SELECT CASE
-        -- Known attribute name: must match registered unit
+        -- Known attribute name: must match registered unit and quantity_type
         WHEN EXISTS (
             SELECT 1 FROM unit_conventions
             WHERE table_name = 'attributes' AND column_name = NEW.name
@@ -672,14 +673,14 @@ BEGIN
         )
         THEN RAISE(ABORT,
             'Known attribute must use the registered unit and quantity_type from unit_conventions.')
-        -- Unknown numeric attribute: must have a unit
+        -- Unknown attribute with physical value: must have unit and quantity_type
         WHEN NOT EXISTS (
             SELECT 1 FROM unit_conventions
             WHERE table_name = 'attributes' AND column_name = NEW.name
         )
-        AND json_type(NEW.value) IN ('integer', 'real')
-        AND NEW.unit IS NULL
+        AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
+        AND (NEW.unit IS NULL OR NEW.quantity_type IS NULL)
         THEN RAISE(ABORT,
-            'Numeric attributes require a UCUM unit code. Use 1 for dimensionless.')
+            'Attributes with numeric or structured values require unit and quantity_type. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.')
     END;
 END;
