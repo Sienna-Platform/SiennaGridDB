@@ -64,6 +64,14 @@ DROP TABLE IF EXISTS plant_associations;
 
 DROP TABLE IF EXISTS plants;
 
+DROP TABLE IF EXISTS known_units;
+
+DROP TABLE IF EXISTS unit_conventions;
+
+DROP TABLE IF EXISTS quantity_types;
+
+DROP TABLE IF EXISTS system_metadata;
+
 PRAGMA foreign_keys = ON;
 
 -- NOTE: This table should not be interacted directly since it gets populated
@@ -407,6 +415,8 @@ CREATE TABLE attributes (
     TYPE TEXT NOT NULL,
     name TEXT NOT NULL,
     value JSON NOT NULL,
+    unit TEXT NULL,
+    quantity_type TEXT NULL,
     json_type TEXT generated always AS (json_type(value)) virtual,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE(entity_id, name)
@@ -508,3 +518,44 @@ CREATE TABLE static_time_series (
 CREATE INDEX idx_static_time_series_uuid_idx ON static_time_series (uuid, idx);
 CREATE INDEX idx_arcs_from ON arcs (from_id);
 CREATE INDEX idx_arcs_to ON arcs (to_id);
+
+-- Unit System Registry Tables
+-- These tables are schema-level metadata, not runtime data.
+-- They are sealed after migration and protected by immutability triggers.
+
+CREATE TABLE system_metadata (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL,
+    description TEXT NULL
+) strict;
+
+CREATE TABLE quantity_types (
+    name TEXT PRIMARY KEY NOT NULL,
+    default_unit TEXT NOT NULL,
+    dimension TEXT NOT NULL,
+    description TEXT NULL,
+    cim_domain_class TEXT NULL
+) strict;
+
+CREATE TABLE unit_conventions (
+    id INTEGER PRIMARY KEY,
+    table_name TEXT NOT NULL,
+    column_name TEXT NOT NULL,
+    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    unit TEXT NOT NULL,
+    unit_policy TEXT NOT NULL DEFAULT 'fixed'
+        CHECK (unit_policy IN ('fixed', 'unique')),
+    companion_column TEXT NULL,
+    is_per_unit INTEGER NOT NULL DEFAULT 0,
+    per_unit_base_column TEXT NULL,
+    description TEXT NULL,
+    UNIQUE(table_name, column_name)
+) strict;
+
+CREATE TABLE known_units (
+    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    unit TEXT NOT NULL,
+    conversion_to_default REAL NULL,
+    description TEXT NULL,
+    PRIMARY KEY (quantity_type, unit)
+) strict;
