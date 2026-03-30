@@ -597,32 +597,6 @@ BEGIN
         'unit_conventions is sealed. New entries require a schema migration.');
 END;
 
--- known_units
-CREATE TRIGGER IF NOT EXISTS prevent_known_units_update
-BEFORE UPDATE ON known_units
-BEGIN
-    SELECT RAISE(ABORT,
-        'known_units is immutable. Changes require a schema migration.');
-END;
-
-CREATE TRIGGER IF NOT EXISTS prevent_known_units_delete
-BEFORE DELETE ON known_units
-BEGIN
-    SELECT RAISE(ABORT,
-        'known_units is immutable. Changes require a schema migration.');
-END;
-
-CREATE TRIGGER IF NOT EXISTS prevent_known_units_insert
-BEFORE INSERT ON known_units
-WHEN EXISTS (
-    SELECT 1 FROM system_metadata
-    WHERE key = 'unit_conventions_checksum'
-)
-BEGIN
-    SELECT RAISE(ABORT,
-        'known_units is sealed. New entries require a schema migration.');
-END;
-
 -- =============================================================================
 -- Unit Convention Validation Triggers
 -- =============================================================================
