@@ -1,3 +1,19 @@
+CREATE VIEW IF NOT EXISTS column_units AS
+SELECT
+    uc.table_name,
+    uc.column_name,
+    uc.unit,
+    uc.unit_policy,
+    uc.companion_column,
+    uc.quantity_type,
+    qt.dimension,
+    uc.is_per_unit,
+    uc.per_unit_base_column,
+    uc.description
+FROM unit_conventions uc
+JOIN quantity_types qt ON uc.quantity_type = qt.name
+ORDER BY uc.table_name, uc.column_name;
+
 CREATE VIEW IF NOT EXISTS operational_data AS
 SELECT e.id AS entity_id,
     e.entity_table,
