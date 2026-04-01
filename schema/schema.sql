@@ -124,8 +124,9 @@ CREATE TABLE planning_regions (
 CREATE TABLE balancing_topologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    area INTEGER NULL REFERENCES planning_regions (id) ON DELETE SET NULL,
-    description TEXT NULL
+    area INTEGER NULL REFERENCES planning_regions (id) ON DELETE
+    SET NULL,
+        description TEXT NULL
 ) strict;
 
 -- NOTE: The purpose of this table is to provide links different entities that
@@ -520,9 +521,8 @@ CREATE INDEX idx_arcs_to ON arcs (to_id);
 -- Unit System Registry Tables
 -- These tables are schema-level metadata, not runtime data.
 -- They are sealed after migration and protected by immutability triggers.
-
 CREATE TABLE system_metadata (
-    key TEXT PRIMARY KEY NOT NULL,
+    KEY TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL,
     description TEXT NULL
 ) strict;
@@ -531,6 +531,7 @@ CREATE TABLE quantity_types (
     name TEXT PRIMARY KEY NOT NULL,
     default_unit TEXT NOT NULL,
     dimension TEXT NOT NULL,
+    per_unit INTEGER NOT NULL DEFAULT 0,
     description TEXT NULL
 ) strict;
 
@@ -539,13 +540,10 @@ CREATE TABLE unit_conventions (
     table_name TEXT NOT NULL,
     column_name TEXT NOT NULL,
     quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    -- "unique" unit indicates you should check the companion_column as the corresponding unit
+    -- "1" indicates you should use companion_column to scale
     unit TEXT NOT NULL,
-    unit_policy TEXT NOT NULL DEFAULT 'fixed'
-        CHECK (unit_policy IN ('fixed', 'unique')),
     companion_column TEXT NULL,
-    is_per_unit INTEGER NOT NULL DEFAULT 0,
-    per_unit_base_column TEXT NULL,
     description TEXT NULL,
     UNIQUE(table_name, column_name)
 ) strict;
-

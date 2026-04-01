@@ -604,7 +604,7 @@ END;
 -- unique policy requires a companion column
 CREATE TRIGGER IF NOT EXISTS validate_unit_convention_companion
 BEFORE INSERT ON unit_conventions
-WHEN NEW.unit_policy = 'unique' AND NEW.companion_column IS NULL
+WHEN NEW.unit = 'unique' AND NEW.companion_column IS NULL
 BEGIN
     SELECT RAISE(ABORT, 'unit_policy unique requires companion_column.');
 END;

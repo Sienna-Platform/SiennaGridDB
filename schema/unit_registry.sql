@@ -44,88 +44,89 @@ INSERT INTO quantity_types (name, default_unit, dimension, description) VALUES
 -- 3. Unit conventions — entity table columns
 
 -- transmission_lines
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('transmission_lines', 'continuous_rating', 'ApparentPower',        'MVA',    'fixed', 'Continuous thermal rating'),
-    ('transmission_lines', 'ste_rating',        'ApparentPower',        'MVA',    'fixed', 'Short-term emergency rating'),
-    ('transmission_lines', 'lte_rating',        'ApparentPower',        'MVA',    'fixed', 'Long-term emergency rating'),
-    ('transmission_lines', 'line_length',       'Length',               'km',     'fixed', 'Line length');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('transmission_lines', 'continuous_rating', 'ApparentPower',        'MVA',    'Continuous thermal rating'),
+    ('transmission_lines', 'ste_rating',        'ApparentPower',        'MVA',    'Short-term emergency rating'),
+    ('transmission_lines', 'lte_rating',        'ApparentPower',        'MVA',    'Long-term emergency rating'),
+    ('transmission_lines', 'line_length',       'Length',               'km',     'Line length');
 
 -- transmission_interchanges
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('transmission_interchanges', 'max_flow_from', 'ActivePower', 'MW', 'fixed', 'Maximum flow from'),
-    ('transmission_interchanges', 'max_flow_to',   'ActivePower', 'MW', 'fixed', 'Maximum flow to');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('transmission_interchanges', 'max_flow_from', 'ActivePower', 'MW', 'Maximum flow from'),
+    ('transmission_interchanges', 'max_flow_to',   'ActivePower', 'MW', 'Maximum flow to');
 
 -- thermal_generators
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('thermal_generators', 'rating',                'ApparentPower',        'MVA',    'fixed', 'Nameplate rating'),
-    ('thermal_generators', 'base_power',            'ActivePower',          'MW',     'fixed', 'Per-unit base for this device'),
-    ('thermal_generators', 'active_power',          'ActivePower',          'MW',     'fixed', 'Initial active power setpoint'),
-    ('thermal_generators', 'reactive_power',        'ReactivePower',        'MVAr',   'fixed', 'Initial reactive power setpoint'),
-    ('thermal_generators', 'active_power_limits',   'ActivePower',          'MW',     'fixed', 'JSON {min, max}'),
-    ('thermal_generators', 'reactive_power_limits', 'ReactivePower',        'MVAr',   'fixed', 'JSON {min, max}'),
-    ('thermal_generators', 'ramp_limits',           'ActivePowerChangeRate','MW/min', 'fixed', 'JSON {up, down}'),
-    ('thermal_generators', 'time_limits',           'Duration',             'h',      'fixed', 'JSON {up, down}');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('thermal_generators', 'rating',                'ApparentPower',        'MVA',    'Nameplate rating'),
+    ('thermal_generators', 'base_power',            'ActivePower',          'MW',     'Per-unit base for this device'),
+    ('thermal_generators', 'active_power',          'ActivePower',          'MW',     'Initial active power setpoint'),
+    ('thermal_generators', 'reactive_power',        'ReactivePower',        'MVAr',   'Initial reactive power setpoint'),
+    ('thermal_generators', 'active_power_limits',   'ActivePower',          'MW',     'JSON {min, max}'),
+    ('thermal_generators', 'reactive_power_limits', 'ReactivePower',        'MVAr',   'JSON {min, max}'),
+    ('thermal_generators', 'ramp_limits',           'ActivePowerChangeRate','MW/min', 'JSON {up, down}'),
+    ('thermal_generators', 'time_limits',           'Duration',             'h',      'JSON {up, down}');
 
 -- renewable_generators
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('renewable_generators', 'rating',                'ApparentPower', 'MVA',  'fixed', 'Nameplate rating'),
-    ('renewable_generators', 'base_power',            'ActivePower',   'MW',   'fixed', 'Per-unit base for this device'),
-    ('renewable_generators', 'power_factor',          'PowerFactor',   '1',    'fixed', 'Power factor'),
-    ('renewable_generators', 'active_power',          'ActivePower',   'MW',   'fixed', 'Initial active power setpoint'),
-    ('renewable_generators', 'reactive_power',        'ReactivePower', 'MVAr', 'fixed', 'Initial reactive power setpoint'),
-    ('renewable_generators', 'reactive_power_limits', 'ReactivePower', 'MVAr', 'fixed', 'JSON {min, max}');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('renewable_generators', 'rating',                'ApparentPower', 'MVA',  'Nameplate rating'),
+    ('renewable_generators', 'base_power',            'ActivePower',   'MW',   'Per-unit base for this device'),
+    ('renewable_generators', 'power_factor',          'PowerFactor',   '1',    'Power factor'),
+    ('renewable_generators', 'active_power',          'ActivePower',   'MW',   'Initial active power setpoint'),
+    ('renewable_generators', 'reactive_power',        'ReactivePower', 'MVAr', 'Initial reactive power setpoint'),
+    ('renewable_generators', 'reactive_power_limits', 'ReactivePower', 'MVAr', 'JSON {min, max}');
 
 -- hydro_generators
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('hydro_generators', 'rating',                'ApparentPower',        'MVA',    'fixed', 'Nameplate rating'),
-    ('hydro_generators', 'base_power',            'ActivePower',          'MW',     'fixed', 'Per-unit base for this device'),
-    ('hydro_generators', 'active_power',          'ActivePower',          'MW',     'fixed', 'Initial active power setpoint'),
-    ('hydro_generators', 'reactive_power',        'ReactivePower',        'MVAr',   'fixed', 'Initial reactive power setpoint'),
-    ('hydro_generators', 'active_power_limits',   'ActivePower',          'MW',     'fixed', 'JSON {min, max}'),
-    ('hydro_generators', 'reactive_power_limits', 'ReactivePower',        'MVAr',   'fixed', 'JSON {min, max}'),
-    ('hydro_generators', 'ramp_limits',           'ActivePowerChangeRate','MW/min', 'fixed', 'JSON {up, down}'),
-    ('hydro_generators', 'time_limits',           'Duration',             'h',      'fixed', 'JSON {up, down}'),
-    ('hydro_generators', 'powerhouse_elevation',  'Elevation',            'm',      'fixed', 'Powerhouse elevation'),
-    ('hydro_generators', 'outflow_limits',        'VolumeFlowRate',       'm3/s',   'fixed', 'JSON {min, max}'),
-    ('hydro_generators', 'conversion_factor',     'Dimensionless',        '1',      'fixed', 'Conversion factor'),
-    ('hydro_generators', 'travel_time',           'Duration',             'h',      'fixed', 'Water travel time');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('hydro_generators', 'rating',                'ApparentPower',        'MVA',    'Nameplate rating'),
+    ('hydro_generators', 'base_power',            'ActivePower',          'MW',     'Per-unit base for this device'),
+    ('hydro_generators', 'active_power',          'ActivePower',          'MW',     'Initial active power setpoint'),
+    ('hydro_generators', 'reactive_power',        'ReactivePower',        'MVAr',   'Initial reactive power setpoint'),
+    ('hydro_generators', 'active_power_limits',   'ActivePower',          'MW',     'JSON {min, max}'),
+    ('hydro_generators', 'reactive_power_limits', 'ReactivePower',        'MVAr',   'JSON {min, max}'),
+    ('hydro_generators', 'ramp_limits',           'ActivePowerChangeRate','MW/min', 'JSON {up, down}'),
+    ('hydro_generators', 'time_limits',           'Duration',             'h',      'JSON {up, down}'),
+    ('hydro_generators', 'powerhouse_elevation',  'Elevation',            'm',      'Powerhouse elevation'),
+    ('hydro_generators', 'outflow_limits',        'VolumeFlowRate',       'm3/s',   'JSON {min, max}'),
+    ('hydro_generators', 'conversion_factor',     'Dimensionless',        '1',      'Conversion factor'),
+    ('hydro_generators', 'travel_time',           'Duration',             'h',      'Water travel time');
 
 -- storage_units
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('storage_units', 'rating',                        'ApparentPower', 'MVA',  'fixed', 'Nameplate rating'),
-    ('storage_units', 'base_power',                    'ActivePower',   'MW',   'fixed', 'Per-unit base for this device'),
-    ('storage_units', 'storage_capacity',              'RealEnergy',    'MWh',  'fixed', 'Total storage capacity'),
-    ('storage_units', 'storage_level_limits',          'RealEnergy',    'MWh',  'fixed', 'JSON {min, max}'),
-    ('storage_units', 'initial_storage_capacity_level','RealEnergy',    'MWh',  'fixed', 'Initial storage level'),
-    ('storage_units', 'input_active_power_limits',     'ActivePower',   'MW',   'fixed', 'JSON {min, max} charging'),
-    ('storage_units', 'output_active_power_limits',    'ActivePower',   'MW',   'fixed', 'JSON {min, max} discharging'),
-    ('storage_units', 'efficiency',                    'Dimensionless', '1',    'fixed', 'JSON {in, out}'),
-    ('storage_units', 'reactive_power_limits',         'ReactivePower', 'MVAr', 'fixed', 'JSON {min, max}'),
-    ('storage_units', 'active_power',                  'ActivePower',   'MW',   'fixed', 'Initial active power setpoint'),
-    ('storage_units', 'reactive_power',                'ReactivePower', 'MVAr', 'fixed', 'Initial reactive power setpoint'),
-    ('storage_units', 'conversion_factor',             'Dimensionless', '1',    'fixed', 'Conversion factor'),
-    ('storage_units', 'storage_target',                'RealEnergy',    'MWh',  'fixed', 'Storage target level');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('storage_units', 'rating',                        'ApparentPower', 'MVA',  'Nameplate rating'),
+    ('storage_units', 'base_power',                    'ActivePower',   'MW',   'Per-unit base for this device'),
+    ('storage_units', 'storage_capacity',              'RealEnergy',    'MWh',  'Total storage capacity'),
+    ('storage_units', 'storage_level_limits',          'RealEnergy',    'MWh',  'JSON {min, max}'),
+    ('storage_units', 'initial_storage_capacity_level','RealEnergy',    'MWh',  'Initial storage level'),
+    ('storage_units', 'input_active_power_limits',     'ActivePower',   'MW',   'JSON {min, max} charging'),
+    ('storage_units', 'output_active_power_limits',    'ActivePower',   'MW',   'JSON {min, max} discharging'),
+    ('storage_units', 'efficiency',                    'Dimensionless', '1',    'JSON {in, out}'),
+    ('storage_units', 'reactive_power_limits',         'ReactivePower', 'MVAr', 'JSON {min, max}'),
+    ('storage_units', 'active_power',                  'ActivePower',   'MW',   'Initial active power setpoint'),
+    ('storage_units', 'reactive_power',                'ReactivePower', 'MVAr', 'Initial reactive power setpoint'),
+    ('storage_units', 'conversion_factor',             'Dimensionless', '1',    'Conversion factor'),
+    ('storage_units', 'storage_target',                'RealEnergy',    'MWh',  'Storage target level');
 
 -- hydro_reservoirs
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('hydro_reservoirs', 'storage_level_limits', 'Volume',         'm3',   'fixed', 'JSON {min, max}'),
-    ('hydro_reservoirs', 'initial_level',        'Volume',         'm3',   'fixed', 'Initial reservoir level'),
-    ('hydro_reservoirs', 'spillage_limits',      'VolumeFlowRate', 'm3/s', 'fixed', 'JSON {min, max}'),
-    ('hydro_reservoirs', 'inflow',               'VolumeFlowRate', 'm3/s', 'fixed', 'Inflow rate'),
-    ('hydro_reservoirs', 'outflow',              'VolumeFlowRate', 'm3/s', 'fixed', 'Outflow rate'),
-    ('hydro_reservoirs', 'intake_elevation',     'Elevation',      'm',    'fixed', 'Intake elevation');
+-- This is currently incorrect. We need to add unit columns and fields in SiennaSchema.
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('hydro_reservoirs', 'storage_level_limits', 'Volume',         'm3',   'JSON {min, max}'),
+    ('hydro_reservoirs', 'initial_level',        'Volume',         'm3',   'Initial reservoir level'),
+    ('hydro_reservoirs', 'spillage_limits',      'VolumeFlowRate', 'm3/s', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'inflow',               'VolumeFlowRate', 'm3/s', 'Inflow rate'),
+    ('hydro_reservoirs', 'outflow',              'VolumeFlowRate', 'm3/s', 'Outflow rate'),
+    ('hydro_reservoirs', 'intake_elevation',     'Elevation',      'm',    'Intake elevation');
 
 -- loads
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('loads', 'base_power', 'ActivePower', 'MW', 'fixed', 'Base power');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('loads', 'base_power', 'ActivePower', 'MW', 'Base power');
 
 -- Well-known attribute names (registry-linked validation)
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, unit_policy, description) VALUES
-    ('attributes', 'active_power_limits',      'ActivePower',          'MW',     'fixed', 'Active power limits stored as attribute'),
-    ('attributes', 'time_limits',              'Duration',             'h',      'fixed', 'Time limits stored as attribute'),
-    ('attributes', 'ramp_limits',              'ActivePowerChangeRate','MW/min', 'fixed', 'Ramp limits stored as attribute'),
-    ('attributes', 'efficiency',               'Dimensionless',        '1',      'fixed', 'Efficiency stored as attribute'),
-    ('attributes', 'active_power_limits_pump', 'ActivePower',          'MW',     'fixed', 'HydroPumpTurbine pump limits stored as attribute');
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, description) VALUES
+    ('attributes', 'active_power_limits',      'ActivePower',          'MW',     'Active power limits stored as attribute'),
+    ('attributes', 'time_limits',              'Duration',             'h',      'Time limits stored as attribute'),
+    ('attributes', 'ramp_limits',              'ActivePowerChangeRate','MW/min', 'Ramp limits stored as attribute'),
+    ('attributes', 'efficiency',               'Dimensionless',        '1',      'Efficiency stored as attribute'),
+    ('attributes', 'active_power_limits_pump', 'ActivePower',          'MW',     'HydroPumpTurbine pump limits stored as attribute');
 
 -- 4. Seal the registry — compute and store checksum
 -- Once this row exists, INSERT triggers on registry tables activate.
@@ -133,7 +134,7 @@ INSERT INTO system_metadata (key, value, description) VALUES (
     'unit_conventions_checksum',
     (SELECT group_concat(
         table_name || '.' || column_name || ':' ||
-        quantity_type || ':' || unit || ':' || unit_policy,
+        quantity_type || ':' || unit,
         ';'
     ) FROM unit_conventions ORDER BY table_name, column_name),
     'Registry content fingerprint — recompute to verify integrity'

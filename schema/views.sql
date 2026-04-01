@@ -3,7 +3,6 @@ SELECT
     uc.table_name,
     uc.column_name,
     uc.unit,
-    uc.unit_policy,
     uc.companion_column,
     uc.quantity_type,
     qt.dimension,
