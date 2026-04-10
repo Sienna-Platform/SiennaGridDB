@@ -612,8 +612,8 @@ END;
 -- =============================================================================
 -- Attribute Unit Validation Triggers (registry-linked)
 -- Known attribute names must match registered unit and quantity_type.
--- Unknown numeric attributes must provide some unit.
--- Non-numeric attributes pass freely.
+-- Unknown attributes with numeric or structured (non-boolean, non-text, non-null) JSON values
+-- must provide unit and quantity_type. Boolean, text, and null-valued attributes pass freely.
 -- =============================================================================
 
 CREATE TRIGGER IF NOT EXISTS validate_attribute_unit_insert

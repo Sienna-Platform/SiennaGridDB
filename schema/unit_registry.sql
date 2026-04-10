@@ -1,5 +1,5 @@
 -- Unit Registry Seed Data
--- Populates the 4 registry tables with unit metadata for all physical columns.
+-- Populates the 3 registry tables with unit metadata for all physical columns.
 -- Must be run AFTER schema.sql and triggers.sql, BEFORE views.sql.
 -- The checksum INSERT at the end seals the registry (activates INSERT triggers).
 
@@ -132,10 +132,13 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, desc
 -- Once this row exists, INSERT triggers on registry tables activate.
 INSERT INTO system_metadata (key, value, description) VALUES (
     'unit_conventions_checksum',
-    (SELECT group_concat(
-        table_name || '.' || column_name || ':' ||
-        quantity_type || ':' || unit,
-        ';'
-    ) FROM unit_conventions ORDER BY table_name, column_name),
+    (SELECT group_concat(convention_repr, ';')
+       FROM (
+           SELECT
+               table_name || '.' || column_name || ':' ||
+               quantity_type || ':' || unit AS convention_repr
+           FROM unit_conventions
+           ORDER BY table_name, column_name
+       )),
     'Registry content fingerprint — recompute to verify integrity'
 );

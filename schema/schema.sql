@@ -415,7 +415,7 @@ CREATE TABLE attributes (
     name TEXT NOT NULL,
     value JSON NOT NULL,
     unit TEXT NULL,
-    quantity_type TEXT NULL,
+    quantity_type TEXT NULL REFERENCES quantity_types (name),
     json_type TEXT generated always AS (json_type(value)) virtual,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE(entity_id, name)
