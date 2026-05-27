@@ -4,7 +4,7 @@
 -- The checksum INSERT at the end seals the registry (activates INSERT triggers).
 -- 1. System metadata
 INSERT INTO
-    system_metadata
+    unit_management_metadata
 VALUES
     (
         'convention',
@@ -1232,7 +1232,7 @@ VALUES
 -- 4. Seal the registry — compute and store checksum
 -- Once this row exists, INSERT triggers on registry tables activate.
 INSERT INTO
-    system_metadata (KEY, value, description)
+    unit_management_metadata (KEY, value, description)
 VALUES
     (
         'unit_conventions_checksum',

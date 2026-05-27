@@ -250,6 +250,48 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_storage_technologies_entity_exists BEFORE
+INSERT
+    ON storage_technologies
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'storage_technologies'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table storage_technologies before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_demand_technologies_entity_exists BEFORE
+INSERT
+    ON demand_technologies
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'demand_technologies'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table demand_technologies before insertion'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_supplemental_attributes_entity_exists BEFORE
 INSERT
     ON supplemental_attributes
@@ -767,37 +809,37 @@ END;
 -- UPDATE and DELETE are blocked unconditionally.
 -- INSERT is blocked only after the registry is sealed (checksum exists).
 -- =============================================================================
--- system_metadata
-CREATE TRIGGER IF NOT EXISTS prevent_system_metadata_update BEFORE
+-- unit_management_metadata
+CREATE TRIGGER IF NOT EXISTS prevent_unit_management_metadata_update BEFORE
 UPDATE
-    ON system_metadata
+    ON unit_management_metadata
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'system_metadata is immutable. Changes require a schema migration.'
+        'unit_management_metadata is immutable. Changes require a schema migration.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_system_metadata_delete BEFORE DELETE ON system_metadata
+CREATE TRIGGER IF NOT EXISTS prevent_unit_management_metadata_delete BEFORE DELETE ON unit_management_metadata
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'system_metadata is immutable. Changes require a schema migration.'
+        'unit_management_metadata is immutable. Changes require a schema migration.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_system_metadata_insert BEFORE
+CREATE TRIGGER IF NOT EXISTS prevent_unit_management_metadata_insert BEFORE
 INSERT
-    ON system_metadata
+    ON unit_management_metadata
     WHEN EXISTS (
         SELECT
             1
         FROM
-            system_metadata
+            unit_management_metadata
         WHERE
             KEY = 'unit_conventions_checksum'
     )
@@ -805,7 +847,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'system_metadata is sealed. New entries require a schema migration.'
+        'unit_management_metadata is sealed. New entries require a schema migration.'
     );
 
 END;
@@ -840,7 +882,7 @@ INSERT
         SELECT
             1
         FROM
-            system_metadata
+            unit_management_metadata
         WHERE
             KEY = 'unit_conventions_checksum'
     )
@@ -883,7 +925,7 @@ INSERT
         SELECT
             1
         FROM
-            system_metadata
+            unit_management_metadata
         WHERE
             KEY = 'unit_conventions_checksum'
     )
@@ -909,7 +951,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_policy unique requires companion_column.'
+        'unit="unique" requires companion_column to be set.'
     );
 
 END;
