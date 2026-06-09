@@ -1,114 +1,260 @@
--- Unit Registry Seed Data
--- Populates the 3 registry tables with unit metadata for all physical columns.
--- Must be run AFTER schema.sql and triggers.sql, BEFORE views.sql.
---
--- The bulk seed data lives in sibling CSV files so this stays reviewable:
---   schema/quantity_types.csv    -> quantity_types
---   schema/unit_conventions.csv  -> unit_conventions
--- Each CSV has a header row (skipped on import). Edit the CSVs to change the
--- registry; this script only wires them in and seals the result.
---
--- NOTE: the .import paths are relative to the process working directory
--- (the repo root, per the justfile recipes), not to this file.
---
--- The checksum INSERT at the end seals the registry (activates INSERT triggers).
--- 1. System metadata
-INSERT INTO
-    unit_management_metadata
-VALUES
-    (
-        'convention',
-        'sienna-griddb-1.0',
-        'Schema unit convention version'
-    ),
-    (
-        'unit_system',
-        'https://units-of-measurement.org',
-        'UCUM as unit coding system'
-    );
+PRAGMA foreign_keys = ON;
 
--- 2. Quantity types (CIM Domain classes with single UCUM codes)
--- Loaded from schema/quantity_types.csv via a staging table so empty fields
--- become NULL and the table's own column defaults still apply.
-CREATE TEMP TABLE quantity_types_import (
-    name TEXT,
-    default_unit TEXT,
-    dimension TEXT,
-    description TEXT
-);
+-- Unit Registry Seed Data (GENERATED -- do not edit by hand)
+-- Regenerate with: python3 scripts/generate_unit_registry.py
+-- Source of truth: SiennaSchemas Core/units.json + schema/column_conventions.json
+-- Must run AFTER schema.sql and triggers.sql, BEFORE views.sql.
 
-.import --csv --skip 1 schema/quantity_types.csv quantity_types_import
+-- 1. Quantity types
+INSERT INTO quantity_types (name, default_unit, dimension, description) VALUES
+    ('ActivePower', 'MW', '{"L":2,"M":1,"T":-3}', 'Active (real) power'),
+    ('ActivePowerChangeRate', 'MW/min', '{"L":2,"M":1,"T":-4}', 'Rate of change of active power (ramp)'),
+    ('Angle', 'rad', '{}', 'Angle (allowed units rad and deg)'),
+    ('ApparentPower', 'MVA', '{"L":2,"M":1,"T":-3}', 'Apparent power'),
+    ('CO2Emissions', 't/MMBtu', '{"Btu":-1,"M":1}', 'CO2 emission rate (mass per unit of fuel energy)'),
+    ('Capacitance', 'F', '{"I":2,"L":-2,"M":-1,"T":4}', 'Capacitance'),
+    ('Conductance', 'S', '{"I":2,"L":-2,"M":-1,"T":3}', 'Conductance'),
+    ('CostPerCapacity', 'USD/MW', '{"L":-2,"M":-1,"T":3,"USD":1}', 'Cost per unit of capacity (capital cost)'),
+    ('CostPerEnergy', 'USD/MWh', '{"L":-2,"M":-1,"T":2,"USD":1}', 'Cost per unit of energy (operation / energy capital cost)'),
+    ('CostPerLevel', 'USD/m', '{"L":-1,"USD":1}', 'Cost per unit of hydraulic head (e.g. reservoir operation cost when level_data_type=HEAD)'),
+    ('CostPerMass', 'USD/t', '{"M":-1,"USD":1}', 'Cost per unit of mass (e.g. carbon price or tax)'),
+    ('CostPerTime', 'USD/h', '{"T":-1,"USD":1}', 'Cost per unit of time'),
+    ('CostPerVolume', 'USD/m3', '{"L":-3,"USD":1}', 'Cost per unit of volume (e.g. reservoir operation cost)'),
+    ('CurrentFlow', 'kA', '{"I":1}', 'Current flow'),
+    ('Dimensionless', '1', '{}', 'Dimensionless quantity'),
+    ('Duration', 'h', '{"T":1}', 'Duration (allowed units h, yr, min, s)'),
+    ('Elevation', 'm', '{"L":1}', 'Elevation / hydraulic head'),
+    ('EmissionRate', 't/MWh', '{"L":-2,"M":-1,"T":2}', 'Emission mass per unit of electrical energy'),
+    ('Fraction', '1', '{}', 'Fractional quantity (efficiency, losses, cofire level, etc.)'),
+    ('Frequency', 'Hz', '{"T":-1}', 'Frequency'),
+    ('HeadRate', 'm/s', '{"L":1,"T":-1}', 'Rate of change of hydraulic head'),
+    ('HeatRate', 'MMBtu/MWh', '{"Btu":1,"L":-2,"M":-1,"T":2}', 'Heat rate (fuel energy per unit of electrical energy)'),
+    ('Impedance', 'ohm', '{"I":-2,"L":2,"M":1,"T":-3}', 'Impedance'),
+    ('Inductance', 'H', '{"I":-2,"L":2,"M":1,"T":-2}', 'Inductance'),
+    ('Length', 'km', '{"L":1}', 'Length'),
+    ('Mass', 't', '{"M":1}', 'Mass'),
+    ('Money', 'USD', '{"USD":1}', 'Monetary value'),
+    ('PowerFactor', '1', '{}', 'Power factor'),
+    ('PowerPerFrequency', 'MW/Hz', '{"L":2,"M":1,"T":-2}', 'Active power response per unit of frequency deviation (regulation / droop participation)'),
+    ('Reactance', 'ohm', '{"I":-2,"L":2,"M":1,"T":-3}', 'Reactance'),
+    ('ReactivePower', 'MVAr', '{"L":2,"M":1,"T":-3}', 'Reactive power'),
+    ('RealEnergy', 'MWh', '{"L":2,"M":1,"T":-2}', 'Real (electrical) energy'),
+    ('Resistance', 'ohm', '{"I":-2,"L":2,"M":1,"T":-3}', 'Resistance'),
+    ('StartFuelPerCapacity', 'MMBtu/MW', '{"Btu":1,"L":-2,"M":-1,"T":3}', 'Start-up fuel per unit of capacity'),
+    ('Susceptance', 'S', '{"I":2,"L":-2,"M":-1,"T":3}', 'Susceptance'),
+    ('Temperature', 'degC', '{"Theta":1}', 'Temperature'),
+    ('Voltage', 'kV', '{"I":-1,"L":2,"M":1,"T":-3}', 'Voltage'),
+    ('Volume', 'm3', '{"L":3}', 'Volume'),
+    ('VolumeFlowRate', 'm3/s', '{"L":3,"T":-1}', 'Volumetric flow rate');
 
-INSERT INTO
-    quantity_types (name, default_unit, dimension, description)
-SELECT
-    name,
-    default_unit,
-    dimension,
-    NULLIF(description, '')
-FROM
-    quantity_types_import;
+-- 2. Allowed (quantity_type, unit) vocabulary
+INSERT INTO allowed_units (quantity_type, unit) VALUES
+    ('ActivePower', 'MW'),
+    ('ActivePowerChangeRate', 'MW/min'),
+    ('Angle', 'deg'),
+    ('Angle', 'rad'),
+    ('ApparentPower', 'MVA'),
+    ('CO2Emissions', 't/MMBtu'),
+    ('Capacitance', 'F'),
+    ('Conductance', 'S'),
+    ('Conductance', 'pu'),
+    ('CostPerCapacity', 'USD/MW'),
+    ('CostPerEnergy', 'USD/MWh'),
+    ('CostPerLevel', 'USD/m'),
+    ('CostPerMass', 'USD/t'),
+    ('CostPerTime', 'USD/h'),
+    ('CostPerVolume', 'USD/m3'),
+    ('CurrentFlow', 'A'),
+    ('CurrentFlow', 'kA'),
+    ('Dimensionless', '1'),
+    ('Duration', 'h'),
+    ('Duration', 'min'),
+    ('Duration', 's'),
+    ('Duration', 'yr'),
+    ('Elevation', 'm'),
+    ('EmissionRate', 't/MWh'),
+    ('Fraction', '1'),
+    ('Frequency', 'Hz'),
+    ('HeadRate', 'm/s'),
+    ('HeatRate', 'MMBtu/MWh'),
+    ('Impedance', 'ohm'),
+    ('Inductance', 'H'),
+    ('Length', 'km'),
+    ('Length', 'm'),
+    ('Mass', 'Mt'),
+    ('Mass', 'kg'),
+    ('Mass', 'lb'),
+    ('Mass', 'ston'),
+    ('Mass', 't'),
+    ('Money', 'USD'),
+    ('PowerFactor', '1'),
+    ('PowerPerFrequency', 'MW/Hz'),
+    ('Reactance', 'ohm'),
+    ('Reactance', 'pu'),
+    ('ReactivePower', 'MVAr'),
+    ('RealEnergy', 'MWh'),
+    ('Resistance', 'ohm'),
+    ('Resistance', 'pu'),
+    ('StartFuelPerCapacity', 'MMBtu/MW'),
+    ('Susceptance', 'S'),
+    ('Susceptance', 'pu'),
+    ('Temperature', 'degC'),
+    ('Voltage', 'kV'),
+    ('Volume', 'm3'),
+    ('VolumeFlowRate', 'm3/s');
 
-DROP TABLE quantity_types_import;
+-- 3. Column unit conventions
+INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, discriminator_column, discriminator_value, description) VALUES
+    ('attributes', 'active_power_limits', 'ActivePower', 'MW', NULL, NULL, 'Attribute-name convention (not a physical column): active power limits stored as attribute'),
+    ('attributes', 'active_power_limits_pump', 'ActivePower', 'MW', NULL, NULL, 'Attribute-name convention (not a physical column): HydroPumpTurbine pump limits stored as attribute'),
+    ('attributes', 'efficiency', 'Fraction', '1', NULL, NULL, 'Attribute-name convention (not a physical column): efficiency stored as attribute'),
+    ('attributes', 'ramp_limits', 'ActivePowerChangeRate', 'MW/min', NULL, NULL, 'Attribute-name convention (not a physical column): ramp limits stored as attribute'),
+    ('attributes', 'time_limits', 'Duration', 'h', NULL, NULL, 'Attribute-name convention (not a physical column): time limits stored as attribute'),
+    ('hydro_generators', 'active_power', 'ActivePower', 'MW', NULL, NULL, 'Initial active power setpoint'),
+    ('hydro_generators', 'active_power_limits', 'ActivePower', 'MW', NULL, NULL, 'JSON {min, max}'),
+    ('hydro_generators', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, 'Per-unit base for this device (apparent power)'),
+    ('hydro_generators', 'conversion_factor', 'Dimensionless', '1', NULL, NULL, 'Conversion factor'),
+    ('hydro_generators', 'operation_cost.fixed', 'CostPerTime', 'USD/h', NULL, NULL, 'Fixed cost per unit of time (operation_cost JSON path)'),
+    ('hydro_generators', 'operation_cost.variable', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Variable cost per unit of energy (operation_cost JSON path); payload power_units must be NATURAL_UNITS'),
+    ('hydro_generators', 'outflow_limits', 'VolumeFlowRate', 'm3/s', NULL, NULL, 'JSON {min, max}'),
+    ('hydro_generators', 'powerhouse_elevation', 'Elevation', 'm', NULL, NULL, 'Powerhouse elevation'),
+    ('hydro_generators', 'ramp_limits', 'ActivePowerChangeRate', 'MW/min', NULL, NULL, 'JSON {up, down}'),
+    ('hydro_generators', 'rating', 'ApparentPower', 'MVA', NULL, NULL, 'Nameplate rating'),
+    ('hydro_generators', 'reactive_power', 'ReactivePower', 'MVAr', NULL, NULL, 'Initial reactive power setpoint'),
+    ('hydro_generators', 'reactive_power_limits', 'ReactivePower', 'MVAr', NULL, NULL, 'JSON {min, max}'),
+    ('hydro_generators', 'time_limits', 'Duration', 'h', NULL, NULL, 'JSON {up, down}'),
+    ('hydro_generators', 'travel_time', 'Duration', 'h', NULL, NULL, 'Water travel time'),
+    ('hydro_reservoirs', 'head_to_volume_factor', 'Dimensionless', '1', NULL, NULL, 'Head-to-volume conversion curve (FunctionData JSON); coefficients are dimensionless in the natural-unit convention'),
+    ('hydro_reservoirs', 'inflow', 'ActivePower', 'MW', 'level_data_type', 'ENERGY', 'Inflow rate'),
+    ('hydro_reservoirs', 'inflow', 'HeadRate', 'm/s', 'level_data_type', 'HEAD', 'Inflow rate'),
+    ('hydro_reservoirs', 'inflow', 'VolumeFlowRate', 'm3/s', 'level_data_type', 'TOTAL_VOLUME', 'Inflow rate'),
+    ('hydro_reservoirs', 'inflow', 'VolumeFlowRate', 'm3/s', 'level_data_type', 'USABLE_VOLUME', 'Inflow rate'),
+    ('hydro_reservoirs', 'initial_level', 'RealEnergy', 'MWh', 'level_data_type', 'ENERGY', 'Initial reservoir level'),
+    ('hydro_reservoirs', 'initial_level', 'Elevation', 'm', 'level_data_type', 'HEAD', 'Initial reservoir level'),
+    ('hydro_reservoirs', 'initial_level', 'Volume', 'm3', 'level_data_type', 'TOTAL_VOLUME', 'Initial reservoir level'),
+    ('hydro_reservoirs', 'initial_level', 'Volume', 'm3', 'level_data_type', 'USABLE_VOLUME', 'Initial reservoir level'),
+    ('hydro_reservoirs', 'intake_elevation', 'Elevation', 'm', NULL, NULL, 'Intake elevation'),
+    ('hydro_reservoirs', 'level_targets', 'RealEnergy', 'MWh', 'level_data_type', 'ENERGY', 'Reservoir level targets'),
+    ('hydro_reservoirs', 'level_targets', 'Elevation', 'm', 'level_data_type', 'HEAD', 'Reservoir level targets'),
+    ('hydro_reservoirs', 'level_targets', 'Volume', 'm3', 'level_data_type', 'TOTAL_VOLUME', 'Reservoir level targets'),
+    ('hydro_reservoirs', 'level_targets', 'Volume', 'm3', 'level_data_type', 'USABLE_VOLUME', 'Reservoir level targets'),
+    ('hydro_reservoirs', 'operation_cost', 'CostPerEnergy', 'USD/MWh', 'level_data_type', 'ENERGY', 'HydroReservoirCost per unit of energy when level_data_type=ENERGY (level_shortage_cost/level_surplus_cost/spillage_cost)'),
+    ('hydro_reservoirs', 'operation_cost', 'CostPerLevel', 'USD/m', 'level_data_type', 'HEAD', 'HydroReservoirCost per unit of head when level_data_type=HEAD (level_shortage_cost/level_surplus_cost/spillage_cost)'),
+    ('hydro_reservoirs', 'operation_cost', 'CostPerVolume', 'USD/m3', 'level_data_type', 'TOTAL_VOLUME', 'HydroReservoirCost per unit of volume when level_data_type=TOTAL_VOLUME (level_shortage_cost/level_surplus_cost/spillage_cost)'),
+    ('hydro_reservoirs', 'operation_cost', 'CostPerVolume', 'USD/m3', 'level_data_type', 'USABLE_VOLUME', 'HydroReservoirCost per unit of volume when level_data_type=USABLE_VOLUME (level_shortage_cost/level_surplus_cost/spillage_cost)'),
+    ('hydro_reservoirs', 'outflow', 'ActivePower', 'MW', 'level_data_type', 'ENERGY', 'Outflow rate'),
+    ('hydro_reservoirs', 'outflow', 'HeadRate', 'm/s', 'level_data_type', 'HEAD', 'Outflow rate'),
+    ('hydro_reservoirs', 'outflow', 'VolumeFlowRate', 'm3/s', 'level_data_type', 'TOTAL_VOLUME', 'Outflow rate'),
+    ('hydro_reservoirs', 'outflow', 'VolumeFlowRate', 'm3/s', 'level_data_type', 'USABLE_VOLUME', 'Outflow rate'),
+    ('hydro_reservoirs', 'spillage_limits', 'ActivePower', 'MW', 'level_data_type', 'ENERGY', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'spillage_limits', 'HeadRate', 'm/s', 'level_data_type', 'HEAD', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'spillage_limits', 'VolumeFlowRate', 'm3/s', 'level_data_type', 'TOTAL_VOLUME', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'spillage_limits', 'VolumeFlowRate', 'm3/s', 'level_data_type', 'USABLE_VOLUME', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'storage_level_limits', 'RealEnergy', 'MWh', 'level_data_type', 'ENERGY', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'storage_level_limits', 'Elevation', 'm', 'level_data_type', 'HEAD', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'storage_level_limits', 'Volume', 'm3', 'level_data_type', 'TOTAL_VOLUME', 'JSON {min, max}'),
+    ('hydro_reservoirs', 'storage_level_limits', 'Volume', 'm3', 'level_data_type', 'USABLE_VOLUME', 'JSON {min, max}'),
+    ('loads', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, 'Per-unit base (apparent power)'),
+    ('renewable_generators', 'active_power', 'ActivePower', 'MW', NULL, NULL, 'Initial active power setpoint'),
+    ('renewable_generators', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, 'Per-unit base for this device (apparent power)'),
+    ('renewable_generators', 'operation_cost.curtailment_cost', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Curtailment cost curve inside the operation_cost payload; payload power_units must be NATURAL_UNITS.'),
+    ('renewable_generators', 'operation_cost.fixed', 'CostPerTime', 'USD/h', NULL, NULL, 'Fixed cost per unit of time (operation_cost JSON path)'),
+    ('renewable_generators', 'operation_cost.variable', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Variable cost per unit of energy (operation_cost JSON path); payload power_units must be NATURAL_UNITS'),
+    ('renewable_generators', 'power_factor', 'PowerFactor', '1', NULL, NULL, 'Power factor'),
+    ('renewable_generators', 'rating', 'ApparentPower', 'MVA', NULL, NULL, 'Nameplate rating'),
+    ('renewable_generators', 'reactive_power', 'ReactivePower', 'MVAr', NULL, NULL, 'Initial reactive power setpoint'),
+    ('renewable_generators', 'reactive_power_limits', 'ReactivePower', 'MVAr', NULL, NULL, 'JSON {min, max}'),
+    ('storage_technologies', 'capacity_limits_charge', 'ActivePower', 'MW', NULL, NULL, 'JSON {min, max} charge capacity limits'),
+    ('storage_technologies', 'capacity_limits_discharge', 'ActivePower', 'MW', NULL, NULL, 'JSON {min, max} discharge capacity limits'),
+    ('storage_technologies', 'capacity_limits_energy', 'RealEnergy', 'MWh', NULL, NULL, 'JSON {min, max} energy capacity limits'),
+    ('storage_technologies', 'capital_costs_charge', 'CostPerCapacity', 'USD/MW', NULL, NULL, 'Charging capital cost structure'),
+    ('storage_technologies', 'capital_costs_discharge', 'CostPerCapacity', 'USD/MW', NULL, NULL, 'Discharging capital cost structure'),
+    ('storage_technologies', 'capital_costs_energy', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Energy capital cost structure'),
+    ('storage_technologies', 'duration_limits', 'Duration', 'h', NULL, NULL, 'JSON {min, max} duration limits'),
+    ('storage_technologies', 'efficiency', 'Fraction', '1', NULL, NULL, 'JSON {in, out} efficiency'),
+    ('storage_technologies', 'financial_data', 'Money', 'USD', NULL, NULL, 'Financial parameters JSON blob; monetary values in USD'),
+    ('storage_technologies', 'lifetime', 'Duration', 'yr', NULL, NULL, 'Technology lifetime'),
+    ('storage_technologies', 'losses', 'Fraction', '1', NULL, NULL, 'Storage losses'),
+    ('storage_technologies', 'min_discharge_fraction', 'Fraction', '1', NULL, NULL, 'Minimum discharge fraction'),
+    ('storage_technologies', 'operation_costs.fixed', 'CostPerTime', 'USD/h', NULL, NULL, 'Fixed cost per unit of time (operation_costs JSON path)'),
+    ('storage_technologies', 'operation_costs.shut_down', 'Money', 'USD', NULL, NULL, 'Shut-down cost (operation_costs JSON path)'),
+    ('storage_technologies', 'operation_costs.start_up', 'Money', 'USD', NULL, NULL, 'Start-up cost (operation_costs JSON path)'),
+    ('storage_technologies', 'operation_costs.variable', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Variable cost per unit of energy (operation_costs JSON path); payload power_units must be NATURAL_UNITS'),
+    ('storage_technologies', 'unit_size_charge', 'ActivePower', 'MW', NULL, NULL, 'Charging unit size'),
+    ('storage_technologies', 'unit_size_discharge', 'ActivePower', 'MW', NULL, NULL, 'Discharging unit size'),
+    ('storage_technologies', 'unit_size_energy', 'RealEnergy', 'MWh', NULL, NULL, 'Energy storage unit size'),
+    ('storage_units', 'active_power', 'ActivePower', 'MW', NULL, NULL, 'Initial active power setpoint'),
+    ('storage_units', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, 'Per-unit base for this device (apparent power)'),
+    ('storage_units', 'conversion_factor', 'Dimensionless', '1', NULL, NULL, 'Conversion factor'),
+    ('storage_units', 'cycle_limits', 'Dimensionless', '1', NULL, NULL, 'Maximum number of charge/discharge cycles (dimensionless count)'),
+    ('storage_units', 'efficiency', 'Fraction', '1', NULL, NULL, 'JSON {in, out} efficiency'),
+    ('storage_units', 'initial_storage_capacity_level', 'Fraction', '1', NULL, NULL, 'Initial storage level as ratio [0, 1] of storage_capacity'),
+    ('storage_units', 'input_active_power_limits', 'ActivePower', 'MW', NULL, NULL, 'JSON {min, max} charging'),
+    ('storage_units', 'operation_cost.fixed', 'CostPerTime', 'USD/h', NULL, NULL, 'Fixed cost per unit of time (operation_cost JSON path)'),
+    ('storage_units', 'operation_cost.shut_down', 'Money', 'USD', NULL, NULL, 'Shut-down cost (operation_cost JSON path)'),
+    ('storage_units', 'operation_cost.start_up', 'Money', 'USD', NULL, NULL, 'Start-up cost (operation_cost JSON path)'),
+    ('storage_units', 'operation_cost.variable', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Variable cost per unit of energy (operation_cost JSON path); payload power_units must be NATURAL_UNITS'),
+    ('storage_units', 'output_active_power_limits', 'ActivePower', 'MW', NULL, NULL, 'JSON {min, max} discharging'),
+    ('storage_units', 'rating', 'ApparentPower', 'MVA', NULL, NULL, 'Nameplate rating'),
+    ('storage_units', 'reactive_power', 'ReactivePower', 'MVAr', NULL, NULL, 'Initial reactive power setpoint'),
+    ('storage_units', 'reactive_power_limits', 'ReactivePower', 'MVAr', NULL, NULL, 'JSON {min, max}'),
+    ('storage_units', 'storage_capacity', 'RealEnergy', 'MWh', NULL, NULL, 'Total storage capacity'),
+    ('storage_units', 'storage_level_limits', 'Fraction', '1', NULL, NULL, 'JSON {min, max} as ratio [0, 1] of storage_capacity'),
+    ('storage_units', 'storage_target', 'Fraction', '1', NULL, NULL, 'End-of-simulation storage target as ratio of storage_capacity'),
+    ('supply_technologies', 'capacity_limits', 'ActivePower', 'MW', NULL, NULL, 'JSON {min, max} capacity limits'),
+    ('supply_technologies', 'capital_costs', 'CostPerCapacity', 'USD/MW', NULL, NULL, 'Capital cost structure'),
+    ('supply_technologies', 'co2', 'CO2Emissions', 't/MMBtu', NULL, NULL, 'JSON CO2 emission rates per fuel'),
+    ('supply_technologies', 'cofire_level_limits', 'Fraction', '1', NULL, NULL, 'JSON fuel cofire level limits'),
+    ('supply_technologies', 'cofire_start_limits', 'Fraction', '1', NULL, NULL, 'JSON fuel cofire start limits'),
+    ('supply_technologies', 'financial_data', 'Money', 'USD', NULL, NULL, 'Financial parameters JSON blob; monetary values in USD'),
+    ('supply_technologies', 'lifetime', 'Duration', 'yr', NULL, NULL, 'Technology lifetime'),
+    ('supply_technologies', 'min_generation_fraction', 'Fraction', '1', NULL, NULL, 'Minimum generation fraction'),
+    ('supply_technologies', 'operation_costs.fixed', 'CostPerTime', 'USD/h', NULL, NULL, 'Fixed cost per unit of time (operation_costs JSON path)'),
+    ('supply_technologies', 'operation_costs.shut_down', 'Money', 'USD', NULL, NULL, 'Shut-down cost (operation_costs JSON path)'),
+    ('supply_technologies', 'operation_costs.start_up', 'Money', 'USD', NULL, NULL, 'Start-up cost (operation_costs JSON path)'),
+    ('supply_technologies', 'operation_costs.variable', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Variable cost per unit of energy (operation_costs JSON path); payload power_units must be NATURAL_UNITS'),
+    ('supply_technologies', 'outage_factor', 'Fraction', '1', NULL, NULL, 'Outage factor'),
+    ('supply_technologies', 'ramp_limits', 'ActivePowerChangeRate', 'MW/min', NULL, NULL, 'JSON {up, down} ramp limits'),
+    ('supply_technologies', 'start_fuel_mmbtu_per_mw', 'StartFuelPerCapacity', 'MMBtu/MW', NULL, NULL, 'Start-up fuel per unit of capacity'),
+    ('supply_technologies', 'time_limits', 'Duration', 'h', NULL, NULL, 'JSON {up, down} time limits'),
+    ('supply_technologies', 'unit_size', 'ActivePower', 'MW', NULL, NULL, 'Unit nameplate capacity'),
+    ('thermal_generators', 'active_power', 'ActivePower', 'MW', NULL, NULL, 'Initial active power setpoint'),
+    ('thermal_generators', 'active_power_limits', 'ActivePower', 'MW', NULL, NULL, 'JSON {min, max}'),
+    ('thermal_generators', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, 'Per-unit base for this device (apparent power)'),
+    ('thermal_generators', 'operation_cost.fixed', 'CostPerTime', 'USD/h', NULL, NULL, 'Fixed cost per unit of time (operation_cost JSON path)'),
+    ('thermal_generators', 'operation_cost.shut_down', 'Money', 'USD', NULL, NULL, 'Shut-down cost (operation_cost JSON path)'),
+    ('thermal_generators', 'operation_cost.start_up', 'Money', 'USD', NULL, NULL, 'Start-up cost (operation_cost JSON path)'),
+    ('thermal_generators', 'operation_cost.variable', 'CostPerEnergy', 'USD/MWh', NULL, NULL, 'Variable cost per unit of energy (operation_cost JSON path); payload power_units must be NATURAL_UNITS'),
+    ('thermal_generators', 'ramp_limits', 'ActivePowerChangeRate', 'MW/min', NULL, NULL, 'JSON {up, down}'),
+    ('thermal_generators', 'rating', 'ApparentPower', 'MVA', NULL, NULL, 'Nameplate rating'),
+    ('thermal_generators', 'reactive_power', 'ReactivePower', 'MVAr', NULL, NULL, 'Initial reactive power setpoint'),
+    ('thermal_generators', 'reactive_power_limits', 'ReactivePower', 'MVAr', NULL, NULL, 'JSON {min, max}'),
+    ('thermal_generators', 'time_limits', 'Duration', 'h', NULL, NULL, 'JSON {up, down}'),
+    ('transmission_interchanges', 'max_flow_from', 'ActivePower', 'MW', NULL, NULL, 'Maximum flow from'),
+    ('transmission_interchanges', 'max_flow_to', 'ActivePower', 'MW', NULL, NULL, 'Maximum flow to'),
+    ('transmission_lines', 'b', 'Susceptance', 'S', 'parameter_units', 'NATURAL_UNITS', 'Shunt susceptance halves, JSON {from, to}, in siemens when the row''s parameter_units discriminator is NATURAL_UNITS'),
+    ('transmission_lines', 'b', 'Susceptance', 'pu', 'parameter_units', 'SYSTEM_BASE', 'Shunt susceptance halves, JSON {from, to}, per-unit on system base when the row''s parameter_units discriminator is SYSTEM_BASE'),
+    ('transmission_lines', 'continuous_rating', 'ApparentPower', 'MVA', NULL, NULL, 'Continuous thermal rating'),
+    ('transmission_lines', 'g', 'Conductance', 'S', 'parameter_units', 'NATURAL_UNITS', 'Shunt conductance halves, JSON {from, to}, in siemens when the row''s parameter_units discriminator is NATURAL_UNITS'),
+    ('transmission_lines', 'g', 'Conductance', 'pu', 'parameter_units', 'SYSTEM_BASE', 'Shunt conductance halves, JSON {from, to}, per-unit on system base when the row''s parameter_units discriminator is SYSTEM_BASE'),
+    ('transmission_lines', 'line_length', 'Length', 'km', NULL, NULL, 'Line length'),
+    ('transmission_lines', 'lte_rating', 'ApparentPower', 'MVA', NULL, NULL, 'Long-term emergency rating'),
+    ('transmission_lines', 'r', 'Resistance', 'ohm', 'parameter_units', 'NATURAL_UNITS', 'Series resistance in ohm when the row''s parameter_units discriminator is NATURAL_UNITS'),
+    ('transmission_lines', 'r', 'Resistance', 'pu', 'parameter_units', 'SYSTEM_BASE', 'Series resistance, per-unit on system base when the row''s parameter_units discriminator is SYSTEM_BASE'),
+    ('transmission_lines', 'ste_rating', 'ApparentPower', 'MVA', NULL, NULL, 'Short-term emergency rating'),
+    ('transmission_lines', 'x', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', 'Series reactance in ohm when the row''s parameter_units discriminator is NATURAL_UNITS'),
+    ('transmission_lines', 'x', 'Reactance', 'pu', 'parameter_units', 'SYSTEM_BASE', 'Series reactance, per-unit on system base when the row''s parameter_units discriminator is SYSTEM_BASE'),
+    ('transport_technologies', 'capital_costs', 'CostPerCapacity', 'USD/MW', NULL, NULL, 'Capital cost structure'),
+    ('transport_technologies', 'financial_data', 'Money', 'USD', NULL, NULL, 'Financial parameters JSON blob; monetary values in USD'),
+    ('transport_technologies', 'unit_size', 'ActivePower', 'MW', NULL, NULL, 'Unit nameplate capacity');
 
--- 3. Unit conventions — entity table columns and well-known attribute names.
--- Loaded from schema/unit_conventions.csv. CAST/NULLIF normalize CSV text into
--- the STRICT table's INTEGER / nullable columns.
-CREATE TEMP TABLE unit_conventions_import (
-    table_name TEXT,
-    column_name TEXT,
-    quantity_type TEXT,
-    unit TEXT,
-    is_per_unit TEXT,
-    per_unit_base_column TEXT,
-    description TEXT
-);
+-- 4. Registry metadata (non-seal rows)
+INSERT INTO unit_management_metadata (key, value, description) VALUES
+    ('convention', 'sienna-griddb-1.1', 'Schema unit convention version'),
+    ('units_artifact', 'sienna-units-1.0', 'SiennaSchemas Core/units.json vocabulary convention this registry derives from');
 
-.import --csv --skip 1 schema/unit_conventions.csv unit_conventions_import
-
-INSERT INTO
-    unit_conventions (
-        table_name,
-        column_name,
-        quantity_type,
-        unit,
-        is_per_unit,
-        per_unit_base_column,
-        description
-    )
-SELECT
-    table_name,
-    column_name,
-    quantity_type,
-    unit,
-    CAST(is_per_unit AS INTEGER),
-    NULLIF(per_unit_base_column, ''),
-    NULLIF(description, '')
-FROM
-    unit_conventions_import;
-
-DROP TABLE unit_conventions_import;
-
--- 4. Seal the registry — compute and store checksum
--- Once this row exists, INSERT triggers on registry tables activate.
-INSERT INTO
-    unit_management_metadata (KEY, value, description)
-VALUES
-    (
-        'unit_conventions_checksum',
-        (
-            SELECT
-                GROUP_CONCAT(convention_repr, ';')
-            FROM
-                (
-                    SELECT
-                        table_name || '.' || column_name || ':' || quantity_type || ':' || unit AS convention_repr
-                    FROM
-                        unit_conventions
-                    ORDER BY
-                        table_name,
-                        column_name
-                )
-        ),
-        'Registry content fingerprint — recompute to verify integrity'
-    );
+-- 5. Seal row -- sha256 over canonical repr of the registry.
+-- Inserting this row activates the immutability triggers. See the
+-- module docstring of generate_unit_registry.py for the exact repr.
+INSERT INTO unit_management_metadata (key, value, description) VALUES
+    ('unit_conventions_checksum', 'a3949998d9a55d95fb9c97ad46037e17766f3f349daaa4886cffcdb716d6eeb5', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

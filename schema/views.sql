@@ -3,11 +3,10 @@ SELECT
     uc.table_name,
     uc.column_name,
     uc.unit,
-    uc.companion_column,
     uc.quantity_type,
     qt.dimension,
-    uc.is_per_unit,
-    uc.per_unit_base_column,
+    uc.discriminator_column,
+    uc.discriminator_value,
     uc.description
 FROM
     unit_conventions uc
