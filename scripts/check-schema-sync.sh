@@ -8,8 +8,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CANONICAL_DIR="$REPO_ROOT/schema"
 JULIA_DBINTERFACE_DIR="$REPO_ROOT/SiennaOpenAPIModels.jl/src/dbinterface"
 
-# Files to check (views.sql is only in schema/, not copied to Julia package)
-FILES=("schema.sql" "triggers.sql")
+# Files to check
+FILES=("schema.sql" "triggers.sql" "unit_registry.sql" "views.sql")
+
+# If the Julia package copy dir is absent, there is nothing to sync against.
+if [[ ! -d "$JULIA_DBINTERFACE_DIR" ]]; then
+    echo "SKIP: Julia package dir not found: $JULIA_DBINTERFACE_DIR"
+    echo "Nothing to sync; downstream must ship these files where its copy lives."
+    exit 0
+fi
 
 # Track if any files are out of sync
 OUT_OF_SYNC=0

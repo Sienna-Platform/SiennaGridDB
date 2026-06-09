@@ -1,0 +1,54 @@
+{
+  "description": "SiennaGridDB DB-table -> SiennaSchemas component map. Consumed by scripts/check_units_sync.py to resolve every unit_conventions/column_conventions row (keyed by DB table+column) to the same-named property on each mapped schema component, and to reach the same-named PowerSystems.jl struct for the PSY-descriptor layer. 'file' paths are relative to the SiennaSchemas checkout root (default ../SiennaSchemas). 'is_psy' marks components that also correspond to a PowerSystems.jl generated struct (checked in layer L3); Investments technology components have no PSY struct (is_psy=false) so they are skipped by L3. Derived from column_conventions.json tables + the schema file inventory; four technology schemas noted as deleted-on-main are not mapped. Every listed file is verified to exist by the checker before use.",
+  "tables": {
+    "thermal_generators": [
+      {"component": "ThermalStandard", "file": "Operations/StaticInjection/ThermalStandard.json", "is_psy": true},
+      {"component": "ThermalMultiStart", "file": "Operations/StaticInjection/ThermalMultiStart.json", "is_psy": true}
+    ],
+    "renewable_generators": [
+      {"component": "RenewableDispatch", "file": "Operations/StaticInjection/RenewableDispatch.json", "is_psy": true},
+      {"component": "RenewableNonDispatch", "file": "Operations/StaticInjection/RenewableNonDispatch.json", "is_psy": true}
+    ],
+    "hydro_generators": [
+      {"component": "HydroDispatch", "file": "Operations/StaticInjection/HydroDispatch.json", "is_psy": true},
+      {"component": "HydroTurbine", "file": "Operations/StaticInjection/HydroTurbine.json", "is_psy": true},
+      {"component": "HydroPumpTurbine", "file": "Operations/StaticInjection/HydroPumpTurbine.json", "is_psy": true}
+    ],
+    "storage_units": [
+      {"component": "EnergyReservoirStorage", "file": "Operations/StaticInjection/EnergyReservoirStorage.json", "is_psy": true}
+    ],
+    "hydro_reservoirs": [
+      {"component": "HydroReservoir", "file": "Operations/StaticInjection/HydroReservoir.json", "is_psy": true}
+    ],
+    "loads": [
+      {"component": "PowerLoad", "file": "Operations/StaticInjection/PowerLoad.json", "is_psy": true},
+      {"component": "StandardLoad", "file": "Operations/StaticInjection/StandardLoad.json", "is_psy": true},
+      {"component": "InterruptiblePowerLoad", "file": "Operations/StaticInjection/InterruptiblePowerLoad.json", "is_psy": true},
+      {"component": "InterruptibleStandardLoad", "file": "Operations/StaticInjection/InterruptibleStandardLoad.json", "is_psy": true},
+      {"component": "MotorLoad", "file": "Operations/StaticInjection/MotorLoad.json", "is_psy": true},
+      {"component": "ExponentialLoad", "file": "Operations/StaticInjection/ExponentialLoad.json", "is_psy": true},
+      {"component": "ShiftablePowerLoad", "file": "Operations/StaticInjection/ShiftablePowerLoad.json", "is_psy": true}
+    ],
+    "transmission_lines": [
+      {"component": "Line", "file": "Operations/Branch/Line.json", "is_psy": true},
+      {"component": "MonitoredLine", "file": "Operations/Branch/MonitoredLine.json", "is_psy": true}
+    ],
+    "transmission_interchanges": [
+      {"component": "AreaInterchange", "file": "Operations/Branch/AreaInterchange.json", "is_psy": true}
+    ],
+    "balancing_topologies": [
+      {"component": "ACBus", "file": "Operations/Topology/ACBus.json", "is_psy": true}
+    ],
+    "supply_technologies": [
+      {"component": "SupplyTechnology", "file": "Investments/Technologies/SupplyTechnology.json", "is_psy": false}
+    ],
+    "storage_technologies": [
+      {"component": "StorageTechnology", "file": "Investments/Technologies/StorageTechnology.json", "is_psy": false}
+    ],
+    "transport_technologies": [
+      {"component": "NodalACTransportTechnology", "file": "Investments/Technologies/NodalACTransportTechnology.json", "is_psy": false},
+      {"component": "NodalHVDCTransportTechnology", "file": "Investments/Technologies/NodalHVDCTransportTechnology.json", "is_psy": false},
+      {"component": "AggregateTransportTechnology", "file": "Investments/Technologies/AggregateTransportTechnology.json", "is_psy": false}
+    ]
+  }
+}

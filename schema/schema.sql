@@ -6,6 +6,9 @@
 --      3. User friendly over peformance, but consider performance always,
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
+-- Schema/registry revision; bump on every future registry or schema change.
+PRAGMA user_version = 2;
+
 DROP TABLE IF EXISTS thermal_generators;
 
 DROP TABLE IF EXISTS renewable_generators;
@@ -41,6 +44,10 @@ DROP TABLE IF EXISTS attributes;
 DROP TABLE IF EXISTS loads;
 
 DROP TABLE IF EXISTS static_time_series;
+
+DROP TABLE IF EXISTS time_series_metadata;
+
+DROP TABLE IF EXISTS allowed_units;
 
 DROP TABLE IF EXISTS entity_types;
 
@@ -144,14 +151,26 @@ CREATE TABLE arcs (
 ) strict;
 
 -- Existing transmission lines
+-- Branch electrical parameters r/x/b/g are stored flexibly in per-unit on system
+-- base OR natural units; the per-row parameter_units discriminator records which
+-- (SYSTEM_BASE -> pu; NATURAL_UNITS -> ohm for r/x, S for b/g). All of r/x/b/g on
+-- a line share one basis (PSY stores them all on system base; a matpower import is
+-- all natural). r and x are scalar REAL; b and g are shunt halves stored as JSON
+-- {"from": ..., "to": ...} text (json_valid-checked, STRICT-legal), mirroring the
+-- schema FromTo payload.
 CREATE TABLE transmission_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    arc_id INTEGER,
-    continuous_rating REAL NULL CHECK (continuous_rating >= 0),
+    arc_id INTEGER NOT NULL,
+    continuous_rating REAL NOT NULL CHECK (continuous_rating >= 0),
     ste_rating REAL NULL CHECK (ste_rating >= 0),
     lte_rating REAL NULL CHECK (lte_rating >= 0),
     line_length REAL NULL CHECK (line_length >= 0),
+    r REAL NOT NULL CHECK (r >= 0),
+    x REAL NOT NULL,
+    b TEXT NULL CHECK (b IS NULL OR json_valid(b)),
+    g TEXT NULL DEFAULT '{"from": 0.0, "to": 0.0}' CHECK (g IS NULL OR json_valid(g)),
+    parameter_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE' CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
     FOREIGN KEY (arc_id) REFERENCES arcs (id) ON DELETE CASCADE
 ) strict;
 
@@ -282,7 +301,7 @@ CREATE TABLE storage_units (
     storage_target REAL NOT NULL DEFAULT 0.0,
     cycle_limits INTEGER NOT NULL DEFAULT 10000 CHECK (cycle_limits > 0),
     -- Cost:
-    operation_cost JSON NULL
+    operation_cost JSON NOT NULL DEFAULT '{"cost_type": "STORAGE", "charge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}, "discharge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}'
 );
 
 -- Topological hydro reservoirs
@@ -303,7 +322,9 @@ CREATE TABLE hydro_reservoirs (
     head_to_volume_factor JSON NOT NULL,
     -- Cost (HydroReservoirCost):
     operation_cost JSON NOT NULL DEFAULT '{"cost_type": "HYDRO_RES", "level_shortage_cost": 0.0, "level_surplus_cost": 0.0, "spillage_cost": 0.0}',
-    level_data_type TEXT NOT NULL DEFAULT 'USABLE_VOLUME'
+    level_data_type TEXT NOT NULL DEFAULT 'USABLE_VOLUME' CHECK (
+        level_data_type IN ('USABLE_VOLUME', 'TOTAL_VOLUME', 'HEAD', 'ENERGY')
+    )
 );
 
 CREATE TABLE hydro_reservoir_connections (
@@ -327,7 +348,7 @@ CREATE TABLE supply_technologies (
     capacity_limits JSON NULL,
     -- Fuel information:
     fuel TEXT NOT NULL DEFAULT '["OTHER"]',
-    start_fuel_mmbtu_per_mwh REAL NULL,
+    start_fuel_mmbtu_per_mw REAL NULL,
     -- Fuel cofire limits (JSON: {"fuel1": {"min": ..., "max": ...}, "fuel2": {"min": ..., "max": ...}}):
     cofire_level_limits JSON NULL,
     -- Fuel cofire start limits (JSON: {"fuel1": ..., "fuel2": ...}):
@@ -506,7 +527,7 @@ CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     balancing_topology INTEGER NOT NULL,
-    base_power REAL,
+    base_power REAL NOT NULL,
     FOREIGN KEY(balancing_topology) REFERENCES balancing_topologies (id) ON DELETE CASCADE
 );
 
@@ -514,7 +535,14 @@ CREATE TABLE static_time_series (
     id INTEGER PRIMARY KEY,
     uuid TEXT NOT NULL,
     idx INTEGER NOT NULL,
-    value REAL NOT NULL,
+    value REAL NOT NULL
+) strict;
+
+-- Series-level unit metadata: one row per time series uuid, so a series cannot
+-- carry mixed units. Validated against allowed_units and enforced on
+-- static_time_series inserts by triggers.
+CREATE TABLE time_series_metadata (
+    uuid TEXT PRIMARY KEY,
     unit TEXT NOT NULL,
     quantity_type TEXT NOT NULL REFERENCES quantity_types (name)
 ) strict;
@@ -538,8 +566,16 @@ CREATE TABLE quantity_types (
     name TEXT PRIMARY KEY NOT NULL,
     default_unit TEXT NOT NULL,
     dimension TEXT NOT NULL,
-    per_unit INTEGER NOT NULL DEFAULT 0,
     description TEXT NULL
+) strict;
+
+-- Vocabulary of valid (quantity_type, unit) pairs. Seeded from units.json and
+-- sealed like the other registry tables; unit-string writes are validated
+-- against it.
+CREATE TABLE allowed_units (
+    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    unit TEXT NOT NULL,
+    PRIMARY KEY (quantity_type, unit)
 ) strict;
 
 CREATE TABLE unit_conventions (
@@ -548,9 +584,21 @@ CREATE TABLE unit_conventions (
     column_name TEXT NOT NULL,
     quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
     unit TEXT NOT NULL,
-    companion_column TEXT NULL,
-    is_per_unit INTEGER NOT NULL DEFAULT 0,
-    per_unit_base_column TEXT NULL,
+    -- Polymorphic units: when a column's quantity_type/unit depends on the value
+    -- of a sibling column (e.g. hydro_reservoirs.level_data_type), one row is
+    -- registered per discriminator value. discriminator_column names that sibling;
+    -- discriminator_value is the value this row applies to. Both NULL for the
+    -- common case of a column with a single fixed unit.
+    discriminator_column TEXT NULL,
+    discriminator_value TEXT NULL,
     description TEXT NULL,
-    UNIQUE(table_name, column_name)
+    -- Distinct units per discriminator value for a polymorphic column.
+    UNIQUE(table_name, column_name, discriminator_value)
 ) strict;
+
+-- For non-polymorphic columns (no discriminator) enforce one row per column.
+-- A table-level UNIQUE can't do this because SQLite treats each NULL
+-- discriminator_value as distinct, so guard those rows with a partial index.
+CREATE UNIQUE INDEX uq_unit_conventions_no_discriminator
+    ON unit_conventions (table_name, column_name)
+    WHERE discriminator_value IS NULL;

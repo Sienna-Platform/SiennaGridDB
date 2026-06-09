@@ -817,7 +817,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_management_metadata is immutable. Changes require a schema migration.'
+        'unit_management_metadata is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -827,7 +827,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_management_metadata is immutable. Changes require a schema migration.'
+        'unit_management_metadata is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -847,7 +847,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_management_metadata is sealed. New entries require a schema migration.'
+        'unit_management_metadata is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -860,7 +860,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable. Changes require a schema migration.'
+        'quantity_types is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -870,7 +870,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable. Changes require a schema migration.'
+        'quantity_types is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -890,7 +890,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is sealed. New entries require a schema migration.'
+        'quantity_types is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -903,7 +903,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_conventions is immutable. Changes require a schema migration.'
+        'unit_conventions is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -913,7 +913,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_conventions is immutable. Changes require a schema migration.'
+        'unit_conventions is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
@@ -933,25 +933,98 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_conventions is sealed. New entries require a schema migration.'
+        'unit_conventions is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+-- allowed_units (registry vocabulary): UPDATE and DELETE are blocked
+-- unconditionally; INSERT is blocked only after the registry is sealed.
+CREATE TRIGGER IF NOT EXISTS prevent_allowed_units_update BEFORE
+UPDATE
+    ON allowed_units
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'allowed_units is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_allowed_units_delete BEFORE DELETE ON allowed_units
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'allowed_units is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_allowed_units_insert BEFORE
+INSERT
+    ON allowed_units
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            unit_management_metadata
+        WHERE
+            KEY = 'unit_conventions_checksum'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'allowed_units is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
 
 -- =============================================================================
--- Unit Convention Validation Triggers
+-- Time Series Metadata Unit Validation Triggers (registry-linked)
+-- The (quantity_type, unit) pair on each series must be a registered vocabulary
+-- entry in allowed_units.
 -- =============================================================================
--- unique policy requires a companion column
-CREATE TRIGGER IF NOT EXISTS validate_unit_convention_companion BEFORE
+CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_insert BEFORE
 INSERT
-    ON unit_conventions
-    WHEN NEW.unit = 'unique'
-    AND NEW.companion_column IS NULL
+    ON time_series_metadata
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            allowed_units au
+        WHERE
+            au.quantity_type = NEW.quantity_type
+            AND au.unit = NEW.unit
+    )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit="unique" requires companion_column to be set.'
+        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_update BEFORE
+UPDATE
+    ON time_series_metadata
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            allowed_units au
+        WHERE
+            au.quantity_type = NEW.quantity_type
+            AND au.unit = NEW.unit
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
     );
 
 END;
@@ -968,7 +1041,9 @@ INSERT
 BEGIN
 SELECT
     CASE
-        -- Known attribute name: must match registered unit and quantity_type
+        -- Known attribute name: the (unit, quantity_type) must match some
+        -- registered row for that name. Polymorphic names carry several rows,
+        -- so any matching row satisfies the check (NOT EXISTS over the match).
         WHEN EXISTS (
             SELECT
                 1
@@ -976,34 +1051,28 @@ SELECT
                 unit_conventions
             WHERE
                 table_name = 'attributes'
-                AND column_name = NEW.name
+                AND LOWER(column_name) = LOWER(NEW.name)
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.unit != (
-                SELECT
-                    unit
-                FROM
-                    unit_conventions
-                WHERE
-                    table_name = 'attributes'
-                    AND column_name = NEW.name
-            )
             OR NEW.quantity_type IS NULL
-            OR NEW.quantity_type != (
+            OR NOT EXISTS (
                 SELECT
-                    quantity_type
+                    1
                 FROM
-                    unit_conventions
+                    unit_conventions uc
                 WHERE
-                    table_name = 'attributes'
-                    AND column_name = NEW.name
+                    uc.table_name = 'attributes'
+                    AND LOWER(uc.column_name) = LOWER(NEW.name)
+                    AND uc.unit = NEW.unit
+                    AND uc.quantity_type = NEW.quantity_type
             )
         ) THEN RAISE(
             ABORT,
             'Known attribute must use the registered unit and quantity_type from unit_conventions.'
         )
-        -- Unknown attribute with physical value: must have unit and quantity_type
+        -- Unknown attribute with physical value: must have a vocabulary-valid
+        -- (quantity_type, unit) pair from allowed_units.
         -- Physical = anything except boolean, text, or null
         WHEN NOT EXISTS (
             SELECT
@@ -1012,15 +1081,24 @@ SELECT
                 unit_conventions
             WHERE
                 table_name = 'attributes'
-                AND column_name = NEW.name
+                AND LOWER(column_name) = LOWER(NEW.name)
         )
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
             NEW.unit IS NULL
             OR NEW.quantity_type IS NULL
+            OR NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_type = NEW.quantity_type
+                    AND au.unit = NEW.unit
+            )
         ) THEN RAISE(
             ABORT,
-            'Attributes with numeric or structured values require unit and quantity_type. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
+            'Attributes with numeric or structured values require a vocabulary-valid unit and quantity_type from allowed_units. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
         )
     END;
 
@@ -1032,7 +1110,9 @@ UPDATE
 BEGIN
 SELECT
     CASE
-        -- Known attribute name: must match registered unit and quantity_type
+        -- Known attribute name: the (unit, quantity_type) must match some
+        -- registered row for that name. Polymorphic names carry several rows,
+        -- so any matching row satisfies the check (NOT EXISTS over the match).
         WHEN EXISTS (
             SELECT
                 1
@@ -1040,34 +1120,28 @@ SELECT
                 unit_conventions
             WHERE
                 table_name = 'attributes'
-                AND column_name = NEW.name
+                AND LOWER(column_name) = LOWER(NEW.name)
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.unit != (
-                SELECT
-                    unit
-                FROM
-                    unit_conventions
-                WHERE
-                    table_name = 'attributes'
-                    AND column_name = NEW.name
-            )
             OR NEW.quantity_type IS NULL
-            OR NEW.quantity_type != (
+            OR NOT EXISTS (
                 SELECT
-                    quantity_type
+                    1
                 FROM
-                    unit_conventions
+                    unit_conventions uc
                 WHERE
-                    table_name = 'attributes'
-                    AND column_name = NEW.name
+                    uc.table_name = 'attributes'
+                    AND LOWER(uc.column_name) = LOWER(NEW.name)
+                    AND uc.unit = NEW.unit
+                    AND uc.quantity_type = NEW.quantity_type
             )
         ) THEN RAISE(
             ABORT,
             'Known attribute must use the registered unit and quantity_type from unit_conventions.'
         )
-        -- Unknown attribute with physical value: must have unit and quantity_type
+        -- Unknown attribute with physical value: must have a vocabulary-valid
+        -- (quantity_type, unit) pair from allowed_units.
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -1075,48 +1149,403 @@ SELECT
                 unit_conventions
             WHERE
                 table_name = 'attributes'
-                AND column_name = NEW.name
+                AND LOWER(column_name) = LOWER(NEW.name)
         )
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
             NEW.unit IS NULL
             OR NEW.quantity_type IS NULL
+            OR NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_type = NEW.quantity_type
+                    AND au.unit = NEW.unit
+            )
         ) THEN RAISE(
             ABORT,
-            'Attributes with numeric or structured values require unit and quantity_type. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
+            'Attributes with numeric or structured values require a vocabulary-valid unit and quantity_type from allowed_units. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
         )
     END;
 
 END;
 
 -- =============================================================================
--- Time Series Unit Validation Triggers
--- Numeric time series values must provide unit and quantity_type.
+-- Time Series Data Validation Triggers
+-- Units live on time_series_metadata (one row per uuid), so a series cannot
+-- carry mixed units. Each static_time_series row must reference an existing
+-- metadata row.
 -- =============================================================================
-CREATE TRIGGER IF NOT EXISTS validate_time_series_unit_insert BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists BEFORE
 INSERT
     ON static_time_series
-    WHEN NEW.unit IS NULL
-    OR NEW.quantity_type IS NULL
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_metadata
+        WHERE
+            uuid = NEW.uuid
+    )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series requires unit and quantity_type. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
+        'static_time_series.uuid must exist in time_series_metadata before insertion.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS validate_time_series_unit_update BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists_update BEFORE
 UPDATE
-    ON static_time_series
-    WHEN NEW.unit IS NULL
-    OR NEW.quantity_type IS NULL
+    OF uuid ON static_time_series
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_metadata
+        WHERE
+            uuid = NEW.uuid
+    )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series requires unit and quantity_type. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
+        'static_time_series.uuid must exist in time_series_metadata before insertion.'
+    );
+
+END;
+
+-- =============================================================================
+-- Deprecated time_series_associations.units guard
+-- The column is deprecated in favor of time_series_metadata.unit. When set, it
+-- must agree with the series metadata unit.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NEW.units IS NOT NULL
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_metadata m
+        WHERE
+            m.uuid = NEW.time_series_uuid
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_metadata m
+        WHERE
+            m.uuid = NEW.time_series_uuid
+            AND m.unit = NEW.units
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_update BEFORE
+UPDATE
+    ON time_series_associations
+    WHEN NEW.units IS NOT NULL
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_metadata m
+        WHERE
+            m.uuid = NEW.time_series_uuid
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_metadata m
+        WHERE
+            m.uuid = NEW.time_series_uuid
+            AND m.unit = NEW.units
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
+    );
+
+END;
+
+-- =============================================================================
+-- Cost Payload Power-Units Guard
+-- The DB stores no system/device base, so cost payloads must express their
+-- variable curve in NATURAL_UNITS. Relative-base payloads are uninterpretable.
+-- NULL/absent power_units passes (payload may be a plain curve). Applies to the
+-- seven cost-bearing operation_cost(s) columns.
+-- The authoritative list of guarded cost payload paths is
+-- column_conventions.json (operation_cost* rows); keep in sync.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_insert BEFORE
+INSERT
+    ON thermal_generators
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_update BEFORE
+UPDATE
+    ON thermal_generators
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_renewable_generators_cost_units_insert BEFORE
+INSERT
+    ON renewable_generators
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_renewable_generators_cost_units_update BEFORE
+UPDATE
+    ON renewable_generators
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_insert BEFORE
+INSERT
+    ON hydro_generators
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_update BEFORE
+UPDATE
+    ON hydro_generators
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_storage_units_cost_units_insert BEFORE
+INSERT
+    ON storage_units
+    WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_storage_units_cost_units_update BEFORE
+UPDATE
+    ON storage_units
+    WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_hydro_reservoirs_cost_units_insert BEFORE
+INSERT
+    ON hydro_reservoirs
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_hydro_reservoirs_cost_units_update BEFORE
+UPDATE
+    ON hydro_reservoirs
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_supply_technologies_cost_units_insert BEFORE
+INSERT
+    ON supply_technologies
+    WHEN json_extract(NEW.operation_costs, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_supply_technologies_cost_units_update BEFORE
+UPDATE
+    ON supply_technologies
+    WHEN json_extract(NEW.operation_costs, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_storage_technologies_cost_units_insert BEFORE
+INSERT
+    ON storage_technologies
+    WHEN json_extract(NEW.operation_costs, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_costs, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_storage_technologies_cost_units_update BEFORE
+UPDATE
+    ON storage_technologies
+    WHEN json_extract(NEW.operation_costs, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_costs, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+-- =============================================================================
+-- EmissionsData supplemental-attribute payload guard
+-- supplemental_attributes stores free-form JSON per TYPE; for TYPE =
+-- 'EmissionsData' the payload's enum-bearing fields must use the schema enums
+-- (Core/common.json MassUnit/EnergyUnit/PollutantType/EmissionBasis) and the
+-- energy_unit must be consistent with the basis, mirroring the schema's allOf
+-- rule. Required fields (pollutant, basis, energy_unit) are rejected when
+-- absent: pollutant/basis via explicit IS NULL terms, energy_unit via the
+-- NULL-safe basis-gated IS NOT checks. Absent optional fields (mass_unit) pass.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS validate_supplemental_emissions_insert BEFORE
+INSERT
+    ON supplemental_attributes
+    WHEN NEW.TYPE = 'EmissionsData'
+    AND (
+        json_extract(NEW.value, '$.mass_unit') NOT IN ('KG', 'LB', 'SHORT_TON', 'METRIC_TON')
+        OR json_extract(NEW.value, '$.energy_unit') NOT IN ('MMBTU', 'GJ', 'MWH')
+        OR json_extract(NEW.value, '$.pollutant') NOT IN ('CO2', 'CO2E', 'CH4', 'N2O', 'NOX', 'SO2', 'PM25', 'PM10', 'HG', 'HAP', 'CUSTOM')
+        OR json_extract(NEW.value, '$.basis') NOT IN ('FUEL_INPUT', 'POWER_OUTPUT')
+        OR json_extract(NEW.value, '$.pollutant') IS NULL
+        OR json_extract(NEW.value, '$.basis') IS NULL
+        OR (
+            json_extract(NEW.value, '$.basis') = 'FUEL_INPUT'
+            AND json_extract(NEW.value, '$.energy_unit') IS NOT 'MMBTU'
+            AND json_extract(NEW.value, '$.energy_unit') IS NOT 'GJ'
+        )
+        OR (
+            json_extract(NEW.value, '$.basis') = 'POWER_OUTPUT'
+            AND json_extract(NEW.value, '$.energy_unit') IS NOT 'MWH'
+        )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'EmissionsData payload must use MassUnit/EnergyUnit/PollutantType/EmissionBasis enum values with a basis-consistent energy_unit (FUEL_INPUT: MMBTU or GJ; POWER_OUTPUT: MWH).'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_supplemental_emissions_update BEFORE
+UPDATE
+    ON supplemental_attributes
+    WHEN NEW.TYPE = 'EmissionsData'
+    AND (
+        json_extract(NEW.value, '$.mass_unit') NOT IN ('KG', 'LB', 'SHORT_TON', 'METRIC_TON')
+        OR json_extract(NEW.value, '$.energy_unit') NOT IN ('MMBTU', 'GJ', 'MWH')
+        OR json_extract(NEW.value, '$.pollutant') NOT IN ('CO2', 'CO2E', 'CH4', 'N2O', 'NOX', 'SO2', 'PM25', 'PM10', 'HG', 'HAP', 'CUSTOM')
+        OR json_extract(NEW.value, '$.basis') NOT IN ('FUEL_INPUT', 'POWER_OUTPUT')
+        OR json_extract(NEW.value, '$.pollutant') IS NULL
+        OR json_extract(NEW.value, '$.basis') IS NULL
+        OR (
+            json_extract(NEW.value, '$.basis') = 'FUEL_INPUT'
+            AND json_extract(NEW.value, '$.energy_unit') IS NOT 'MMBTU'
+            AND json_extract(NEW.value, '$.energy_unit') IS NOT 'GJ'
+        )
+        OR (
+            json_extract(NEW.value, '$.basis') = 'POWER_OUTPUT'
+            AND json_extract(NEW.value, '$.energy_unit') IS NOT 'MWH'
+        )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'EmissionsData payload must use MassUnit/EnergyUnit/PollutantType/EmissionBasis enum values with a basis-consistent energy_unit (FUEL_INPUT: MMBTU or GJ; POWER_OUTPUT: MWH).'
     );
 
 END;
