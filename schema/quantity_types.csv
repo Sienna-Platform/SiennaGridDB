@@ -24,6 +24,7 @@ Fraction,1,dimensionless,"Fractional quantity (efficiency, losses, etc.)"
 PowerFactor,1,dimensionless,"Power factor"
 HeatRate,MMBtu/MWh,heat_rate,"Heat rate"
 VolumeFlowRate,m3/s,volume_flow,"Volume flow rate"
+HeadRate,m/s,head_rate,"Rate of change of hydraulic head"
 Volume,m3,volume,Volume
 Inductance,H,inductance,Inductance
 Capacitance,F,capacitance,Capacitance

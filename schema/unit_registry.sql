@@ -61,7 +61,9 @@ CREATE TEMP TABLE unit_conventions_import (
     unit TEXT,
     is_per_unit TEXT,
     per_unit_base_column TEXT,
-    description TEXT
+    description TEXT,
+    discriminator_column TEXT,
+    discriminator_value TEXT
 );
 
 .import --csv --skip 1 schema/unit_conventions.csv unit_conventions_import
@@ -74,7 +76,9 @@ INSERT INTO
         unit,
         is_per_unit,
         per_unit_base_column,
-        description
+        description,
+        discriminator_column,
+        discriminator_value
     )
 SELECT
     table_name,
@@ -83,7 +87,9 @@ SELECT
     unit,
     CAST(is_per_unit AS INTEGER),
     NULLIF(per_unit_base_column, ''),
-    NULLIF(description, '')
+    NULLIF(description, ''),
+    NULLIF(discriminator_column, ''),
+    NULLIF(discriminator_value, '')
 FROM
     unit_conventions_import;
 
@@ -102,12 +108,13 @@ VALUES
             FROM
                 (
                     SELECT
-                        table_name || '.' || column_name || ':' || quantity_type || ':' || unit AS convention_repr
+                        table_name || '.' || column_name || '[' || COALESCE(discriminator_value, '') || ']:' || quantity_type || ':' || unit AS convention_repr
                     FROM
                         unit_conventions
                     ORDER BY
                         table_name,
-                        column_name
+                        column_name,
+                        COALESCE(discriminator_value, '')
                 )
         ),
         'Registry content fingerprint — recompute to verify integrity'

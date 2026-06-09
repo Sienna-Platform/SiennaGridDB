@@ -8,6 +8,8 @@ SELECT
     qt.dimension,
     uc.is_per_unit,
     uc.per_unit_base_column,
+    uc.discriminator_column,
+    uc.discriminator_value,
     uc.description
 FROM
     unit_conventions uc

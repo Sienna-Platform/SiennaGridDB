@@ -515,6 +515,21 @@ CREATE TABLE unit_conventions (
     companion_column TEXT NULL,
     is_per_unit INTEGER NOT NULL DEFAULT 0,
     per_unit_base_column TEXT NULL,
+    -- Polymorphic units: when a column's quantity_type/unit depends on the value
+    -- of a sibling column (e.g. hydro_reservoirs.level_data_type), one row is
+    -- registered per discriminator value. discriminator_column names that sibling;
+    -- discriminator_value is the value this row applies to. Both NULL for the
+    -- common case of a column with a single fixed unit.
+    discriminator_column TEXT NULL,
+    discriminator_value TEXT NULL,
     description TEXT NULL,
-    UNIQUE(table_name, column_name)
+    -- Distinct units per discriminator value for a polymorphic column.
+    UNIQUE(table_name, column_name, discriminator_value)
 ) strict;
+
+-- For non-polymorphic columns (no discriminator) enforce one row per column.
+-- A table-level UNIQUE can't do this because SQLite treats each NULL
+-- discriminator_value as distinct, so guard those rows with a partial index.
+CREATE UNIQUE INDEX uq_unit_conventions_no_discriminator
+    ON unit_conventions (table_name, column_name)
+    WHERE discriminator_value IS NULL;
