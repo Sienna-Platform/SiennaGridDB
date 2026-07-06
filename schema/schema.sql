@@ -58,6 +58,12 @@ DROP TABLE IF EXISTS supplemental_attributes_association;
 
 DROP TABLE IF EXISTS transport_technologies;
 
+DROP TABLE IF EXISTS combined_cycle_associations;
+
+DROP TABLE IF EXISTS plant_associations;
+
+DROP TABLE IF EXISTS plants;
+
 PRAGMA foreign_keys = ON;
 
 -- NOTE: This table should not be interacted directly since it gets populated
@@ -423,6 +429,36 @@ CREATE TABLE supplemental_attributes_association (
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     FOREIGN KEY (attribute_id) REFERENCES supplemental_attributes (id) ON DELETE CASCADE,
     PRIMARY KEY (attribute_id, entity_id)
+) strict;
+
+CREATE TABLE plants (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    TYPE TEXT NOT NULL,
+    value JSON,
+    json_type TEXT generated always AS (json_type (value)) virtual
+);
+
+CREATE TABLE plant_associations (
+    plant_id INTEGER NOT NULL,
+    entity_id INTEGER NOT NULL,
+    group_index INTEGER NOT NULL,
+    FOREIGN KEY (plant_id) REFERENCES plants (id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
+    PRIMARY KEY (plant_id, entity_id)
+) strict;
+
+-- CombinedCycleBlock CT/CA <-> HRSG associations are n-to-m: a CT or CA can
+-- feed multiple HRSGs and an HRSG can have multiple CTs/CAs. Kept in its own
+-- table so (plant, entity) is not unique.
+CREATE TABLE combined_cycle_associations (
+    plant_id INTEGER NOT NULL,
+    entity_id INTEGER NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('CT', 'CA')),
+    hrsg_index INTEGER NOT NULL,
+    FOREIGN KEY (plant_id) REFERENCES plants (id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
+    PRIMARY KEY (plant_id, entity_id, hrsg_index)
 ) strict;
 
 CREATE TABLE time_series_associations(

@@ -180,6 +180,20 @@ SELECT RAISE(
     );
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_plants_entity_exists BEFORE
+INSERT ON plants
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM entities
+        WHERE id = NEW.id
+            AND entity_table = 'plants'
+    ) BEGIN
+SELECT RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table plants before insertion'
+    );
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_loads_entity_exists BEFORE
 INSERT ON loads
     WHEN NOT EXISTS (
@@ -480,6 +494,13 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS delete_supplemental_attributes_entity
 AFTER DELETE ON supplemental_attributes
+FOR EACH ROW
+BEGIN
+    DELETE FROM entities WHERE id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_plants_entity
+AFTER DELETE ON plants
 FOR EACH ROW
 BEGIN
     DELETE FROM entities WHERE id = OLD.id;
