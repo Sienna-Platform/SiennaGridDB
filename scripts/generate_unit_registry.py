@@ -37,7 +37,8 @@ Per-table row field order (NULLs rendered as the empty string):
                          map: json.dumps(map, sort_keys=True, separators=(",",":")))
     allowed_units     : quantity_type, unit
     unit_conventions  : table_name, column_name, quantity_type, unit,
-                        discriminator_column, discriminator_value, description
+                        discriminator_column, discriminator_value,
+                        discriminator_column_2, discriminator_value_2, description
 
 Rows within each table are sorted (ascending, Python default string sort) by the
 tuple of their fields in the order listed above. Field values are joined with US,
@@ -104,6 +105,8 @@ def load_conventions(path):
                 "unit": entry["unit"],
                 "discriminator_column": entry.get("discriminator_column"),
                 "discriminator_value": entry.get("discriminator_value"),
+                "discriminator_column_2": entry.get("discriminator_column_2"),
+                "discriminator_value_2": entry.get("discriminator_value_2"),
                 "description": entry.get("description"),
             }
         )
@@ -143,6 +146,8 @@ def canonical_repr(quantity_types, allowed_units, conventions):
             r["unit"],
             none_to_empty(r["discriminator_column"]),
             none_to_empty(r["discriminator_value"]),
+            none_to_empty(r["discriminator_column_2"]),
+            none_to_empty(r["discriminator_value_2"]),
             none_to_empty(r["description"]),
         )
         for r in conventions
@@ -204,7 +209,7 @@ def emit(quantity_types, allowed_units, conventions, units_convention, seal):
 
     lines.append("-- 3. Column unit conventions")
     lines.append(
-        "INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, discriminator_column, discriminator_value, description) VALUES"
+        "INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, description) VALUES"
     )
     uc_sorted = sorted(
         conventions,
@@ -212,18 +217,21 @@ def emit(quantity_types, allowed_units, conventions, units_convention, seal):
             r["table_name"],
             r["column_name"],
             none_to_empty(r["discriminator_value"]),
+            none_to_empty(r["discriminator_value_2"]),
         ),
     )
     uc_values = []
     for r in uc_sorted:
         uc_values.append(
-            "    ({}, {}, {}, {}, {}, {}, {})".format(
+            "    ({}, {}, {}, {}, {}, {}, {}, {}, {})".format(
                 sql_literal(r["table_name"]),
                 sql_literal(r["column_name"]),
                 sql_literal(r["quantity_type"]),
                 sql_literal(r["unit"]),
                 sql_literal(r["discriminator_column"]),
                 sql_literal(r["discriminator_value"]),
+                sql_literal(r["discriminator_column_2"]),
+                sql_literal(r["discriminator_value_2"]),
                 sql_literal(r["description"]),
             )
         )

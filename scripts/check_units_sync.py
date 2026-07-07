@@ -217,13 +217,57 @@ def layer1(report, conventions, schema_map, schemas_path, allowed_pairs, doc_cac
     return {"checked": checked_pairs, "contradictions": contradiction, "gaps": gap}
 
 
+def _expand_schema_units_map(units_map):
+    """Expand a (possibly nested) schema x-units map into a flat
+    {(primary_value, secondary_value): unit} map.
+
+    A flat entry (`{"SYSTEM_BASE": "pu", ...}`) expands to (primary_value, None).
+    A nested entry (a field whose unit depends on a SECOND discriminator, e.g.
+    `dc_setpoint_from`'s `DC_VOLTAGE` value being `{"x-unit-discriminator":
+    "voltage_units", "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"}}`)
+    expands to one (primary_value, secondary_value) entry per secondary key.
+    Must not choke on a dict value -- that is the whole point of this helper.
+    """
+    expanded = {}
+    for primary_value, value in units_map.items():
+        if isinstance(value, dict):
+            for secondary_value, unit in value.get("x-units", {}).items():
+                if isinstance(unit, dict):
+                    raise ValueError(
+                        "x-units nesting deeper than two levels is not representable "
+                        "in the registry (only discriminator_value_2 exists); found a "
+                        "third level under %r/%r" % (primary_value, secondary_value)
+                    )
+                expanded[(primary_value, secondary_value)] = unit
+        else:
+            expanded[(primary_value, None)] = value
+    return expanded
+
+
+def _discriminator_key_label(key):
+    primary, secondary = key
+    if secondary is None:
+        return primary
+    return f"{primary}/{secondary}"
+
+
 def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_pairs):
     """Compare a schema x-units discriminator map against the registry's discriminator rows.
+
+    Registry rows are keyed on (discriminator_value, discriminator_value_2); rows with no
+    second discriminator carry discriminator_value_2=None (the pre-nesting shape). Flat
+    schema x-units values compare on the primary discriminator only (secondary=None); a
+    nested schema x-units value (a field whose unit depends on a second discriminator)
+    expands into (primary_value, secondary_value) pairs via _expand_schema_units_map and
+    compares against the matching registry rows.
 
     Returns the number of WARNs emitted (0 if none).
     """
     units_map = ann["units_map"]
-    reg_map = {r["discriminator_value"]: (r["quantity_type"], r["unit"]) for r in discriminated}
+    reg_map = {
+        (r["discriminator_value"], r.get("discriminator_value_2")): (r["quantity_type"], r["unit"])
+        for r in discriminated
+    }
 
     if units_map is None:
         # The schema annotates a single representation (e.g. x-unit=pu for branch
@@ -249,30 +293,34 @@ def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_p
             )
         return 0
 
-    schema_keys = set(units_map.keys())
+    schema_map = _expand_schema_units_map(units_map)
+    schema_keys = set(schema_map.keys())
     reg_keys = set(reg_map.keys())
     if schema_keys != reg_keys:
         report.fail(
             "L1",
             "discriminator key mismatch %s.%s on %s: schema x-units keys %s vs registry %s"
-            % (table, column, comp, sorted(schema_keys), sorted(reg_keys)),
+            % (table, column, comp,
+               sorted((_discriminator_key_label(k) for k in schema_keys)),
+               sorted((_discriminator_key_label(k) for k in reg_keys))),
         )
         return 0
 
-    for dv in sorted(schema_keys):
-        schema_unit = units_map[dv]
-        reg_qt, reg_unit = reg_map[dv]
+    for key in sorted(schema_keys, key=lambda k: (k[0], k[1] or "")):
+        schema_unit = schema_map[key]
+        reg_qt, reg_unit = reg_map[key]
+        label = _discriminator_key_label(key)
         if schema_unit != reg_unit:
             report.fail(
                 "L1",
                 "discriminated unit contradiction %s.%s[%s] on %s: schema=%s vs registry=%s"
-                " (%s)" % (table, column, dv, comp, schema_unit, reg_unit, reg_qt),
+                " (%s)" % (table, column, label, comp, schema_unit, reg_unit, reg_qt),
             )
         elif (reg_qt, schema_unit) not in allowed_pairs:
             report.fail(
                 "L1",
                 "discriminated quantity/unit not in vocabulary %s.%s[%s] on %s: (%s, %s)"
-                % (table, column, dv, comp, reg_qt, schema_unit),
+                % (table, column, label, comp, reg_qt, schema_unit),
             )
     return 0
 
@@ -338,11 +386,19 @@ def psy_field_is_mva_convertible(field):
 
 
 def psy_field_is_documented_natural(name, field):
-    """base_power is a documented natural-unit (MVA) field with no needs_conversion."""
-    if name != "base_power":
-        return False
+    """A power-valued PSY field stored in natural units with no needs_conversion.
+
+    Two documented cases:
+    - base_power: the device MVA base itself.
+    - a device quantity entered "at unity voltage" (e.g. FACTS max_shunt_current, a
+      current expressed as MVA at unity voltage): a device basis, not a system-base
+      power, so PSY deliberately stores it unconverted. The idiom is specific — only
+      max_shunt_current uses it today — so it exempts exactly that pattern.
+    """
     comment = field.get("comment") or ""
-    return "MVA" in comment
+    if name == "base_power":
+        return "MVA" in comment
+    return "at unity voltage" in comment.lower() and not field.get("needs_conversion")
 
 
 def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):

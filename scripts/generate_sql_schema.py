@@ -161,10 +161,24 @@ def bound_checks(column, prop):
     return checks
 
 
+def _units_entry(key, value):
+    """Render one x-units entry. A dict value is a nested discriminator (a field
+    whose unit depends on a second discriminator column); a plain value is a
+    unit string, rendered exactly as before."""
+    if isinstance(value, dict):
+        disc2 = value.get("x-unit-discriminator", "?")
+        inner = ", ".join(f"{k2}: {v2}" for k2, v2 in sorted(value.get("x-units", {}).items()))
+        return f"{key}: per {disc2} [{inner}]"
+    return f"{key}: {value}"
+
+
 def units_comment(prop):
     if "x-units" in prop:
         disc = prop.get("x-unit-discriminator", "?")
-        pairs = ", ".join(f"{k}: {v}" for k, v in sorted(prop["x-units"].items()))
+        units_map = prop["x-units"]
+        nested = any(isinstance(v, dict) for v in units_map.values())
+        sep = "; " if nested else ", "
+        pairs = sep.join(_units_entry(k, v) for k, v in sorted(units_map.items()))
         return f" -- Units: per {disc} ({pairs})"
     if "x-unit" in prop:
         return f" -- Units: {prop['x-unit']}"

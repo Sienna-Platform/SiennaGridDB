@@ -36,6 +36,30 @@
     "transmission_interchanges": [
       {"component": "AreaInterchange", "file": "Operations/Branch/AreaInterchange.json", "is_psy": true}
     ],
+    "two_terminal_lcc_lines": [
+      {"component": "TwoTerminalLCCLine", "file": "Operations/Branch/TwoTerminalLCCLine.json", "is_psy": true}
+    ],
+    "two_terminal_vsc_lines": [
+      {"component": "TwoTerminalVSCLine", "file": "Operations/Branch/TwoTerminalVSCLine.json", "is_psy": true}
+    ],
+    "tmodel_hvdc_lines": [
+      {"component": "TModelHVDCLine", "file": "Operations/Branch/TModelHVDCLine.json", "is_psy": true}
+    ],
+    "fixed_admittance": [
+      {"component": "FixedAdmittance", "file": "Operations/StaticInjection/FixedAdmittance.json", "is_psy": true}
+    ],
+    "switched_admittance": [
+      {"component": "SwitchedAdmittance", "file": "Operations/StaticInjection/SwitchedAdmittance.json", "is_psy": true}
+    ],
+    "sources": [
+      {"component": "Source", "file": "Operations/StaticInjection/Source.json", "is_psy": true}
+    ],
+    "interconnecting_converters": [
+      {"component": "InterconnectingConverter", "file": "Operations/StaticInjection/InterconnectingConverter.json", "is_psy": true}
+    ],
+    "facts_control_devices": [
+      {"component": "FACTSControlDevice", "file": "Operations/StaticInjection/FACTSControlDevice.json", "is_psy": true}
+    ],
     "balancing_topologies": [
       {"component": "ACBus", "file": "Operations/Topology/ACBus.json", "is_psy": true}
     ],

@@ -22,8 +22,8 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR
 
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 39
-EXPECTED_ALLOWED_UNITS = 53
-EXPECTED_UNIT_CONVENTIONS = 142
+EXPECTED_ALLOWED_UNITS = 54
+EXPECTED_UNIT_CONVENTIONS = 215
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1167,3 +1167,63 @@ def test_emissions_enum_lists_match_common_json(db, action):
             f"{def_name} enum drift: trigger has {trigger_lists[field]} but "
             f"common.json has {schema_members}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# Flexible unit-basis columns (PSS/E-sourced fields, UIP Phase 2)
+# --------------------------------------------------------------------------- #
+def test_flexible_basis_columns_registered(db):
+    """Every discriminated PSS/E-sourced column added in Phase 2 has exactly the
+    expected set of basis rows in unit_conventions -- no missing or extra basis."""
+    expected = {
+        ("fixed_admittance", "y_b"): {"SYSTEM_BASE", "NATURAL_UNITS", "DEVICE_MVAR"},
+        ("fixed_admittance", "y_g"): {"SYSTEM_BASE", "NATURAL_UNITS", "DEVICE_MVAR"},
+        ("sources", "r_th"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("sources", "x_th"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("two_terminal_lcc_lines", "r"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("two_terminal_lcc_lines", "scheduled_dc_voltage"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("two_terminal_lcc_lines", "switch_mode_voltage"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("two_terminal_lcc_lines", "min_compounding_voltage"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("two_terminal_vsc_lines", "g"): {"SYSTEM_BASE", "NATURAL_UNITS", "DEVICE_MVAR"},
+        ("two_terminal_vsc_lines", "voltage_limits_from"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("two_terminal_vsc_lines", "voltage_limits_to"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("facts_control_devices", "voltage_setpoint"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+    }
+    for (table, col), bases in expected.items():
+        rows = db.execute(
+            "SELECT discriminator_value FROM unit_conventions "
+            "WHERE table_name=? AND column_name=?", (table, col)
+        ).fetchall()
+        got = {r[0] for r in rows}
+        assert got == bases, f"{table}.{col}: {got} != {bases}"
+
+
+def test_vsc_setpoints_two_discriminator(db):
+    """VSC dc_setpoint_from/ac_setpoint_from are mode-multiplexed by
+    dc_control_from/ac_control_from; their voltage-mode rows carry a second
+    discriminator (voltage_units) so pu vs kV is also explicit."""
+    rows = set(db.execute(
+        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_type, unit "
+        "FROM unit_conventions WHERE table_name='two_terminal_vsc_lines' "
+        "AND column_name IN ('dc_setpoint_from','ac_setpoint_from')"
+    ).fetchall())
+    assert ('dc_setpoint_from','DC_POWER',None,'ActivePower','MW') in rows
+    assert ('dc_setpoint_from','DC_VOLTAGE','SYSTEM_BASE','Voltage','pu') in rows
+    assert ('dc_setpoint_from','DC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
+    assert ('ac_setpoint_from','AC_VOLTAGE','SYSTEM_BASE','Voltage','pu') in rows
+    assert ('ac_setpoint_from','AC_REACTIVE_POWER',None,'PowerFactor','1') in rows
+
+
+def test_interconnecting_converter_setpoints_two_discriminator(db):
+    """InterconnectingConverter dc_setpoint/ac_setpoint are mode-multiplexed by
+    dc_control/ac_control, the same enums used by TwoTerminalVSCLine; their
+    voltage-mode rows carry a second discriminator (voltage_setpoint_units) so
+    pu vs kV is also explicit."""
+    rows = set(db.execute(
+        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_type, unit "
+        "FROM unit_conventions WHERE table_name='interconnecting_converters' "
+        "AND column_name IN ('dc_setpoint','ac_setpoint')"
+    ).fetchall())
+    assert ('dc_setpoint','DC_POWER',None,'ActivePower','MW') in rows
+    assert ('dc_setpoint','DC_VOLTAGE','SYSTEM_BASE','Voltage','pu') in rows
+    assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows

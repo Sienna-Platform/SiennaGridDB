@@ -22,7 +22,8 @@ Per-table row field order (NULLs rendered as the empty string):
     quantity_types    : name, default_unit, dimension, description
     allowed_units     : quantity_type, unit
     unit_conventions  : table_name, column_name, quantity_type, unit,
-                        discriminator_column, discriminator_value, description
+                        discriminator_column, discriminator_value,
+                        discriminator_column_2, discriminator_value_2, description
 
 Rows within each table are sorted (ascending, Python default tuple sort) by the
 tuple of their fields in the order listed above. Field values are joined with

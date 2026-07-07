@@ -9,6 +9,9 @@ import pytest
 
 from conftest import SCHEMA_DIR, SCRIPTS_DIR
 
+sys.path.insert(0, str(SCRIPTS_DIR))
+from generate_sql_schema import units_comment  # noqa: E402
+
 GENERATE_SCRIPT = SCRIPTS_DIR / "generate_sql_schema.py"
 GENERATED_SQL = SCHEMA_DIR / "generated_schema.sql"
 SCHEMA_MAP = SCHEMA_DIR / "schema_map.json"
@@ -139,6 +142,7 @@ def test_branch_parameter_pu_pairs_in_vocabulary(fresh_db):
         ("Reactance", "pu"),
         ("Susceptance", "pu"),
         ("Conductance", "pu"),
+        ("Voltage", "pu"),
     }
 
 
@@ -185,3 +189,43 @@ def test_branch_parameter_columns_store_values(fresh_db):
             "VALUES (2, 'line2', ?, 100.0, -0.5, 0.1)",
             (_arc(2),),
         )
+
+
+def test_units_comment_plain_x_unit_unchanged():
+    assert units_comment({"x-unit": "MW"}) == " -- Units: MW"
+    assert units_comment({}) == ""
+
+
+def test_units_comment_flat_x_units_unchanged():
+    """A flat x-units map (no nested discriminator) renders exactly as before:
+    ', '-joined 'key: value' pairs, sorted by key."""
+    prop = {
+        "x-unit-discriminator": "parameter_units",
+        "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "ohm"},
+    }
+    assert units_comment(prop) == " -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)"
+
+
+def test_units_comment_nested_x_units():
+    """A nested x-units value (dc_setpoint_from-shaped: unit depends on a SECOND
+    discriminator) renders both discriminators and the pu/kV pair."""
+    prop = {
+        "x-unit-discriminator": "dc_control_from",
+        "x-units": {
+            "DC_POWER": "MW",
+            "DC_VOLTAGE": {
+                "x-unit-discriminator": "voltage_units",
+                "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"},
+            },
+        },
+    }
+    comment = units_comment(prop)
+    assert "dc_control_from" in comment
+    assert "DC_POWER: MW" in comment
+    assert "voltage_units" in comment
+    assert "SYSTEM_BASE: pu" in comment
+    assert "NATURAL_UNITS: kV" in comment
+    assert comment == (
+        " -- Units: per dc_control_from (DC_POWER: MW; "
+        "DC_VOLTAGE: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])"
+    )

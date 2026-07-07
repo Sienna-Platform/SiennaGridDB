@@ -45,7 +45,8 @@ def fetch_repr(conn):
 
     cur.execute(
         "SELECT table_name, column_name, quantity_type, unit, "
-        "discriminator_column, discriminator_value, description "
+        "discriminator_column, discriminator_value, "
+        "discriminator_column_2, discriminator_value_2, description "
         "FROM unit_conventions"
     )
     uc_rows = (
@@ -57,6 +58,8 @@ def fetch_repr(conn):
             none_to_empty(row[4]),
             none_to_empty(row[5]),
             none_to_empty(row[6]),
+            none_to_empty(row[7]),
+            none_to_empty(row[8]),
         )
         for row in cur.fetchall()
     )

@@ -7,7 +7,7 @@
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
 -- Schema/registry revision; bump on every future registry or schema change.
-PRAGMA user_version = 2;
+PRAGMA user_version = 4;
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -42,6 +42,22 @@ DROP TABLE IF EXISTS time_series_associations;
 DROP TABLE IF EXISTS attributes;
 
 DROP TABLE IF EXISTS loads;
+
+DROP TABLE IF EXISTS fixed_admittance;
+
+DROP TABLE IF EXISTS switched_admittance;
+
+DROP TABLE IF EXISTS sources;
+
+DROP TABLE IF EXISTS two_terminal_lcc_lines;
+
+DROP TABLE IF EXISTS tmodel_hvdc_lines;
+
+DROP TABLE IF EXISTS two_terminal_vsc_lines;
+
+DROP TABLE IF EXISTS facts_control_devices;
+
+DROP TABLE IF EXISTS interconnecting_converters;
 
 DROP TABLE IF EXISTS static_time_series;
 
@@ -531,6 +547,149 @@ CREATE TABLE loads (
     FOREIGN KEY(balancing_topology) REFERENCES balancing_topologies (id) ON DELETE CASCADE
 );
 
+-- Fixed shunt admittance (PSY FixedAdmittance). Complex Y is stored as conductance
+-- (y_g) and susceptance (y_b) halves; admittance_units records the basis so PSS/E
+-- data (Mvar/MW at unity voltage) is stored without conversion.
+CREATE TABLE fixed_admittance (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    y_g REAL NOT NULL DEFAULT 0.0,
+    y_b REAL NOT NULL DEFAULT 0.0,
+    admittance_units TEXT NOT NULL DEFAULT 'DEVICE_MVAR'
+        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR'))
+) strict;
+
+-- Switched shunt admittance (PSY SwitchedAdmittance). Same y_g/y_b + admittance_units
+-- template as fixed_admittance. NOTE: Y_increase (step-size admittance) and
+-- admittance_limits (per-step array) are deferred -- not yet represented as columns --
+-- so only the primary Y (y_g/y_b) is registered in the unit registry.
+CREATE TABLE switched_admittance (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    y_g REAL NOT NULL DEFAULT 0.0,
+    y_b REAL NOT NULL DEFAULT 0.0,
+    admittance_units TEXT NOT NULL DEFAULT 'DEVICE_MVAR'
+        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR'))
+) strict;
+
+-- Thevenin equivalent source (PSY Source). R_th/X_th are stored flexibly in pu on
+-- system base OR natural-units ohm, recorded per row by parameter_units. PSY has no
+-- PSS/E-native representation for this component, so SYSTEM_BASE (pu) is the default.
+CREATE TABLE sources (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    r_th REAL NOT NULL,
+    x_th REAL NOT NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE'
+        CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- Two-terminal LCC (line-commutated converter) HVDC line (PSY TwoTerminalLCCLine).
+-- The 8 impedance fields are stored flexibly in pu on system base OR natural-units ohm
+-- (PSS/E native), recorded per row by parameter_units. scheduled_dc_voltage,
+-- switch_mode_voltage, and min_compounding_voltage are stored flexibly per
+-- dc_voltage_units (SYSTEM_BASE: pu on DC base voltage, NATURAL_UNITS: kV, PSS/E native).
+-- TODO(non-unit fields): transformer taps, firing/extinction angles, converter counts,
+-- and other non-unit-flexible PSY fields are out of scope for this table slice.
+CREATE TABLE two_terminal_lcc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL,
+    rectifier_rc REAL NOT NULL,
+    rectifier_xc REAL NOT NULL,
+    inverter_rc REAL NOT NULL,
+    inverter_xc REAL NOT NULL,
+    rectifier_capacitor_reactance REAL NOT NULL,
+    inverter_capacitor_reactance REAL NOT NULL,
+    compounding_resistance REAL NOT NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    scheduled_dc_voltage REAL NOT NULL DEFAULT 0.0,
+    switch_mode_voltage REAL NOT NULL DEFAULT 0.0,
+    min_compounding_voltage REAL NOT NULL DEFAULT 0.0,
+    dc_voltage_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (dc_voltage_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- T-model HVDC line (PSY TModelHVDCLine). Only the resistance r is unit-flexible in
+-- this slice; l/c are out of scope (no Inductance/pu or Capacitance/pu vocabulary yet).
+-- TODO(l, c and other non-unit fields deferred).
+CREATE TABLE tmodel_hvdc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- Two-terminal VSC (voltage-source converter) HVDC line (PSY TwoTerminalVSCLine).
+-- Converter conductance g is stored flexibly per admittance_units (SYSTEM_BASE: pu,
+-- NATURAL_UNITS: siemens -- PSS/E native for this field, DEVICE_MVAR: MW at unity
+-- voltage). voltage_limits_from/to (DC bus voltage MinMax) are stored flexibly per
+-- voltage_units (SYSTEM_BASE: pu, NATURAL_UNITS: kV). dc_setpoint_*/ac_setpoint_* are
+-- mode-multiplexed by dc_control_*/ac_control_*; their voltage-mode values (DC_VOLTAGE,
+-- DC_VOLTAGE_DROOP, AC_VOLTAGE) are further discriminated by voltage_units (pu/kV) via
+-- the registry's second discriminator column.
+-- TODO(non-unit fields).
+CREATE TABLE two_terminal_vsc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    g REAL NOT NULL DEFAULT 0.0,
+    admittance_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR')),
+    voltage_limits_from TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'
+        CHECK (voltage_limits_from IS NULL OR json_valid(voltage_limits_from)),
+    voltage_limits_to TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'
+        CHECK (voltage_limits_to IS NULL OR json_valid(voltage_limits_to)),
+    voltage_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (voltage_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    dc_setpoint_from REAL NOT NULL DEFAULT 0.0,
+    dc_control_from TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control_from IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
+    dc_setpoint_to REAL NOT NULL DEFAULT 0.0,
+    dc_control_to TEXT NOT NULL DEFAULT 'DC_POWER' CHECK (dc_control_to IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
+    ac_setpoint_from REAL NOT NULL DEFAULT 1.0,
+    ac_control_from TEXT NOT NULL DEFAULT 'AC_VOLTAGE' CHECK (ac_control_from IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
+    ac_setpoint_to REAL NOT NULL DEFAULT 1.0,
+    ac_control_to TEXT NOT NULL DEFAULT 'AC_VOLTAGE' CHECK (ac_control_to IN ('AC_VOLTAGE','AC_REACTIVE_POWER'))
+) strict;
+
+-- FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly
+-- per voltage_setpoint_units (SYSTEM_BASE: pu on bus base -- PSS/E VSET native;
+-- NATURAL_UNITS: kV). TODO(non-unit fields).
+CREATE TABLE facts_control_devices (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    voltage_setpoint REAL NOT NULL,
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE'
+        CHECK (voltage_setpoint_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- Interconnecting power converter (PSY InterconnectingConverter), AC<->DC bus
+-- converter. dc_setpoint/ac_setpoint are mode-multiplexed by dc_control/ac_control;
+-- their voltage-mode values (DC_VOLTAGE, DC_VOLTAGE_DROOP, AC_VOLTAGE) are further
+-- discriminated by voltage_setpoint_units (pu/kV) via the registry's second
+-- discriminator column, mirroring two_terminal_vsc_lines.
+-- TODO(non-unit fields: dc_bus, active_power, rating, active_power_limits,
+-- base_power, reactive_power_limits, dc_current, max_dc_current, loss_function,
+-- dc_voltage_droop, dynamic_injector).
+CREATE TABLE interconnecting_converters (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    dc_setpoint REAL NOT NULL DEFAULT 0.0,
+    dc_control TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
+    ac_setpoint REAL NOT NULL DEFAULT 1.0,
+    ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE' CHECK (voltage_setpoint_units IN ('SYSTEM_BASE','NATURAL_UNITS'))
+) strict;
+
 CREATE TABLE static_time_series (
     id INTEGER PRIMARY KEY,
     uuid TEXT NOT NULL,
@@ -591,9 +750,14 @@ CREATE TABLE unit_conventions (
     -- common case of a column with a single fixed unit.
     discriminator_column TEXT NULL,
     discriminator_value TEXT NULL,
+    -- Optional second discriminator, for columns whose unit depends on a pair of
+    -- sibling columns. NULL for every current convention (single or no
+    -- discriminator); reserved for future use.
+    discriminator_column_2 TEXT NULL,
+    discriminator_value_2 TEXT NULL,
     description TEXT NULL,
     -- Distinct units per discriminator value for a polymorphic column.
-    UNIQUE(table_name, column_name, discriminator_value)
+    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2)
 ) strict;
 
 -- For non-polymorphic columns (no discriminator) enforce one row per column.

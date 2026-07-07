@@ -348,6 +348,174 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_fixed_admittance_entity_exists BEFORE
+INSERT
+    ON fixed_admittance
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'fixed_admittance'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table fixed_admittance before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_switched_admittance_entity_exists BEFORE
+INSERT
+    ON switched_admittance
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'switched_admittance'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table switched_admittance before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_sources_entity_exists BEFORE
+INSERT
+    ON sources
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'sources'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table sources before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_lcc_lines_entity_exists BEFORE
+INSERT
+    ON two_terminal_lcc_lines
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'two_terminal_lcc_lines'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table two_terminal_lcc_lines before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_tmodel_hvdc_lines_entity_exists BEFORE
+INSERT
+    ON tmodel_hvdc_lines
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'tmodel_hvdc_lines'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table tmodel_hvdc_lines before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_vsc_lines_entity_exists BEFORE
+INSERT
+    ON two_terminal_vsc_lines
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'two_terminal_vsc_lines'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table two_terminal_vsc_lines before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_facts_control_devices_entity_exists BEFORE
+INSERT
+    ON facts_control_devices
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'facts_control_devices'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table facts_control_devices before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_interconnecting_converters_entity_exists BEFORE
+INSERT
+    ON interconnecting_converters
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'interconnecting_converters'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table interconnecting_converters before insertion'
+    );
+
+END;
+
 -- Business Logic Validation Triggers
 CREATE TRIGGER enforce_arc_entity_types_insert
 AFTER
@@ -796,6 +964,94 @@ END;
 CREATE TRIGGER IF NOT EXISTS delete_loads_entity
 AFTER
     DELETE ON loads FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_fixed_admittance_entity
+AFTER
+    DELETE ON fixed_admittance FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_switched_admittance_entity
+AFTER
+    DELETE ON switched_admittance FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_sources_entity
+AFTER
+    DELETE ON sources FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_two_terminal_lcc_lines_entity
+AFTER
+    DELETE ON two_terminal_lcc_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_tmodel_hvdc_lines_entity
+AFTER
+    DELETE ON tmodel_hvdc_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_two_terminal_vsc_lines_entity
+AFTER
+    DELETE ON two_terminal_vsc_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_facts_control_devices_entity
+AFTER
+    DELETE ON facts_control_devices FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_interconnecting_converters_entity
+AFTER
+    DELETE ON interconnecting_converters FOR EACH ROW
 BEGIN
 DELETE FROM
     entities
