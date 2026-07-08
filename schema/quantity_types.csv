@@ -31,6 +31,7 @@ Capacitance,F,capacitance,Capacitance
 CostPerEnergyUnit,USD/MWh,cost_rate,"Cost per unit of energy"
 CapitalCost,USD/MW,cost_rate,"Capital cost per unit of capacity"
 OperationCost,USD/MWh,cost_rate,"Operational cost per unit of energy"
+DemandCost,USD/MWh,cost_rate,"Cost of demand per unit of energy"
 CO2Emissions,t/MMBtu,emissions,"CO2 emission rate"
 Money,USD,currency,"Monetary value"
 Temperature,degC,temperature,Temperature
