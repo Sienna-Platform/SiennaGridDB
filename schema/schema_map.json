@@ -36,6 +36,9 @@
     "transmission_interchanges": [
       {"component": "AreaInterchange", "file": "Operations/Branch/AreaInterchange.json", "is_psy": true}
     ],
+    "discrete_controlled_ac_branches": [
+      {"component": "DiscreteControlledACBranch", "file": "Operations/Branch/DiscreteControlledACBranch.json", "is_psy": true}
+    ],
     "two_terminal_lcc_lines": [
       {"component": "TwoTerminalLCCLine", "file": "Operations/Branch/TwoTerminalLCCLine.json", "is_psy": true}
     ],

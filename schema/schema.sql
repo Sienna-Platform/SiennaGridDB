@@ -7,7 +7,7 @@
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
 -- Schema/registry revision; bump on every future registry or schema change.
-PRAGMA user_version = 4;
+PRAGMA user_version = 6;
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -190,6 +190,25 @@ CREATE TABLE transmission_lines (
     FOREIGN KEY (arc_id) REFERENCES arcs (id) ON DELETE CASCADE
 ) strict;
 
+-- Switches and breakers connecting AC buses (PSY DiscreteControlledACBranch).
+-- r/x are per-unit on system base (this component has no natural-units option
+-- in PSY, unlike transmission_lines); rating is stored in MVA (natural units),
+-- mirroring transmission_lines.continuous_rating.
+CREATE TABLE discrete_controlled_ac_branches (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL CHECK (r >= 0),
+    x REAL NOT NULL CHECK (x >= 0),
+    rating REAL NOT NULL CHECK (rating >= 0),
+    discrete_branch_type TEXT NOT NULL DEFAULT 'OTHER'
+        CHECK (discrete_branch_type IN ('SWITCH', 'BREAKER', 'OTHER')),
+    branch_status TEXT NOT NULL DEFAULT 'CLOSED'
+        CHECK (branch_status IN ('OPEN', 'CLOSED')),
+    normal_branch_status TEXT NOT NULL DEFAULT 'CLOSED'
+        CHECK (normal_branch_status IN ('OPEN', 'CLOSED'))
+) strict;
+
 -- NOTE: The purpose of this table is to provide physical limits to flows
 -- between areas or balancing topologies. In contrast with the transmission
 -- lines, this entities are used to enforce given physical limits of certain
@@ -316,6 +335,12 @@ CREATE TABLE storage_units (
     conversion_factor REAL NOT NULL DEFAULT 1.0 CHECK (conversion_factor > 0),
     storage_target REAL NOT NULL DEFAULT 0.0,
     cycle_limits INTEGER NOT NULL DEFAULT 10000 CHECK (cycle_limits > 0),
+    -- Ramp limits (JSON: {"up": ..., "down": ...}, MW/min):
+    ramp_limits JSON NULL,
+    -- Leakage loss (fraction of stored energy lost per hour) and constant
+    -- standing-loss power (MW), both PSY-defaulted to 0.0:
+    self_discharge REAL NOT NULL DEFAULT 0.0 CHECK (self_discharge >= 0),
+    standing_loss REAL NOT NULL DEFAULT 0.0 CHECK (standing_loss >= 0),
     -- Cost:
     operation_cost JSON NOT NULL DEFAULT '{"cost_type": "STORAGE", "charge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}, "discharge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}'
 );
@@ -336,11 +361,14 @@ CREATE TABLE hydro_reservoirs (
     intake_elevation REAL NOT NULL DEFAULT 0.0,
     -- Head to volume relationship (JSON ValueCurve):
     head_to_volume_factor JSON NOT NULL,
-    -- Cost (HydroReservoirCost):
+    -- Cost (HydroReservoirCost), always USD/MWh regardless of level_data_type --
+    -- level-native values convert to energy via head_to_volume_factor before costing:
     operation_cost JSON NOT NULL DEFAULT '{"cost_type": "HYDRO_RES", "level_shortage_cost": 0.0, "level_surplus_cost": 0.0, "spillage_cost": 0.0}',
     level_data_type TEXT NOT NULL DEFAULT 'USABLE_VOLUME' CHECK (
         level_data_type IN ('USABLE_VOLUME', 'TOTAL_VOLUME', 'HEAD', 'ENERGY')
-    )
+    ),
+    -- Standing loss from evaporation (fraction of stored volume/energy lost per hour):
+    evaporative_loss REAL NOT NULL DEFAULT 0.0 CHECK (evaporative_loss >= 0)
 );
 
 CREATE TABLE hydro_reservoir_connections (
@@ -561,9 +589,9 @@ CREATE TABLE fixed_admittance (
 ) strict;
 
 -- Switched shunt admittance (PSY SwitchedAdmittance). Same y_g/y_b + admittance_units
--- template as fixed_admittance. NOTE: Y_increase (step-size admittance) and
--- admittance_limits (per-step array) are deferred -- not yet represented as columns --
--- so only the primary Y (y_g/y_b) is registered in the unit registry.
+-- template as fixed_admittance. NOTE: initial_status, number_of_steps, Y_increase, and
+-- admittance_limits remain deferred -- not yet represented as columns (pre-existing gap,
+-- out of scope for this change).
 CREATE TABLE switched_admittance (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -571,7 +599,13 @@ CREATE TABLE switched_admittance (
     y_g REAL NOT NULL DEFAULT 0.0,
     y_b REAL NOT NULL DEFAULT 0.0,
     admittance_units TEXT NOT NULL DEFAULT 'DEVICE_MVAR'
-        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR'))
+        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR')),
+    control_mode TEXT NOT NULL DEFAULT 'FIXED'
+        CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE',
+            'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT',
+            'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
+    -- 0 = local bus (PSS/E SWREM/NREG):
+    regulated_bus_number INTEGER NOT NULL DEFAULT 0
 ) strict;
 
 -- Thevenin equivalent source (PSY Source). R_th/X_th are stored flexibly in pu on
@@ -668,7 +702,14 @@ CREATE TABLE facts_control_devices (
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     voltage_setpoint REAL NOT NULL,
     voltage_setpoint_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE'
-        CHECK (voltage_setpoint_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+        CHECK (voltage_setpoint_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    -- Independent max reactive power ceiling (non-binding sentinel default;
+    -- not unit-converted on the PSY side, hence no discriminator/unit row):
+    max_reactive_power REAL NOT NULL DEFAULT 9999.0 CHECK (max_reactive_power >= 0),
+    shunt_control_type TEXT NOT NULL DEFAULT 'STATCOM'
+        CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
+    -- 0 = local (sending) bus (PSS/E FCREG):
+    regulated_bus_number INTEGER NOT NULL DEFAULT 0
 ) strict;
 
 -- Interconnecting power converter (PSY InterconnectingConverter), AC<->DC bus
@@ -687,7 +728,15 @@ CREATE TABLE interconnecting_converters (
     dc_control TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
     ac_setpoint REAL NOT NULL DEFAULT 1.0,
     ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
-    voltage_setpoint_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE' CHECK (voltage_setpoint_units IN ('SYSTEM_BASE','NATURAL_UNITS'))
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE' CHECK (voltage_setpoint_units IN ('SYSTEM_BASE','NATURAL_UNITS')),
+    -- Remote-bus voltage control, PSS/E-style droop compensation, and
+    -- reactive/active power-factor weighting (added to PSY in e6cab24c1):
+    remote_bus_control INTEGER NULL CHECK (remote_bus_control IS NULL OR remote_bus_control >= 1),
+    rmpct REAL NOT NULL DEFAULT 100.0 CHECK (rmpct >= 0),
+    power_factor_weighting_fraction REAL NOT NULL DEFAULT 1.0 CHECK (power_factor_weighting_fraction >= 0),
+    -- Voltage limits (JSON: {"min": ..., "max": ...}):
+    voltage_limits TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'
+        CHECK (voltage_limits IS NULL OR json_valid(voltage_limits))
 ) strict;
 
 CREATE TABLE static_time_series (

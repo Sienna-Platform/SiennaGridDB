@@ -21,9 +21,13 @@ import pytest
 from conftest import SCHEMA_DIR, SCRIPTS_DIR
 
 # Expected seed row counts (current sealed state).
-EXPECTED_QUANTITY_TYPES = 39
-EXPECTED_ALLOWED_UNITS = 54
-EXPECTED_UNIT_CONVENTIONS = 215
+# Temperature (degC) removed: unused by any schema component.
+EXPECTED_QUANTITY_TYPES = 38
+# +1 MJ for ElectricalEnergy (RealEnergy rename), +1 Mt/MWh for EmissionRate (carbon caps),
+# -1 Temperature/degC (unused, removed)
+EXPECTED_ALLOWED_UNITS = 55
+# +3 for discrete_controlled_ac_branches.{r,x,rating}
+EXPECTED_UNIT_CONVENTIONS = 227
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -49,6 +53,9 @@ COMPLETENESS_ALLOWLIST = {
     ("supplemental_attributes", "value"),
     # structural TYPE+value JSON store (like supplemental_attributes); no fixed unit
     ("plants", "value"),
+    # non-binding sentinel ceiling, not unit-converted on the PSY side (no x-unit
+    # in the schema; see schema.sql's facts_control_devices comment)
+    ("facts_control_devices", "max_reactive_power"),
 }
 
 
@@ -886,19 +893,17 @@ def test_completeness_attributes_rows_whitelisted(db):
 
 
 def test_completeness_cost_bearing_tables_have_guard_triggers(db):
-    """Every table with an operation_cost* JSON-path convention row must carry
-    the cost-payload guard trigger pair, so registering a new cost-bearing
-    table without extending triggers.sql fails here instead of silently."""
-    # JSON-path rows (operation_cost.variable) and discriminated whole-blob rows
-    # (hydro_reservoirs operation_cost per level_data_type) both mark a
-    # cost-bearing table.
+    """Every table with an operation_cost* convention row must carry the
+    cost-payload guard trigger pair, so registering a new cost-bearing table
+    without extending triggers.sql fails here instead of silently."""
+    # Any operation_cost-prefixed column marks a cost-bearing table: dotted
+    # JSON-path rows (operation_cost.variable), discriminated whole-blob rows,
+    # and non-discriminated whole-blob rows (e.g. hydro_reservoirs) alike.
     tables = {
         row[0]
         for row in db.execute(
             "SELECT DISTINCT table_name FROM unit_conventions"
-            " WHERE column_name LIKE 'operation_cost%.%'"
-            " OR (column_name LIKE 'operation_cost%'"
-            "     AND discriminator_column IS NOT NULL)"
+            " WHERE column_name LIKE 'operation_cost%'"
         )
     }
     assert len(tables) >= 7
@@ -1112,30 +1117,32 @@ def test_other_supplemental_types_unaffected(fresh_db):
 
 
 # --------------------------------------------------------------------------- #
-# EmissionsData enum drift gate: the trigger hardcodes the PollutantType /
-# MassUnit / EnergyUnit / EmissionBasis members copied from Core/common.json.
-# If someone adds a pollutant (etc.) to common.json without updating the
-# trigger, this test FAILS. It does not change the trigger's values; it locks
-# them to the schema source of truth.
+# EmissionsData enum drift gate: the trigger hardcodes the pollutant / mass_unit
+# / energy_unit / basis enum members copied from EmissionsData.json's own
+# properties (these enums are declared inline there, not $ref'd from
+# Core/common.json). If someone edits one of these enums in EmissionsData.json
+# without updating the trigger, this test FAILS. It does not change the
+# trigger's values; it locks them to the schema source of truth.
 # --------------------------------------------------------------------------- #
 import re  # noqa: E402
 
-# common.json enum def name -> the JSON path field the trigger probes.
-_EMISSIONS_ENUM_FIELDS = {
-    "PollutantType": "pollutant",
-    "MassUnit": "mass_unit",
-    "EnergyUnit": "energy_unit",
-    "EmissionBasis": "basis",
-}
+# EmissionsData.json property names carrying an inline enum the trigger probes.
+_EMISSIONS_ENUM_FIELDS = ["pollutant", "mass_unit", "energy_unit", "basis"]
 
-COMMON_JSON = SCHEMA_DIR.parent.parent / "SiennaSchemas" / "Core" / "common.json"
+EMISSIONS_DATA_JSON = (
+    SCHEMA_DIR.parent.parent
+    / "SiennaSchemas"
+    / "Operations"
+    / "SupplementalAttributes"
+    / "EmissionsData.json"
+)
 
 
 def _extract_trigger_in_lists(trigger_sql):
     """Extract the ``NOT IN (...)`` enum member lists for each probed field from
     an EmissionsData trigger body, keyed by field name."""
     lists = {}
-    for field in _EMISSIONS_ENUM_FIELDS.values():
+    for field in _EMISSIONS_ENUM_FIELDS:
         m = re.search(
             r"\$\." + re.escape(field) + r"'\)\s*NOT IN\s*\(([^)]*)\)",
             trigger_sql,
@@ -1147,13 +1154,14 @@ def _extract_trigger_in_lists(trigger_sql):
 
 
 @pytest.mark.parametrize("action", ["insert", "update"])
-def test_emissions_enum_lists_match_common_json(db, action):
+def test_emissions_enum_lists_match_schema(db, action):
     """DRIFT GATE: the hardcoded enum members in the EmissionsData guard trigger
-    must exactly equal the corresponding enum arrays in SiennaSchemas/Core/
-    common.json. Adding a member to common.json without updating the trigger
-    (or vice versa) fails here."""
-    schema = json.loads(COMMON_JSON.read_text(encoding="utf-8"))
-    defs = schema.get("definitions", schema.get("$defs", {}))
+    must exactly equal the corresponding inline enum arrays on
+    SiennaSchemas/Operations/SupplementalAttributes/EmissionsData.json's own
+    properties. Editing an enum there without updating the trigger (or vice
+    versa) fails here."""
+    schema = json.loads(EMISSIONS_DATA_JSON.read_text(encoding="utf-8"))
+    properties = schema["properties"]
 
     (trigger_sql,) = db.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
@@ -1161,11 +1169,11 @@ def test_emissions_enum_lists_match_common_json(db, action):
     ).fetchone()
     trigger_lists = _extract_trigger_in_lists(trigger_sql)
 
-    for def_name, field in _EMISSIONS_ENUM_FIELDS.items():
-        schema_members = defs[def_name]["enum"]
+    for field in _EMISSIONS_ENUM_FIELDS:
+        schema_members = properties[field]["enum"]
         assert trigger_lists[field] == schema_members, (
-            f"{def_name} enum drift: trigger has {trigger_lists[field]} but "
-            f"common.json has {schema_members}"
+            f"{field} enum drift: trigger has {trigger_lists[field]} but "
+            f"EmissionsData.json has {schema_members}"
         )
 
 

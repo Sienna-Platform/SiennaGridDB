@@ -191,6 +191,72 @@ def test_branch_parameter_columns_store_values(fresh_db):
         )
 
 
+def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
+    """r/x/rating are first-class discrete_controlled_ac_branches columns (pu, pu,
+    MVA -- this component has no natural-units option in PSY, unlike transmission_lines),
+    and are registered in unit_conventions with no discriminator."""
+    cols = {
+        row[1]: row[2]
+        for row in fresh_db.execute("PRAGMA table_info(discrete_controlled_ac_branches)")
+    }
+    assert cols["r"] == "REAL"
+    assert cols["x"] == "REAL"
+    assert cols["rating"] == "REAL"
+    assert cols["discrete_branch_type"] == "TEXT"
+    assert cols["branch_status"] == "TEXT"
+    assert cols["normal_branch_status"] == "TEXT"
+
+    registered = set(
+        fresh_db.execute(
+            "SELECT column_name, quantity_type, unit FROM unit_conventions "
+            "WHERE table_name = 'discrete_controlled_ac_branches'"
+        ).fetchall()
+    )
+    assert registered == {
+        ("r", "Resistance", "pu"),
+        ("x", "Reactance", "pu"),
+        ("rating", "ApparentPower", "MVA"),
+    }
+
+
+def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
+    """End to end on the production build: values persist, invalid enum/bound rejected."""
+    from test_unit_registry import make_entity
+
+    arc, a, b = 501, 502, 503
+    make_entity(fresh_db, arc, entity_table="arcs")
+    fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    for eid in (a, b):
+        fresh_db.execute(
+            "INSERT INTO entities(id, entity_table, entity_type) "
+            "VALUES (?, 'balancing_topologies', 'bus')",
+            (eid,),
+        )
+    fresh_db.execute("INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)", (arc, a, b))
+
+    make_entity(fresh_db, 1, entity_table="discrete_controlled_ac_branches", entity_type="DiscreteControlledACBranch")
+    fresh_db.execute(
+        "INSERT INTO discrete_controlled_ac_branches "
+        "(id, name, arc_id, r, x, rating, discrete_branch_type, branch_status, normal_branch_status) "
+        "VALUES (1, 'sw1', ?, 0.0, 0.0, 100.0, 'BREAKER', 'CLOSED', 'CLOSED')",
+        (arc,),
+    )
+    row = fresh_db.execute(
+        "SELECT r, x, rating, discrete_branch_type, branch_status, normal_branch_status "
+        "FROM discrete_controlled_ac_branches WHERE id = 1"
+    ).fetchone()
+    assert row == (0.0, 0.0, 100.0, "BREAKER", "CLOSED", "CLOSED")
+
+    make_entity(fresh_db, 2, entity_table="discrete_controlled_ac_branches", entity_type="DiscreteControlledACBranch")
+    with pytest.raises(sqlite3.IntegrityError):
+        fresh_db.execute(
+            "INSERT INTO discrete_controlled_ac_branches "
+            "(id, name, arc_id, r, x, rating, branch_status) "
+            "VALUES (2, 'sw2', ?, 0.0, 0.0, 100.0, 'HALF_OPEN')",
+            (arc,),
+        )
+
+
 def test_units_comment_plain_x_unit_unchanged():
     assert units_comment({"x-unit": "MW"}) == " -- Units: MW"
     assert units_comment({}) == ""

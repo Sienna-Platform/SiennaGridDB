@@ -52,6 +52,13 @@
         "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
       }
     },
+    "discrete_controlled_ac_branches": {
+      "renames": {"arc": "arc_id"},
+      "foreign_keys": {
+        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
+      },
+      "skip": ["available", "active_power_flow", "reactive_power_flow"]
+    },
     "balancing_topologies": {},
     "supply_technologies": {
       "foreign_keys": {

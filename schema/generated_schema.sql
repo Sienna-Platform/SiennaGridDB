@@ -104,6 +104,9 @@ CREATE TABLE storage_units (
     conversion_factor REAL NULL DEFAULT 1.0, -- Units: 1
     storage_target REAL NULL DEFAULT 0.0, -- Units: 1
     cycle_limits INTEGER NULL DEFAULT 10000, -- Units: 1
+    ramp_limits JSON NULL, -- Units: MW/min
+    self_discharge REAL NULL DEFAULT 0.0, -- Units: 1
+    standing_loss REAL NULL DEFAULT 0.0, -- Units: MW
     dynamic_injector INTEGER NULL
 );
 
@@ -124,6 +127,7 @@ CREATE TABLE hydro_reservoirs (
     downstream_turbines JSON NULL,
     upstream_reservoirs JSON NULL,
     operation_cost JSON NOT NULL,
+    evaporative_loss REAL NULL DEFAULT 0.0, -- Units: 1
     level_data_type TEXT NULL DEFAULT 'USABLE_VOLUME' CHECK (level_data_type IN ('USABLE_VOLUME', 'TOTAL_VOLUME', 'HEAD', 'ENERGY'))
 );
 
@@ -172,6 +176,7 @@ CREATE TABLE transmission_lines (
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     r REAL NOT NULL, -- Units: pu
     x REAL NOT NULL, -- Units: pu
+    base_power REAL NOT NULL, -- Units: MVA
     b JSON NULL, -- Units: pu
     continuous_rating REAL NOT NULL, -- Units: MVA
     rating_b REAL NULL, -- Units: MVA
@@ -190,6 +195,218 @@ CREATE TABLE transmission_interchanges (
     from_area INTEGER NOT NULL,
     to_area INTEGER NOT NULL,
     flow_limits JSON NOT NULL -- Units: MW
+);
+
+-- discrete_controlled_ac_branches: generated from DiscreteControlledACBranch
+CREATE TABLE discrete_controlled_ac_branches (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL, -- Units: pu
+    x REAL NOT NULL, -- Units: pu
+    rating REAL NOT NULL, -- Units: MVA
+    discrete_branch_type TEXT NULL DEFAULT 'OTHER' CHECK (discrete_branch_type IN ('SWITCH', 'BREAKER', 'OTHER')),
+    branch_status TEXT NULL DEFAULT 'CLOSED' CHECK (branch_status IN ('OPEN', 'CLOSED')),
+    normal_branch_status TEXT NULL DEFAULT 'CLOSED' CHECK (normal_branch_status IN ('OPEN', 'CLOSED'))
+);
+
+-- two_terminal_lcc_lines: generated from TwoTerminalLCCLine
+CREATE TABLE two_terminal_lcc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    arc INTEGER NOT NULL,
+    active_power_flow REAL NOT NULL, -- Units: MW
+    parameter_units TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    r REAL NOT NULL, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    transfer_setpoint REAL NOT NULL, -- Units: per power_mode (false: A, true: MW)
+    dc_voltage_units TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (dc_voltage_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    scheduled_dc_voltage REAL NOT NULL, -- Units: per dc_voltage_units (NATURAL_UNITS: kV, SYSTEM_BASE: pu)
+    rectifier_bridges INTEGER NOT NULL,
+    rectifier_delay_angle_limits JSON NOT NULL, -- Units: rad
+    rectifier_rc REAL NOT NULL, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    rectifier_xc REAL NOT NULL, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    rectifier_base_voltage REAL NOT NULL, -- Units: kV
+    inverter_bridges INTEGER NOT NULL,
+    inverter_extinction_angle_limits JSON NOT NULL, -- Units: rad
+    inverter_rc REAL NOT NULL, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    inverter_xc REAL NOT NULL, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    inverter_base_voltage REAL NOT NULL, -- Units: kV
+    power_mode BOOLEAN NULL DEFAULT TRUE,
+    switch_mode_voltage REAL NULL DEFAULT 0.0, -- Units: per dc_voltage_units (NATURAL_UNITS: kV, SYSTEM_BASE: pu)
+    compounding_resistance REAL NULL DEFAULT 0.0, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    min_compounding_voltage REAL NULL DEFAULT 0.0, -- Units: per dc_voltage_units (NATURAL_UNITS: kV, SYSTEM_BASE: pu)
+    rectifier_transformer_ratio REAL NULL DEFAULT 1.0, -- Units: 1
+    rectifier_tap_setting REAL NULL DEFAULT 1.0, -- Units: 1
+    rectifier_tap_limits JSON NULL DEFAULT '{"max":1.5,"min":0.51}', -- Units: 1
+    rectifier_tap_step REAL NULL DEFAULT 0.00625, -- Units: 1
+    rectifier_delay_angle REAL NULL DEFAULT 0.0, -- Units: rad
+    rectifier_capacitor_reactance REAL NULL DEFAULT 0.0, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    inverter_transformer_ratio REAL NULL DEFAULT 1.0, -- Units: 1
+    inverter_tap_setting REAL NULL DEFAULT 1.0, -- Units: 1
+    inverter_tap_limits JSON NULL DEFAULT '{"max":1.5,"min":0.51}', -- Units: 1
+    inverter_tap_step REAL NULL DEFAULT 0.00625, -- Units: 1
+    inverter_extinction_angle REAL NULL DEFAULT 0.0, -- Units: rad
+    inverter_capacitor_reactance REAL NULL DEFAULT 0.0, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    active_power_limits_from JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MW
+    active_power_limits_to JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MW
+    reactive_power_limits_from JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MVAr
+    reactive_power_limits_to JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MVAr
+    loss JSON NULL DEFAULT '{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0},"input_at_zero":0}'
+);
+
+-- two_terminal_vsc_lines: generated from TwoTerminalVSCLine
+CREATE TABLE two_terminal_vsc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    arc INTEGER NOT NULL,
+    active_power_flow REAL NOT NULL, -- Units: MW
+    rating REAL NOT NULL, -- Units: MVA
+    active_power_limits_from JSON NOT NULL, -- Units: MW
+    active_power_limits_to JSON NOT NULL, -- Units: MW
+    admittance_units TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR')),
+    g REAL NULL DEFAULT 0.0, -- Units: per admittance_units (DEVICE_MVAR: MW, NATURAL_UNITS: S, SYSTEM_BASE: pu)
+    dc_current REAL NULL DEFAULT 0.0, -- Units: A
+    reactive_power_from REAL NULL DEFAULT 0.0, -- Units: MVAr
+    dc_control_from TEXT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control_from IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
+    ac_control_from TEXT NULL DEFAULT 'AC_VOLTAGE' CHECK (ac_control_from IN ('AC_REACTIVE_POWER', 'AC_VOLTAGE')),
+    dc_setpoint_from REAL NULL DEFAULT 0.0, -- Units: per dc_control_from (DC_POWER: MW; DC_VOLTAGE: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu]; DC_VOLTAGE_DROOP: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])
+    ac_setpoint_from REAL NULL DEFAULT 1.0, -- Units: per ac_control_from (AC_REACTIVE_POWER: 1; AC_VOLTAGE: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])
+    converter_loss_from JSON NULL DEFAULT '{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0},"input_at_zero":0}',
+    max_dc_current_from REAL NULL DEFAULT 100000000.0, -- Units: A
+    rating_from REAL NULL DEFAULT 100000000.0, -- Units: MVA
+    reactive_power_limits_from JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MVAr
+    power_factor_weighting_fraction_from REAL NULL DEFAULT 1.0, -- Units: 1
+    voltage_units TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (voltage_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    voltage_limits_from JSON NULL DEFAULT '{"max":999.9,"min":0.0}', -- Units: per voltage_units (NATURAL_UNITS: kV, SYSTEM_BASE: pu)
+    dc_voltage_droop_from REAL NULL DEFAULT 0.0, -- Units: pu
+    reactive_power_to REAL NULL DEFAULT 0.0, -- Units: MVAr
+    dc_control_to TEXT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control_to IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
+    ac_control_to TEXT NULL DEFAULT 'AC_VOLTAGE' CHECK (ac_control_to IN ('AC_REACTIVE_POWER', 'AC_VOLTAGE')),
+    dc_setpoint_to REAL NULL DEFAULT 0.0, -- Units: per dc_control_to (DC_POWER: MW; DC_VOLTAGE: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu]; DC_VOLTAGE_DROOP: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])
+    ac_setpoint_to REAL NULL DEFAULT 1.0, -- Units: per ac_control_to (AC_REACTIVE_POWER: 1; AC_VOLTAGE: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])
+    converter_loss_to JSON NULL DEFAULT '{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0},"input_at_zero":0}',
+    max_dc_current_to REAL NULL DEFAULT 100000000.0, -- Units: A
+    rating_to REAL NULL DEFAULT 100000000.0, -- Units: MVA
+    reactive_power_limits_to JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MVAr
+    power_factor_weighting_fraction_to REAL NULL DEFAULT 1.0, -- Units: 1
+    voltage_limits_to JSON NULL DEFAULT '{"max":999.9,"min":0.0}', -- Units: per voltage_units (NATURAL_UNITS: kV, SYSTEM_BASE: pu)
+    dc_voltage_droop_to REAL NULL DEFAULT 0.0, -- Units: pu
+    rated_dc_voltage REAL NULL DEFAULT 0.0, -- Units: kV
+    remote_bus_control_from INTEGER NULL,
+    remote_bus_control_to INTEGER NULL,
+    rmpct_from REAL NULL DEFAULT 100.0, -- Units: 1
+    rmpct_to REAL NULL DEFAULT 100.0 -- Units: 1
+);
+
+-- tmodel_hvdc_lines: generated from TModelHVDCLine
+CREATE TABLE tmodel_hvdc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    active_power_flow REAL NOT NULL, -- Units: MW
+    arc INTEGER NOT NULL,
+    parameter_units TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    r REAL NOT NULL, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    l REAL NOT NULL, -- Units: pu
+    c REAL NOT NULL, -- Units: pu
+    active_power_limits_from JSON NOT NULL, -- Units: MW
+    active_power_limits_to JSON NOT NULL -- Units: MW
+);
+
+-- fixed_admittance: generated from FixedAdmittance
+CREATE TABLE fixed_admittance (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    bus INTEGER NOT NULL,
+    admittance_units TEXT NULL DEFAULT 'DEVICE_MVAR' CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR')),
+    Y JSON NOT NULL, -- Units: per admittance_units (DEVICE_MVAR: MVAr, NATURAL_UNITS: S, SYSTEM_BASE: pu)
+    dynamic_injector INTEGER NULL
+);
+
+-- switched_admittance: generated from SwitchedAdmittance
+CREATE TABLE switched_admittance (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    bus INTEGER NOT NULL,
+    admittance_units TEXT NULL DEFAULT 'DEVICE_MVAR' CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR')),
+    Y JSON NOT NULL, -- Units: per admittance_units (DEVICE_MVAR: MVAr, NATURAL_UNITS: S, SYSTEM_BASE: pu)
+    initial_status JSON NULL,
+    number_of_steps JSON NULL,
+    Y_increase JSON NULL, -- Units: per admittance_units (DEVICE_MVAR: MVAr, NATURAL_UNITS: S, SYSTEM_BASE: pu)
+    admittance_limits JSON NULL DEFAULT '{"max":1.0,"min":1.0}', -- Units: per admittance_units (DEVICE_MVAR: MVAr, NATURAL_UNITS: S, SYSTEM_BASE: pu)
+    control_mode TEXT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE', 'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT', 'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
+    regulated_bus_number INTEGER NULL DEFAULT 0, -- Units: 1
+    dynamic_injector INTEGER NULL
+);
+
+-- sources: generated from Source
+CREATE TABLE sources (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    bus INTEGER NOT NULL,
+    active_power REAL NULL DEFAULT 0.0, -- Units: MW
+    reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
+    active_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MW
+    reactive_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MVAr
+    parameter_units TEXT NULL DEFAULT 'SYSTEM_BASE' CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    R_th REAL NULL DEFAULT 0.0, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    X_th REAL NULL DEFAULT 0.0, -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)
+    internal_voltage REAL NULL DEFAULT 1.0, -- Units: pu
+    internal_angle REAL NULL DEFAULT 0.0, -- Units: rad
+    base_voltage REAL NULL, -- Units: kV
+    base_power REAL NULL DEFAULT 100.0, -- Units: MVA
+    operation_cost JSON NOT NULL DEFAULT '{"energy_export_weekly_limit":1000000.0,"energy_import_weekly_limit":1000000.0,"export_offer_curves":{"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0},"input_at_zero":0},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0},"input_at_zero":0}},"import_offer_curves":{"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0},"input_at_zero":0},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0},"input_at_zero":0}}}',
+    dynamic_injector INTEGER NULL
+);
+
+-- interconnecting_converters: generated from InterconnectingConverter
+CREATE TABLE interconnecting_converters (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    bus INTEGER NOT NULL,
+    dc_bus INTEGER NOT NULL,
+    active_power REAL NOT NULL, -- Units: MW
+    rating REAL NOT NULL, -- Units: MVA
+    active_power_limits JSON NOT NULL, -- Units: MW
+    base_power REAL NOT NULL, -- Units: MVA
+    reactive_power_limits JSON NULL, -- Units: MVAr
+    dc_current REAL NULL DEFAULT 0.0, -- Units: A
+    max_dc_current REAL NULL DEFAULT 100000000.0, -- Units: A
+    loss_function JSON NULL,
+    dc_control TEXT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
+    ac_control TEXT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_REACTIVE_POWER', 'AC_VOLTAGE')),
+    voltage_setpoint_units TEXT NULL DEFAULT 'SYSTEM_BASE' CHECK (voltage_setpoint_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    dc_setpoint REAL NULL DEFAULT 0.0, -- Units: per dc_control (DC_POWER: MW; DC_VOLTAGE: per voltage_setpoint_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu]; DC_VOLTAGE_DROOP: per voltage_setpoint_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])
+    ac_setpoint REAL NULL DEFAULT 1.0, -- Units: per ac_control (AC_REACTIVE_POWER: 1; AC_VOLTAGE: per voltage_setpoint_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])
+    dc_voltage_droop REAL NULL DEFAULT 0.0, -- Units: pu
+    remote_bus_control INTEGER NULL,
+    rmpct REAL NULL DEFAULT 100.0, -- Units: 1
+    power_factor_weighting_fraction REAL NULL DEFAULT 1.0, -- Units: 1
+    voltage_limits JSON NULL DEFAULT '{"max":999.9,"min":0.0}', -- Units: pu
+    dynamic_injector INTEGER NULL
+);
+
+-- facts_control_devices: generated from FACTSControlDevice
+CREATE TABLE facts_control_devices (
+    name TEXT NOT NULL UNIQUE,
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    available BOOLEAN NOT NULL,
+    bus INTEGER NOT NULL,
+    control_mode TEXT NULL CHECK (control_mode IN ('OOS', 'NML', 'BYP')),
+    voltage_setpoint_units TEXT NULL DEFAULT 'SYSTEM_BASE' CHECK (voltage_setpoint_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    voltage_setpoint REAL NOT NULL, -- Units: per voltage_setpoint_units (NATURAL_UNITS: kV, SYSTEM_BASE: pu)
+    max_shunt_current REAL NOT NULL, -- Units: MVA
+    reactive_power_required REAL NOT NULL, -- Units: 1
+    max_reactive_power REAL NULL DEFAULT 9999.0,
+    shunt_control_type TEXT NULL DEFAULT 'STATCOM' CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
+    regulated_bus_number INTEGER NULL DEFAULT 0, -- Units: 1
+    dynamic_injector INTEGER NULL
 );
 
 -- balancing_topologies: generated from ACBus
