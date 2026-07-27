@@ -1,8 +1,8 @@
 # SiennaGridDB — Claude Guide
 
-The canonical **SQLite database schema** ("griddb") for Sienna applications: 31 tables mirroring the PowerSystems data model (entities, thermal/renewable/hydro generators, storage, reservoirs, transmission, planning regions, investment technologies, time-series metadata/static storage) plus the units tables (`quantity_types`, `allowed_units`, `unit_conventions`, `unit_management_metadata`). Content is SQL under `schema/` with a little Python tooling in `scripts/`. Requires **SQLite ≥ 3.45** (jsonb). Platform conventions: `.claude/Sienna.md`; workspace architecture: `/home/jdlara/Sienna_work/psy6/CLAUDE.md`.
+The canonical **SQLite database schema** ("griddb") for Sienna applications: 31 tables mirroring the PowerSystems data model (entities, thermal/renewable/hydro generators, storage, reservoirs, transmission, planning regions, investment technologies, time-series metadata/static storage) plus the units tables (`quantity_types`, `allowed_units`, `unit_conventions`, `unit_management_metadata`). Content is SQL under `schema/` with a little Python tooling in `scripts/`. Requires **SQLite ≥ 3.45** (jsonb). Platform conventions: `.claude/Sienna.md`; workspace architecture: the psy6 workspace root `CLAUDE.md`.
 
-Current branch: `jm/units_v2` (units registry effort, PR #169). Master plan: `/home/jdlara/Sienna_work/psy6/.claude/plans/2026-07-05-units-ecosystem-closure.md`.
+Current branch: `jm/units_v2` (units registry effort, PR #169). Master plan: the psy6 workspace root's `.claude/plans/2026-07-05-units-ecosystem-closure.md`.
 
 ## Place in the pipeline
 
@@ -39,7 +39,7 @@ python3 scripts/generate_unit_registry.py       # `just generate-registry`
 python3 scripts/verify_unit_registry.py test.db # `just verify-registry`
 ```
 
-Python tests use the shared venv `/home/jdlara/Sienna_work/psy6/.venv-units` (`.venv-units/bin/pytest`); pytest is not installed globally.
+Python tests use the shared venv `.venv-units` at the psy6 workspace root (`.venv-units/bin/pytest`); pytest is not installed globally.
 
 ## Warnings / stale bits
 
