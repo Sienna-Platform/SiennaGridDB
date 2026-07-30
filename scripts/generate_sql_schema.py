@@ -341,8 +341,11 @@ def diff(generated_sql):
             # Type comparison. SQLite stores JSON as TEXT; a JSON-typed
             # projection of a TEXT column (or vice versa) is the same physical
             # storage class, so it is a note rather than a mismatch.
+            # TEXT/JSON and INTEGER/BOOLEAN pairs share a storage class: the
+            # hand-written DDL uses the STRICT-legal spelling (TEXT+json_valid,
+            # INTEGER+CHECK IN (0,1)) of the generated JSON/BOOLEAN type.
             if gen_type != hand_type:
-                if {gen_type, hand_type} == {"TEXT", "JSON"}:
+                if {gen_type, hand_type} in ({"TEXT", "JSON"}, {"INTEGER", "BOOLEAN"}):
                     print(
                         f"[{table}] note: {col} is {hand_type} in schema.sql, "
                         f"{gen_type} per the schemas (same storage class)"

@@ -7,7 +7,10 @@ import sys
 
 import pytest
 
-from conftest import SCHEMA_DIR, SCRIPTS_DIR
+# SCHEMAS_PATH is passed explicitly to codegen subprocesses so they never fall
+# back to a default that does not exist in the CI layout (conftest resolves
+# nested vs sibling).
+from conftest import SCHEMA_DIR, SCHEMAS_PATH, SCRIPTS_DIR, load_schemas_json
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 from generate_sql_schema import units_comment  # noqa: E402
@@ -16,23 +19,6 @@ GENERATE_SCRIPT = SCRIPTS_DIR / "generate_sql_schema.py"
 GENERATED_SQL = SCHEMA_DIR / "generated_schema.sql"
 SCHEMA_MAP = SCHEMA_DIR / "schema_map.json"
 CODEGEN_MAP = SCHEMA_DIR / "sql_codegen_map.json"
-
-REPO_ROOT = SCRIPTS_DIR.parent
-
-
-def _schemas_path():
-    """Locate the SiennaSchemas checkout the same way the CI --check/--diff
-    steps do. CI checks it out nested at <repo>/SiennaSchemas (so the script's
-    default of ../SiennaSchemas does not resolve); locally it is a sibling.
-    Pass the resolved path explicitly so the subprocess never falls back to a
-    default that does not exist in the CI layout."""
-    for candidate in (REPO_ROOT / "SiennaSchemas", REPO_ROOT.parent / "SiennaSchemas"):
-        if candidate.exists():
-            return str(candidate)
-    return "SiennaSchemas"
-
-
-SCHEMAS_PATH = _schemas_path()
 
 
 @pytest.fixture(scope="module")
@@ -255,6 +241,100 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
             "VALUES (2, 'sw2', ?, 0.0, 0.0, 100.0, 'HALF_OPEN')",
             (arc,),
         )
+
+
+def test_transformer_circuits_columns_and_units(fresh_db):
+    """Circuit r/x are first-class pu columns (device base; no natural-units
+    option in PSY, so no parameter_units discriminator -- mirrors
+    discrete_controlled_ac_branches), and the two MinMax control bands are
+    registered per control_objective value."""
+    cols = {
+        row[1]: row[2]
+        for row in fresh_db.execute("PRAGMA table_info(transformer_circuits)")
+    }
+    assert cols["r"] == "REAL"
+    assert cols["x"] == "REAL"
+    assert cols["tap"] == "REAL"
+    assert cols["alpha"] == "REAL"
+    assert cols["control_limits"] == "TEXT"
+    assert cols["controlled_quantity_limits"] == "TEXT"
+    assert "name" not in cols  # circuits are unnamed subcomponents
+
+    registered = set(
+        fresh_db.execute(
+            "SELECT column_name, quantity_type, unit FROM unit_conventions "
+            "WHERE table_name = 'transformer_circuits' "
+            "AND discriminator_column IS NULL"
+        ).fetchall()
+    )
+    assert registered == {
+        ("tap", "Dimensionless", "1"),
+        ("alpha", "Angle", "rad"),
+        ("r", "Resistance", "pu"),
+        ("x", "Reactance", "pu"),
+        ("rating", "ApparentPower", "MVA"),
+        ("rating_b", "ApparentPower", "MVA"),
+        ("rating_c", "ApparentPower", "MVA"),
+        ("active_power_flow", "ActivePower", "MW"),
+        ("reactive_power_flow", "ReactivePower", "MVAr"),
+        ("base_power", "ApparentPower", "MVA"),
+        ("base_voltage_primary", "Voltage", "kV"),
+        ("base_voltage_secondary", "Voltage", "kV"),
+    }
+
+    control_bands = {
+        (col, disc): (qt, unit)
+        for col, disc, qt, unit in fresh_db.execute(
+            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
+            "AND discriminator_column = 'control_objective'"
+        )
+    }
+    angle_objectives = {
+        "ACTIVE_POWER_FLOW", "ACTIVE_POWER_FLOW_DISABLED",
+        "ASYMMETRIC_ACTIVE_POWER_FLOW", "ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED",
+    }
+    schema_objectives = set(
+        load_schemas_json("Operations/common.json")["definitions"][
+            "TransformerControlObjective"
+        ]["enum"]
+    )
+    objectives = {disc for (col, disc) in control_bands if col == "control_limits"}
+    assert objectives == schema_objectives
+    assert objectives == {
+        disc for (col, disc) in control_bands if col == "controlled_quantity_limits"
+    }
+    for objective in objectives:
+        if objective in angle_objectives:
+            assert control_bands[("control_limits", objective)] == ("Angle", "rad")
+            assert control_bands[("controlled_quantity_limits", objective)] == (
+                "ActivePower", "MW",
+            )
+        else:
+            assert control_bands[("control_limits", objective)] == (
+                "Dimensionless", "1",
+            )
+
+
+def test_transformer_tables_magnetizing_shunt_units(fresh_db):
+    """magnetizing_shunt is a complex-admittance JSON column on both transformer
+    tables; its real (conductance) and imag (susceptance) parts are registered
+    as dotted JSON-path conventions, pu-only (the operation_cost.* idiom)."""
+    for table in ("two_winding_transformers", "three_winding_transformers"):
+        cols = {
+            row[1]: row[2] for row in fresh_db.execute(f"PRAGMA table_info({table})")
+        }
+        assert cols["magnetizing_shunt"] == "TEXT"
+        registered = fresh_db.execute(
+            "SELECT column_name, quantity_type, unit FROM unit_conventions "
+            "WHERE table_name = ? AND column_name LIKE 'magnetizing_shunt%' "
+            "ORDER BY column_name",
+            (table,),
+        ).fetchall()
+        assert registered == [
+            ("magnetizing_shunt.imag", "Susceptance", "pu"),
+            ("magnetizing_shunt.real", "Conductance", "pu"),
+        ]
 
 
 def test_units_comment_plain_x_unit_unchanged():

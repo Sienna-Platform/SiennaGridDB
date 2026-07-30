@@ -210,6 +210,60 @@ CREATE TABLE discrete_controlled_ac_branches (
     normal_branch_status TEXT NULL DEFAULT 'CLOSED' CHECK (normal_branch_status IN ('OPEN', 'CLOSED'))
 );
 
+-- transformer_circuits: generated from TransformerCircuit
+CREATE TABLE transformer_circuits (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    available BOOLEAN NOT NULL,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    tap REAL NULL DEFAULT 1.0, -- Units: 1
+    alpha REAL NULL DEFAULT 0.0, -- Units: rad
+    r REAL NULL DEFAULT 0.0, -- Units: pu
+    x REAL NULL DEFAULT 0.0, -- Units: pu
+    control_objective TEXT NULL DEFAULT 'UNDEFINED' CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED', 'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED', 'CONTROL_OF_DC_LINE_DISABLED', 'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE', 'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE', 'ASYMMETRIC_ACTIVE_POWER_FLOW')),
+    regulated_bus_number INTEGER NULL DEFAULT 0,
+    control_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: rad, ACTIVE_POWER_FLOW_DISABLED: rad, ASYMMETRIC_ACTIVE_POWER_FLOW: rad, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: rad, CONTROL_OF_DC_LINE: 1, CONTROL_OF_DC_LINE_DISABLED: 1, FIXED: 1, REACTIVE_POWER_FLOW: 1, REACTIVE_POWER_FLOW_DISABLED: 1, UNDEFINED: 1, VOLTAGE: 1, VOLTAGE_DISABLED: 1)
+    controlled_quantity_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: MW, ACTIVE_POWER_FLOW_DISABLED: MW, ASYMMETRIC_ACTIVE_POWER_FLOW: MW, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: MW, CONTROL_OF_DC_LINE: MW, CONTROL_OF_DC_LINE_DISABLED: MW, FIXED: pu, REACTIVE_POWER_FLOW: MVAr, REACTIVE_POWER_FLOW_DISABLED: MVAr, UNDEFINED: pu, VOLTAGE: pu, VOLTAGE_DISABLED: pu)
+    number_of_tap_positions INTEGER NULL DEFAULT 33,
+    rating REAL NULL, -- Units: MVA
+    rating_b REAL NULL, -- Units: MVA
+    rating_c REAL NULL, -- Units: MVA
+    active_power_flow REAL NULL DEFAULT 0.0, -- Units: MW
+    reactive_power_flow REAL NULL DEFAULT 0.0, -- Units: MVAr
+    base_power REAL NULL DEFAULT 100.0, -- Units: MVA
+    base_voltage_primary REAL NULL, -- Units: kV
+    base_voltage_secondary REAL NULL -- Units: kV
+);
+
+-- two_winding_transformers: generated from TwoWindingTransformer
+CREATE TABLE two_winding_transformers (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    magnetizing_shunt JSON NULL DEFAULT '{"imag":0.0,"real":0.0}', -- Units: pu
+    shunt_location TEXT NULL DEFAULT 'PRIMARY' CHECK (shunt_location IN ('PRIMARY', 'SECONDARY', 'SPLIT'))
+);
+
+-- three_winding_transformers: generated from ThreeWindingTransformer
+CREATE TABLE three_winding_transformers (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    primary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    secondary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    tertiary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    star_bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    r_12 REAL NULL, -- Units: pu
+    x_12 REAL NULL, -- Units: pu
+    r_23 REAL NULL, -- Units: pu
+    x_23 REAL NULL, -- Units: pu
+    r_31 REAL NULL, -- Units: pu
+    x_31 REAL NULL, -- Units: pu
+    base_power_12 REAL NULL, -- Units: MVA
+    base_power_23 REAL NULL, -- Units: MVA
+    base_power_31 REAL NULL, -- Units: MVA
+    magnetizing_shunt JSON NULL DEFAULT '{"imag":0.0,"real":0.0}', -- Units: pu
+    shunt_location TEXT NULL DEFAULT 'PRIMARY' CHECK (shunt_location IN ('PRIMARY', 'STAR'))
+);
+
 -- two_terminal_lcc_lines: generated from TwoTerminalLCCLine
 CREATE TABLE two_terminal_lcc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,

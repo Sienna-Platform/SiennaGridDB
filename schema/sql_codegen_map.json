@@ -59,6 +59,25 @@
       },
       "skip": ["available", "active_power_flow", "reactive_power_flow"]
     },
+    "transformer_circuits": {
+      "renames": {"arc": "arc_id"},
+      "foreign_keys": {
+        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
+      }
+    },
+    "two_winding_transformers": {
+      "foreign_keys": {
+        "circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE"
+      }
+    },
+    "three_winding_transformers": {
+      "foreign_keys": {
+        "primary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
+        "secondary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
+        "tertiary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
+        "star_bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
+      }
+    },
     "balancing_topologies": {},
     "supply_technologies": {
       "foreign_keys": {

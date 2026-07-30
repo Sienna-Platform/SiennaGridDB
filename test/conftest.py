@@ -5,8 +5,10 @@ the four schema files in order, with ``PRAGMA foreign_keys = ON``. No sqlite3
 CLI dependency (Phase 2 removed it).
 """
 
+import json
 import shutil
 import sqlite3
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -14,6 +16,40 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_DIR = REPO_ROOT / "schema"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
+
+
+def _schemas_path():
+    """Locate the SiennaSchemas checkout the same way the CI --check/--diff
+    steps do: CI checks it out nested at <repo>/SiennaSchemas, locally it is
+    a sibling."""
+    for candidate in (REPO_ROOT / "SiennaSchemas", REPO_ROOT.parent / "SiennaSchemas"):
+        if candidate.exists():
+            return candidate
+    return REPO_ROOT.parent / "SiennaSchemas"
+
+
+SCHEMAS_PATH = _schemas_path()
+
+
+@lru_cache(maxsize=None)
+def load_schemas_json(rel_path):
+    """Parse a SiennaSchemas JSON document once per session (read-only)."""
+    return json.loads((SCHEMAS_PATH / rel_path).read_text(encoding="utf-8"))
+
+
+def make_entity(
+    conn, entity_id, entity_table="thing", entity_type="thing_type", is_topology=0
+):
+    """Insert an entity (and its type) so FK-bearing rows can reference it."""
+    conn.execute(
+        "INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES (?, ?)",
+        (entity_type, is_topology),
+    )
+    conn.execute(
+        "INSERT INTO entities(id, entity_table, entity_type) VALUES (?, ?, ?)",
+        (entity_id, entity_table, entity_type),
+    )
+    return entity_id
 
 # Order matters: schema (tables) -> triggers -> registry seed (+ seal) -> views.
 SCHEMA_FILES = [

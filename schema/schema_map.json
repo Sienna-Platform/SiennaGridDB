@@ -39,6 +39,15 @@
     "discrete_controlled_ac_branches": [
       {"component": "DiscreteControlledACBranch", "file": "Operations/Branch/DiscreteControlledACBranch.json", "is_psy": true}
     ],
+    "transformer_circuits": [
+      {"component": "TransformerCircuit", "file": "Operations/Branch/TransformerCircuit.json", "is_psy": true}
+    ],
+    "two_winding_transformers": [
+      {"component": "TwoWindingTransformer", "file": "Operations/Branch/TwoWindingTransformer.json", "is_psy": true}
+    ],
+    "three_winding_transformers": [
+      {"component": "ThreeWindingTransformer", "file": "Operations/Branch/ThreeWindingTransformer.json", "is_psy": true}
+    ],
     "two_terminal_lcc_lines": [
       {"component": "TwoTerminalLCCLine", "file": "Operations/Branch/TwoTerminalLCCLine.json", "is_psy": true}
     ],

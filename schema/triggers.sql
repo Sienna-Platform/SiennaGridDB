@@ -82,6 +82,90 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_discrete_controlled_ac_branches_entity_exists BEFORE
+INSERT
+    ON discrete_controlled_ac_branches
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'discrete_controlled_ac_branches'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table discrete_controlled_ac_branches before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transformer_circuits_entity_exists BEFORE
+INSERT
+    ON transformer_circuits
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transformer_circuits'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table transformer_circuits before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_winding_transformers_entity_exists BEFORE
+INSERT
+    ON two_winding_transformers
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'two_winding_transformers'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table two_winding_transformers before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_three_winding_transformers_entity_exists BEFORE
+INSERT
+    ON three_winding_transformers
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'three_winding_transformers'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table three_winding_transformers before insertion'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_transmission_interchanges_entity_exists BEFORE
 INSERT
     ON transmission_interchanges
@@ -825,6 +909,50 @@ END;
 CREATE TRIGGER IF NOT EXISTS delete_transmission_lines_entity
 AFTER
     DELETE ON transmission_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_discrete_controlled_ac_branches_entity
+AFTER
+    DELETE ON discrete_controlled_ac_branches FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_transformer_circuits_entity
+AFTER
+    DELETE ON transformer_circuits FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_two_winding_transformers_entity
+AFTER
+    DELETE ON two_winding_transformers FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_three_winding_transformers_entity
+AFTER
+    DELETE ON three_winding_transformers FOR EACH ROW
 BEGIN
 DELETE FROM
     entities

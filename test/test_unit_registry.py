@@ -18,7 +18,7 @@ import sys
 
 import pytest
 
-from conftest import SCHEMA_DIR, SCRIPTS_DIR
+from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
 # Temperature (degC) removed: unused by any schema component.
@@ -27,7 +27,13 @@ EXPECTED_QUANTITY_TYPES = 38
 # -1 Temperature/degC (unused, removed)
 EXPECTED_ALLOWED_UNITS = 55
 # +3 for discrete_controlled_ac_branches.{r,x,rating}
-EXPECTED_UNIT_CONVENTIONS = 227
+# +49 for the transformer tables: transformer_circuits (36: tap, alpha, r, x,
+# 12 control_limits + 12 controlled_quantity_limits discriminated by
+# control_objective, ratings, flows, base power/voltages),
+# three_winding_transformers (11: pairwise r/x, pairwise base powers,
+# magnetizing_shunt.real/.imag), two_winding_transformers (2:
+# magnetizing_shunt.real/.imag)
+EXPECTED_UNIT_CONVENTIONS = 276
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -62,19 +68,6 @@ COMPLETENESS_ALLOWLIST = {
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-def make_entity(conn, entity_id, entity_table="thing", entity_type="thing_type"):
-    """Insert an entity (and its type) so FK-bearing rows can reference it."""
-    conn.execute(
-        "INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES (?, 0)",
-        (entity_type,),
-    )
-    conn.execute(
-        "INSERT INTO entities(id, entity_table, entity_type) VALUES (?, ?, ?)",
-        (entity_id, entity_table, entity_type),
-    )
-    return entity_id
-
-
 def insert_attribute(conn, entity_id, name, value, unit=None, quantity_type=None):
     conn.execute(
         "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_type) "
@@ -1118,24 +1111,35 @@ def test_other_supplemental_types_unaffected(fresh_db):
 
 # --------------------------------------------------------------------------- #
 # EmissionsData enum drift gate: the trigger hardcodes the pollutant / mass_unit
-# / energy_unit / basis enum members copied from EmissionsData.json's own
-# properties (these enums are declared inline there, not $ref'd from
-# Core/common.json). If someone edits one of these enums in EmissionsData.json
-# without updating the trigger, this test FAILS. It does not change the
-# trigger's values; it locks them to the schema source of truth.
+# / energy_unit / basis enum members copied from EmissionsData.json's
+# properties (each a $ref into Core/common.json definitions). If someone edits
+# one of these enums in the schemas without updating the trigger, this test
+# FAILS. It does not change the trigger's values; it locks them to the schema
+# source of truth.
 # --------------------------------------------------------------------------- #
+import posixpath  # noqa: E402
 import re  # noqa: E402
 
-# EmissionsData.json property names carrying an inline enum the trigger probes.
+# EmissionsData.json property names carrying an enum the trigger probes.
 _EMISSIONS_ENUM_FIELDS = ["pollutant", "mass_unit", "energy_unit", "basis"]
 
-EMISSIONS_DATA_JSON = (
-    SCHEMA_DIR.parent.parent
-    / "SiennaSchemas"
-    / "Operations"
-    / "SupplementalAttributes"
-    / "EmissionsData.json"
-)
+EMISSIONS_DATA_REL = "Operations/SupplementalAttributes/EmissionsData.json"
+
+
+def _schema_enum(prop, current_rel_file=EMISSIONS_DATA_REL):
+    """Return a property's enum members, following a relative ``$ref`` into its
+    target file (e.g. ``../../Core/common.json#/definitions/PollutantType``)
+    when the enum is not inline."""
+    if "enum" in prop:
+        return prop["enum"]
+    rel, frag = prop["$ref"].split("#", 1)
+    target = posixpath.normpath(
+        posixpath.join(posixpath.dirname(current_rel_file), rel)
+    )
+    node = load_schemas_json(target)
+    for part in frag.strip("/").split("/"):
+        node = node[part]
+    return node["enum"]
 
 
 def _extract_trigger_in_lists(trigger_sql):
@@ -1156,12 +1160,11 @@ def _extract_trigger_in_lists(trigger_sql):
 @pytest.mark.parametrize("action", ["insert", "update"])
 def test_emissions_enum_lists_match_schema(db, action):
     """DRIFT GATE: the hardcoded enum members in the EmissionsData guard trigger
-    must exactly equal the corresponding inline enum arrays on
-    SiennaSchemas/Operations/SupplementalAttributes/EmissionsData.json's own
-    properties. Editing an enum there without updating the trigger (or vice
-    versa) fails here."""
-    schema = json.loads(EMISSIONS_DATA_JSON.read_text(encoding="utf-8"))
-    properties = schema["properties"]
+    must exactly equal the enum arrays reachable from
+    SiennaSchemas/Operations/SupplementalAttributes/EmissionsData.json's
+    properties (via their Core/common.json $refs). Editing an enum there
+    without updating the trigger (or vice versa) fails here."""
+    properties = load_schemas_json(EMISSIONS_DATA_REL)["properties"]
 
     (trigger_sql,) = db.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
@@ -1170,7 +1173,7 @@ def test_emissions_enum_lists_match_schema(db, action):
     trigger_lists = _extract_trigger_in_lists(trigger_sql)
 
     for field in _EMISSIONS_ENUM_FIELDS:
-        schema_members = properties[field]["enum"]
+        schema_members = _schema_enum(properties[field])
         assert trigger_lists[field] == schema_members, (
             f"{field} enum drift: trigger has {trigger_lists[field]} but "
             f"EmissionsData.json has {schema_members}"

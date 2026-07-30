@@ -389,14 +389,16 @@ def psy_field_is_documented_natural(name, field):
     """A power-valued PSY field stored in natural units with no needs_conversion.
 
     Two documented cases:
-    - base_power: the device MVA base itself.
+    - base_power (and the pairwise base_power_12/23/31 on ThreeWindingTransformer):
+      a device MVA base itself. Exact names, not a prefix — a new base_power_*
+      field must be reviewed and added here, not silently exempted.
     - a device quantity entered "at unity voltage" (e.g. FACTS max_shunt_current, a
       current expressed as MVA at unity voltage): a device basis, not a system-base
       power, so PSY deliberately stores it unconverted. The idiom is specific — only
       max_shunt_current uses it today — so it exempts exactly that pattern.
     """
     comment = field.get("comment") or ""
-    if name == "base_power":
+    if name in ("base_power", "base_power_12", "base_power_23", "base_power_31"):
         return "MVA" in comment
     return "at unity voltage" in comment.lower() and not field.get("needs_conversion")
 

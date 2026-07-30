@@ -7,7 +7,7 @@
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
 -- Schema/registry revision; bump on every future registry or schema change.
-PRAGMA user_version = 6;
+PRAGMA user_version = 8;
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -30,6 +30,12 @@ DROP TABLE IF EXISTS storage_technologies;
 DROP TABLE IF EXISTS demand_technologies;
 
 DROP TABLE IF EXISTS transmission_lines;
+
+DROP TABLE IF EXISTS two_winding_transformers;
+
+DROP TABLE IF EXISTS three_winding_transformers;
+
+DROP TABLE IF EXISTS transformer_circuits;
 
 DROP TABLE IF EXISTS planning_regions;
 
@@ -207,6 +213,97 @@ CREATE TABLE discrete_controlled_ac_branches (
         CHECK (branch_status IN ('OPEN', 'CLOSED')),
     normal_branch_status TEXT NOT NULL DEFAULT 'CLOSED'
         CHECK (normal_branch_status IN ('OPEN', 'CLOSED'))
+) strict;
+
+-- One modeled arc of a transformer (PSY TransformerCircuit). Circuits are
+-- unnamed subcomponents, so no name column. r/x are pu with no
+-- parameter_units discriminator (mirrors discrete_controlled_ac_branches);
+-- the MinMax band columns' units follow control_objective, see
+-- unit_conventions. `available` is INTEGER for STRICT (BOOLEAN only exists
+-- in the legacy non-strict generator tables).
+CREATE TABLE transformer_circuits (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    -- Normalized tap position, 1 centered at nominal voltage:
+    tap REAL NOT NULL DEFAULT 1.0 CHECK (tap >= 0 AND tap <= 2), -- Units: 1
+    alpha REAL NOT NULL DEFAULT 0.0, -- Units: rad
+    r REAL NOT NULL DEFAULT 0.0, -- Units: pu
+    -- Star-leg equivalent reactance of a three-winding transformer may be
+    -- negative, so no sign CHECK on r/x:
+    x REAL NOT NULL DEFAULT 0.0, -- Units: pu
+    control_objective TEXT NOT NULL DEFAULT 'UNDEFINED'
+        CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED',
+            'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED',
+            'CONTROL_OF_DC_LINE_DISABLED',
+            'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE',
+            'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE',
+            'ASYMMETRIC_ACTIVE_POWER_FLOW')),
+    -- Controlled bus number (PSS/E CONT; sign = regulation side):
+    regulated_bus_number INTEGER NOT NULL DEFAULT 0,
+    -- Control band (PSS/E RMA/RMI), JSON {"min": ..., "max": ...}:
+    control_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
+        CHECK (control_limits IS NULL OR json_valid(control_limits)), -- Units: per control_objective (tap ratio 1 / angle rad)
+    -- Controlled-quantity band (PSS/E VMA/VMI), JSON {"min": ..., "max": ...}:
+    controlled_quantity_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
+        CHECK (controlled_quantity_limits IS NULL OR json_valid(controlled_quantity_limits)), -- Units: per control_objective (pu / MVAr / MW)
+    number_of_tap_positions INTEGER NOT NULL DEFAULT 33,
+    rating REAL NULL CHECK (rating >= 0), -- Units: MVA
+    rating_b REAL NULL CHECK (rating_b >= 0), -- Units: MVA
+    rating_c REAL NULL CHECK (rating_c >= 0), -- Units: MVA
+    active_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: MW
+    reactive_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: MVAr
+    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_voltage_primary REAL NULL CHECK (base_voltage_primary > 0), -- Units: kV
+    base_voltage_secondary REAL NULL CHECK (base_voltage_secondary > 0) -- Units: kV
+) strict;
+
+-- Two-winding transformer (PSY TwoWindingTransformer); series data lives on
+-- the referenced circuit. magnetizing_shunt is a complex admittance as JSON
+-- {"real": ..., "imag": ...} (real = conductance, imag = susceptance).
+CREATE TABLE two_winding_transformers (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    magnetizing_shunt TEXT NULL DEFAULT '{"real": 0.0, "imag": 0.0}'
+        CHECK (magnetizing_shunt IS NULL OR json_valid(magnetizing_shunt)), -- Units: pu
+    shunt_location TEXT NOT NULL DEFAULT 'PRIMARY'
+        CHECK (shunt_location IN ('PRIMARY', 'SECONDARY', 'SPLIT'))
+) strict;
+
+-- Three-winding transformer (PSY ThreeWindingTransformer), star model: each
+-- circuit connects a terminal bus to the star bus. The pairwise PSS/E CZ=1
+-- fields are all-or-none (table CHECK); star-leg impedances derived from them
+-- live on the circuits and are not synced back.
+CREATE TABLE three_winding_transformers (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    primary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    secondary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    tertiary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    star_bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    r_12 REAL NULL, -- Units: pu
+    x_12 REAL NULL, -- Units: pu
+    r_23 REAL NULL, -- Units: pu
+    x_23 REAL NULL, -- Units: pu
+    r_31 REAL NULL, -- Units: pu
+    x_31 REAL NULL, -- Units: pu
+    base_power_12 REAL NULL CHECK (base_power_12 > 0), -- Units: MVA
+    base_power_23 REAL NULL CHECK (base_power_23 > 0), -- Units: MVA
+    base_power_31 REAL NULL CHECK (base_power_31 > 0), -- Units: MVA
+    magnetizing_shunt TEXT NULL DEFAULT '{"real": 0.0, "imag": 0.0}'
+        CHECK (magnetizing_shunt IS NULL OR json_valid(magnetizing_shunt)), -- Units: pu
+    shunt_location TEXT NOT NULL DEFAULT 'PRIMARY'
+        CHECK (shunt_location IN ('PRIMARY', 'STAR')),
+    CHECK (primary_circuit <> secondary_circuit
+        AND primary_circuit <> tertiary_circuit
+        AND secondary_circuit <> tertiary_circuit),
+    -- All nine pairwise PSSE fields set together or all absent:
+    CHECK (
+        (r_12 IS NULL) + (x_12 IS NULL) + (r_23 IS NULL) + (x_23 IS NULL)
+        + (r_31 IS NULL) + (x_31 IS NULL) + (base_power_12 IS NULL)
+        + (base_power_23 IS NULL) + (base_power_31 IS NULL) IN (0, 9)
+    )
 ) strict;
 
 -- NOTE: The purpose of this table is to provide physical limits to flows
@@ -755,11 +852,32 @@ CREATE TABLE time_series_metadata (
     quantity_type TEXT NOT NULL REFERENCES quantity_types (name)
 ) strict;
 
-CREATE INDEX idx_static_time_series_uuid_idx ON static_time_series (uuid, idx);
+-- UNIQUE: one value per (series, timepoint); loader double-inserts must fail
+-- loudly rather than silently duplicate timepoints.
+CREATE UNIQUE INDEX idx_static_time_series_uuid_idx ON static_time_series (uuid, idx);
 
 CREATE INDEX idx_arcs_from ON arcs (from_id);
 
 CREATE INDEX idx_arcs_to ON arcs (to_id);
+
+-- UNIQUE: a circuit is owned by exactly one transformer slot; also indexes
+-- the ON DELETE CASCADE child keys so transformer_circuits deletes don't
+-- full-scan. (Cross-table sharing of a circuit between a two- and a
+-- three-winding transformer is not yet trigger-enforced.)
+CREATE UNIQUE INDEX idx_two_winding_transformers_circuit
+    ON two_winding_transformers (circuit);
+
+CREATE UNIQUE INDEX idx_three_winding_transformers_primary_circuit
+    ON three_winding_transformers (primary_circuit);
+
+CREATE UNIQUE INDEX idx_three_winding_transformers_secondary_circuit
+    ON three_winding_transformers (secondary_circuit);
+
+CREATE UNIQUE INDEX idx_three_winding_transformers_tertiary_circuit
+    ON three_winding_transformers (tertiary_circuit);
+
+CREATE INDEX idx_three_winding_transformers_star_bus
+    ON three_winding_transformers (star_bus);
 
 -- Unit System Registry Tables
 -- These tables are schema-level metadata, not runtime data.
