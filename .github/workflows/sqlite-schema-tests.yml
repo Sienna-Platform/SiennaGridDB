@@ -15,5 +15,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # TODO after SiennaSchemas release: switch to the release tarball instead of pinning the PR branch.
+      - name: Checkout SiennaSchemas (jm/units branch)
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/SiennaSchemas
+          ref: jm/units
+          path: SiennaSchemas
+
+      # TODO after psy6 merges to PowerSystems main: drop `ref`.
+      # Needed so the L3 schemas<->PSY layer of check_units_sync.py runs in CI.
+      - name: Checkout PowerSystems (psy6) for the L3 PSY-drift gate
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/PowerSystems.jl
+          ref: psy6
+          path: PowerSystems.jl
+          fetch-depth: 1
+
       - uses: extractions/setup-just@v3
-      - run: just new-db
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: pip install pytest
+
+      - name: Build database
+        run: just new-db
+
+      - name: Run pytest suite
+        run: python3 -m pytest test/ -v
+
+      - name: Verify unit registry seal
+        run: python3 scripts/verify_unit_registry.py griddb-example.sqlite
+
+      - name: Check registry staleness
+        run: |
+          python3 scripts/generate_unit_registry.py --units-json SiennaSchemas/Core/units.json
+          git diff --exit-code schema/unit_registry.sql
+
+      - name: Check generated DDL staleness and drift
+        run: python3 scripts/generate_sql_schema.py --schemas-path SiennaSchemas --check --diff
+
+      - name: Cross-repo units sync check
+        run: python3 scripts/check_units_sync.py --schemas-path SiennaSchemas --psy-path PowerSystems.jl --db griddb-example.sqlite

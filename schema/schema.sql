@@ -6,6 +6,9 @@
 --      3. User friendly over peformance, but consider performance always,
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
+-- Schema/registry revision; bump on every future registry or schema change.
+PRAGMA user_version = 8;
+
 DROP TABLE IF EXISTS thermal_generators;
 
 DROP TABLE IF EXISTS renewable_generators;
@@ -28,6 +31,12 @@ DROP TABLE IF EXISTS demand_technologies;
 
 DROP TABLE IF EXISTS transmission_lines;
 
+DROP TABLE IF EXISTS two_winding_transformers;
+
+DROP TABLE IF EXISTS three_winding_transformers;
+
+DROP TABLE IF EXISTS transformer_circuits;
+
 DROP TABLE IF EXISTS planning_regions;
 
 DROP TABLE IF EXISTS transmission_interchanges;
@@ -40,7 +49,27 @@ DROP TABLE IF EXISTS attributes;
 
 DROP TABLE IF EXISTS loads;
 
+DROP TABLE IF EXISTS fixed_admittance;
+
+DROP TABLE IF EXISTS switched_admittance;
+
+DROP TABLE IF EXISTS sources;
+
+DROP TABLE IF EXISTS two_terminal_lcc_lines;
+
+DROP TABLE IF EXISTS tmodel_hvdc_lines;
+
+DROP TABLE IF EXISTS two_terminal_vsc_lines;
+
+DROP TABLE IF EXISTS facts_control_devices;
+
+DROP TABLE IF EXISTS interconnecting_converters;
+
 DROP TABLE IF EXISTS static_time_series;
+
+DROP TABLE IF EXISTS time_series_metadata;
+
+DROP TABLE IF EXISTS allowed_units;
 
 DROP TABLE IF EXISTS entity_types;
 
@@ -63,6 +92,12 @@ DROP TABLE IF EXISTS combined_cycle_associations;
 DROP TABLE IF EXISTS plant_associations;
 
 DROP TABLE IF EXISTS plants;
+
+DROP TABLE IF EXISTS unit_conventions;
+
+DROP TABLE IF EXISTS quantity_types;
+
+DROP TABLE IF EXISTS unit_management_metadata;
 
 PRAGMA foreign_keys = ON;
 
@@ -118,8 +153,10 @@ CREATE TABLE planning_regions (
 CREATE TABLE balancing_topologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    area INTEGER NULL REFERENCES planning_regions (id) ON DELETE SET NULL,
-    description TEXT NULL
+    area INTEGER NULL REFERENCES planning_regions (id) ON DELETE
+    SET
+        NULL,
+        description TEXT NULL
 ) strict;
 
 -- NOTE: The purpose of this table is to provide links different entities that
@@ -136,15 +173,137 @@ CREATE TABLE arcs (
 ) strict;
 
 -- Existing transmission lines
+-- Branch electrical parameters r/x/b/g are stored flexibly in per-unit on system
+-- base OR natural units; the per-row parameter_units discriminator records which
+-- (SYSTEM_BASE -> pu; NATURAL_UNITS -> ohm for r/x, S for b/g). All of r/x/b/g on
+-- a line share one basis (PSY stores them all on system base; a matpower import is
+-- all natural). r and x are scalar REAL; b and g are shunt halves stored as JSON
+-- {"from": ..., "to": ...} text (json_valid-checked, STRICT-legal), mirroring the
+-- schema FromTo payload.
 CREATE TABLE transmission_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    arc_id INTEGER,
-    continuous_rating REAL NULL CHECK (continuous_rating >= 0),
+    arc_id INTEGER NOT NULL,
+    continuous_rating REAL NOT NULL CHECK (continuous_rating >= 0),
     ste_rating REAL NULL CHECK (ste_rating >= 0),
     lte_rating REAL NULL CHECK (lte_rating >= 0),
     line_length REAL NULL CHECK (line_length >= 0),
+    r REAL NOT NULL CHECK (r >= 0),
+    x REAL NOT NULL,
+    b TEXT NULL CHECK (b IS NULL OR json_valid(b)),
+    g TEXT NULL DEFAULT '{"from": 0.0, "to": 0.0}' CHECK (g IS NULL OR json_valid(g)),
+    parameter_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE' CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
     FOREIGN KEY (arc_id) REFERENCES arcs (id) ON DELETE CASCADE
+) strict;
+
+-- Switches and breakers connecting AC buses (PSY DiscreteControlledACBranch).
+-- r/x are per-unit on system base (this component has no natural-units option
+-- in PSY, unlike transmission_lines); rating is stored in MVA (natural units),
+-- mirroring transmission_lines.continuous_rating.
+CREATE TABLE discrete_controlled_ac_branches (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL CHECK (r >= 0),
+    x REAL NOT NULL CHECK (x >= 0),
+    rating REAL NOT NULL CHECK (rating >= 0),
+    discrete_branch_type TEXT NOT NULL DEFAULT 'OTHER'
+        CHECK (discrete_branch_type IN ('SWITCH', 'BREAKER', 'OTHER')),
+    branch_status TEXT NOT NULL DEFAULT 'CLOSED'
+        CHECK (branch_status IN ('OPEN', 'CLOSED')),
+    normal_branch_status TEXT NOT NULL DEFAULT 'CLOSED'
+        CHECK (normal_branch_status IN ('OPEN', 'CLOSED'))
+) strict;
+
+-- One modeled arc of a transformer (PSY TransformerCircuit). Circuits are
+-- unnamed subcomponents, so no name column. r/x are pu with no
+-- parameter_units discriminator (mirrors discrete_controlled_ac_branches);
+-- the MinMax band columns' units follow control_objective, see
+-- unit_conventions. `available` is INTEGER for STRICT (BOOLEAN only exists
+-- in the legacy non-strict generator tables).
+CREATE TABLE transformer_circuits (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    -- Normalized tap position, 1 centered at nominal voltage:
+    tap REAL NOT NULL DEFAULT 1.0 CHECK (tap >= 0 AND tap <= 2), -- Units: 1
+    alpha REAL NOT NULL DEFAULT 0.0, -- Units: rad
+    r REAL NOT NULL DEFAULT 0.0, -- Units: pu
+    -- Star-leg equivalent reactance of a three-winding transformer may be
+    -- negative, so no sign CHECK on r/x:
+    x REAL NOT NULL DEFAULT 0.0, -- Units: pu
+    control_objective TEXT NOT NULL DEFAULT 'UNDEFINED'
+        CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED',
+            'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED',
+            'CONTROL_OF_DC_LINE_DISABLED',
+            'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE',
+            'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE',
+            'ASYMMETRIC_ACTIVE_POWER_FLOW')),
+    -- Controlled bus number (PSS/E CONT; sign = regulation side):
+    regulated_bus_number INTEGER NOT NULL DEFAULT 0,
+    -- Control band (PSS/E RMA/RMI), JSON {"min": ..., "max": ...}:
+    control_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
+        CHECK (control_limits IS NULL OR json_valid(control_limits)), -- Units: per control_objective (tap ratio 1 / angle rad)
+    -- Controlled-quantity band (PSS/E VMA/VMI), JSON {"min": ..., "max": ...}:
+    controlled_quantity_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
+        CHECK (controlled_quantity_limits IS NULL OR json_valid(controlled_quantity_limits)), -- Units: per control_objective (pu / MVAr / MW)
+    number_of_tap_positions INTEGER NOT NULL DEFAULT 33,
+    rating REAL NULL CHECK (rating >= 0), -- Units: MVA
+    rating_b REAL NULL CHECK (rating_b >= 0), -- Units: MVA
+    rating_c REAL NULL CHECK (rating_c >= 0), -- Units: MVA
+    active_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: MW
+    reactive_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: MVAr
+    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_voltage_primary REAL NULL CHECK (base_voltage_primary > 0), -- Units: kV
+    base_voltage_secondary REAL NULL CHECK (base_voltage_secondary > 0) -- Units: kV
+) strict;
+
+-- Two-winding transformer (PSY TwoWindingTransformer); series data lives on
+-- the referenced circuit. magnetizing_shunt is a complex admittance as JSON
+-- {"real": ..., "imag": ...} (real = conductance, imag = susceptance).
+CREATE TABLE two_winding_transformers (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    magnetizing_shunt TEXT NULL DEFAULT '{"real": 0.0, "imag": 0.0}'
+        CHECK (magnetizing_shunt IS NULL OR json_valid(magnetizing_shunt)), -- Units: pu
+    shunt_location TEXT NOT NULL DEFAULT 'PRIMARY'
+        CHECK (shunt_location IN ('PRIMARY', 'SECONDARY', 'SPLIT'))
+) strict;
+
+-- Three-winding transformer (PSY ThreeWindingTransformer), star model: each
+-- circuit connects a terminal bus to the star bus. The pairwise PSS/E CZ=1
+-- fields are all-or-none (table CHECK); star-leg impedances derived from them
+-- live on the circuits and are not synced back.
+CREATE TABLE three_winding_transformers (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    primary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    secondary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    tertiary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
+    star_bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    r_12 REAL NULL, -- Units: pu
+    x_12 REAL NULL, -- Units: pu
+    r_23 REAL NULL, -- Units: pu
+    x_23 REAL NULL, -- Units: pu
+    r_31 REAL NULL, -- Units: pu
+    x_31 REAL NULL, -- Units: pu
+    base_power_12 REAL NULL CHECK (base_power_12 > 0), -- Units: MVA
+    base_power_23 REAL NULL CHECK (base_power_23 > 0), -- Units: MVA
+    base_power_31 REAL NULL CHECK (base_power_31 > 0), -- Units: MVA
+    magnetizing_shunt TEXT NULL DEFAULT '{"real": 0.0, "imag": 0.0}'
+        CHECK (magnetizing_shunt IS NULL OR json_valid(magnetizing_shunt)), -- Units: pu
+    shunt_location TEXT NOT NULL DEFAULT 'PRIMARY'
+        CHECK (shunt_location IN ('PRIMARY', 'STAR')),
+    CHECK (primary_circuit <> secondary_circuit
+        AND primary_circuit <> tertiary_circuit
+        AND secondary_circuit <> tertiary_circuit),
+    -- All nine pairwise PSSE fields set together or all absent:
+    CHECK (
+        (r_12 IS NULL) + (x_12 IS NULL) + (r_23 IS NULL) + (x_23 IS NULL)
+        + (r_31 IS NULL) + (x_31 IS NULL) + (base_power_12 IS NULL)
+        + (base_power_23 IS NULL) + (base_power_31 IS NULL) IN (0, 9)
+    )
 ) strict;
 
 -- NOTE: The purpose of this table is to provide physical limits to flows
@@ -273,8 +432,14 @@ CREATE TABLE storage_units (
     conversion_factor REAL NOT NULL DEFAULT 1.0 CHECK (conversion_factor > 0),
     storage_target REAL NOT NULL DEFAULT 0.0,
     cycle_limits INTEGER NOT NULL DEFAULT 10000 CHECK (cycle_limits > 0),
+    -- Ramp limits (JSON: {"up": ..., "down": ...}, MW/min):
+    ramp_limits JSON NULL,
+    -- Leakage loss (fraction of stored energy lost per hour) and constant
+    -- standing-loss power (MW), both PSY-defaulted to 0.0:
+    self_discharge REAL NOT NULL DEFAULT 0.0 CHECK (self_discharge >= 0),
+    standing_loss REAL NOT NULL DEFAULT 0.0 CHECK (standing_loss >= 0),
     -- Cost:
-    operation_cost JSON NULL
+    operation_cost JSON NOT NULL DEFAULT '{"cost_type": "STORAGE", "charge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}, "discharge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}'
 );
 
 -- Topological hydro reservoirs
@@ -293,9 +458,14 @@ CREATE TABLE hydro_reservoirs (
     intake_elevation REAL NOT NULL DEFAULT 0.0,
     -- Head to volume relationship (JSON ValueCurve):
     head_to_volume_factor JSON NOT NULL,
-    -- Cost (HydroReservoirCost):
+    -- Cost (HydroReservoirCost), always USD/MWh regardless of level_data_type --
+    -- level-native values convert to energy via head_to_volume_factor before costing:
     operation_cost JSON NOT NULL DEFAULT '{"cost_type": "HYDRO_RES", "level_shortage_cost": 0.0, "level_surplus_cost": 0.0, "spillage_cost": 0.0}',
-    level_data_type TEXT NOT NULL DEFAULT 'USABLE_VOLUME'
+    level_data_type TEXT NOT NULL DEFAULT 'USABLE_VOLUME' CHECK (
+        level_data_type IN ('USABLE_VOLUME', 'TOTAL_VOLUME', 'HEAD', 'ENERGY')
+    ),
+    -- Standing loss from evaporation (fraction of stored volume/energy lost per hour):
+    evaporative_loss REAL NOT NULL DEFAULT 0.0 CHECK (evaporative_loss >= 0)
 );
 
 CREATE TABLE hydro_reservoir_connections (
@@ -304,6 +474,7 @@ CREATE TABLE hydro_reservoir_connections (
     CHECK (source_id <> sink_id),
     PRIMARY KEY (source_id, sink_id)
 ) strict;
+
 -- investment for expansion problems.
 -- Investment technology options for expansion problems
 CREATE TABLE supply_technologies (
@@ -318,7 +489,7 @@ CREATE TABLE supply_technologies (
     capacity_limits JSON NULL,
     -- Fuel information:
     fuel TEXT NOT NULL DEFAULT '["OTHER"]',
-    start_fuel_mmbtu_per_mwh REAL NULL,
+    start_fuel_mmbtu_per_mw REAL NULL,
     -- Fuel cofire limits (JSON: {"fuel1": {"min": ..., "max": ...}, "fuel2": {"min": ..., "max": ...}}):
     cofire_level_limits JSON NULL,
     -- Fuel cofire start limits (JSON: {"fuel1": ..., "fuel2": ...}):
@@ -407,6 +578,8 @@ CREATE TABLE attributes (
     TYPE TEXT NOT NULL,
     name TEXT NOT NULL,
     value JSON NOT NULL,
+    unit TEXT NULL,
+    quantity_type TEXT NULL REFERENCES quantity_types (name),
     json_type TEXT generated always AS (json_type(value)) virtual,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE(entity_id, name)
@@ -480,6 +653,7 @@ CREATE TABLE time_series_associations(
     metadata_uuid TEXT NOT NULL,
     units TEXT NULL
 );
+
 CREATE UNIQUE INDEX uq_time_series_assoc_owner_type_name_res_feat ON time_series_associations (
     owner_id,
     time_series_type,
@@ -487,16 +661,180 @@ CREATE UNIQUE INDEX uq_time_series_assoc_owner_type_name_res_feat ON time_series
     resolution,
     features
 );
-CREATE INDEX idx_time_series_assoc_uuid ON time_series_associations (time_series_uuid);
 
+CREATE INDEX idx_time_series_assoc_uuid ON time_series_associations (time_series_uuid);
 
 CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     balancing_topology INTEGER NOT NULL,
-    base_power REAL,
+    base_power REAL NOT NULL,
     FOREIGN KEY(balancing_topology) REFERENCES balancing_topologies (id) ON DELETE CASCADE
 );
+
+-- Fixed shunt admittance (PSY FixedAdmittance). Complex Y is stored as conductance
+-- (y_g) and susceptance (y_b) halves; admittance_units records the basis so PSS/E
+-- data (Mvar/MW at unity voltage) is stored without conversion.
+CREATE TABLE fixed_admittance (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    y_g REAL NOT NULL DEFAULT 0.0,
+    y_b REAL NOT NULL DEFAULT 0.0,
+    admittance_units TEXT NOT NULL DEFAULT 'DEVICE_MVAR'
+        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR'))
+) strict;
+
+-- Switched shunt admittance (PSY SwitchedAdmittance). Same y_g/y_b + admittance_units
+-- template as fixed_admittance. NOTE: initial_status, number_of_steps, Y_increase, and
+-- admittance_limits remain deferred -- not yet represented as columns (pre-existing gap,
+-- out of scope for this change).
+CREATE TABLE switched_admittance (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    y_g REAL NOT NULL DEFAULT 0.0,
+    y_b REAL NOT NULL DEFAULT 0.0,
+    admittance_units TEXT NOT NULL DEFAULT 'DEVICE_MVAR'
+        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR')),
+    control_mode TEXT NOT NULL DEFAULT 'FIXED'
+        CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE',
+            'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT',
+            'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
+    -- 0 = local bus (PSS/E SWREM/NREG):
+    regulated_bus_number INTEGER NOT NULL DEFAULT 0
+) strict;
+
+-- Thevenin equivalent source (PSY Source). R_th/X_th are stored flexibly in pu on
+-- system base OR natural-units ohm, recorded per row by parameter_units. PSY has no
+-- PSS/E-native representation for this component, so SYSTEM_BASE (pu) is the default.
+CREATE TABLE sources (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    r_th REAL NOT NULL,
+    x_th REAL NOT NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE'
+        CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- Two-terminal LCC (line-commutated converter) HVDC line (PSY TwoTerminalLCCLine).
+-- The 8 impedance fields are stored flexibly in pu on system base OR natural-units ohm
+-- (PSS/E native), recorded per row by parameter_units. scheduled_dc_voltage,
+-- switch_mode_voltage, and min_compounding_voltage are stored flexibly per
+-- dc_voltage_units (SYSTEM_BASE: pu on DC base voltage, NATURAL_UNITS: kV, PSS/E native).
+-- TODO(non-unit fields): transformer taps, firing/extinction angles, converter counts,
+-- and other non-unit-flexible PSY fields are out of scope for this table slice.
+CREATE TABLE two_terminal_lcc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL,
+    rectifier_rc REAL NOT NULL,
+    rectifier_xc REAL NOT NULL,
+    inverter_rc REAL NOT NULL,
+    inverter_xc REAL NOT NULL,
+    rectifier_capacitor_reactance REAL NOT NULL,
+    inverter_capacitor_reactance REAL NOT NULL,
+    compounding_resistance REAL NOT NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    scheduled_dc_voltage REAL NOT NULL DEFAULT 0.0,
+    switch_mode_voltage REAL NOT NULL DEFAULT 0.0,
+    min_compounding_voltage REAL NOT NULL DEFAULT 0.0,
+    dc_voltage_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (dc_voltage_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- T-model HVDC line (PSY TModelHVDCLine). Only the resistance r is unit-flexible in
+-- this slice; l/c are out of scope (no Inductance/pu or Capacitance/pu vocabulary yet).
+-- TODO(l, c and other non-unit fields deferred).
+CREATE TABLE tmodel_hvdc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (parameter_units IN ('SYSTEM_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- Two-terminal VSC (voltage-source converter) HVDC line (PSY TwoTerminalVSCLine).
+-- Converter conductance g is stored flexibly per admittance_units (SYSTEM_BASE: pu,
+-- NATURAL_UNITS: siemens -- PSS/E native for this field, DEVICE_MVAR: MW at unity
+-- voltage). voltage_limits_from/to (DC bus voltage MinMax) are stored flexibly per
+-- voltage_units (SYSTEM_BASE: pu, NATURAL_UNITS: kV). dc_setpoint_*/ac_setpoint_* are
+-- mode-multiplexed by dc_control_*/ac_control_*; their voltage-mode values (DC_VOLTAGE,
+-- DC_VOLTAGE_DROOP, AC_VOLTAGE) are further discriminated by voltage_units (pu/kV) via
+-- the registry's second discriminator column.
+-- TODO(non-unit fields).
+CREATE TABLE two_terminal_vsc_lines (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    g REAL NOT NULL DEFAULT 0.0,
+    admittance_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (admittance_units IN ('SYSTEM_BASE', 'NATURAL_UNITS', 'DEVICE_MVAR')),
+    voltage_limits_from TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'
+        CHECK (voltage_limits_from IS NULL OR json_valid(voltage_limits_from)),
+    voltage_limits_to TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'
+        CHECK (voltage_limits_to IS NULL OR json_valid(voltage_limits_to)),
+    voltage_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (voltage_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    dc_setpoint_from REAL NOT NULL DEFAULT 0.0,
+    dc_control_from TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control_from IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
+    dc_setpoint_to REAL NOT NULL DEFAULT 0.0,
+    dc_control_to TEXT NOT NULL DEFAULT 'DC_POWER' CHECK (dc_control_to IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
+    ac_setpoint_from REAL NOT NULL DEFAULT 1.0,
+    ac_control_from TEXT NOT NULL DEFAULT 'AC_VOLTAGE' CHECK (ac_control_from IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
+    ac_setpoint_to REAL NOT NULL DEFAULT 1.0,
+    ac_control_to TEXT NOT NULL DEFAULT 'AC_VOLTAGE' CHECK (ac_control_to IN ('AC_VOLTAGE','AC_REACTIVE_POWER'))
+) strict;
+
+-- FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly
+-- per voltage_setpoint_units (SYSTEM_BASE: pu on bus base -- PSS/E VSET native;
+-- NATURAL_UNITS: kV). TODO(non-unit fields).
+CREATE TABLE facts_control_devices (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    voltage_setpoint REAL NOT NULL,
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE'
+        CHECK (voltage_setpoint_units IN ('SYSTEM_BASE', 'NATURAL_UNITS')),
+    -- Independent max reactive power ceiling (non-binding sentinel default;
+    -- not unit-converted on the PSY side, hence no discriminator/unit row):
+    max_reactive_power REAL NOT NULL DEFAULT 9999.0 CHECK (max_reactive_power >= 0),
+    shunt_control_type TEXT NOT NULL DEFAULT 'STATCOM'
+        CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
+    -- 0 = local (sending) bus (PSS/E FCREG):
+    regulated_bus_number INTEGER NOT NULL DEFAULT 0
+) strict;
+
+-- Interconnecting power converter (PSY InterconnectingConverter), AC<->DC bus
+-- converter. dc_setpoint/ac_setpoint are mode-multiplexed by dc_control/ac_control;
+-- their voltage-mode values (DC_VOLTAGE, DC_VOLTAGE_DROOP, AC_VOLTAGE) are further
+-- discriminated by voltage_setpoint_units (pu/kV) via the registry's second
+-- discriminator column, mirroring two_terminal_vsc_lines.
+-- TODO(non-unit fields: dc_bus, active_power, rating, active_power_limits,
+-- base_power, reactive_power_limits, dc_current, max_dc_current, loss_function,
+-- dc_voltage_droop, dynamic_injector).
+CREATE TABLE interconnecting_converters (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    dc_setpoint REAL NOT NULL DEFAULT 0.0,
+    dc_control TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
+    ac_setpoint REAL NOT NULL DEFAULT 1.0,
+    ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'SYSTEM_BASE' CHECK (voltage_setpoint_units IN ('SYSTEM_BASE','NATURAL_UNITS')),
+    -- Remote-bus voltage control, PSS/E-style droop compensation, and
+    -- reactive/active power-factor weighting (added to PSY in e6cab24c1):
+    remote_bus_control INTEGER NULL CHECK (remote_bus_control IS NULL OR remote_bus_control >= 1),
+    rmpct REAL NOT NULL DEFAULT 100.0 CHECK (rmpct >= 0),
+    power_factor_weighting_fraction REAL NOT NULL DEFAULT 1.0 CHECK (power_factor_weighting_fraction >= 0),
+    -- Voltage limits (JSON: {"min": ..., "max": ...}):
+    voltage_limits TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'
+        CHECK (voltage_limits IS NULL OR json_valid(voltage_limits))
+) strict;
 
 CREATE TABLE static_time_series (
     id INTEGER PRIMARY KEY,
@@ -505,6 +843,93 @@ CREATE TABLE static_time_series (
     value REAL NOT NULL
 ) strict;
 
-CREATE INDEX idx_static_time_series_uuid_idx ON static_time_series (uuid, idx);
+-- Series-level unit metadata: one row per time series uuid, so a series cannot
+-- carry mixed units. Validated against allowed_units and enforced on
+-- static_time_series inserts by triggers.
+CREATE TABLE time_series_metadata (
+    uuid TEXT PRIMARY KEY,
+    unit TEXT NOT NULL,
+    quantity_type TEXT NOT NULL REFERENCES quantity_types (name)
+) strict;
+
+-- UNIQUE: one value per (series, timepoint); loader double-inserts must fail
+-- loudly rather than silently duplicate timepoints.
+CREATE UNIQUE INDEX idx_static_time_series_uuid_idx ON static_time_series (uuid, idx);
+
 CREATE INDEX idx_arcs_from ON arcs (from_id);
+
 CREATE INDEX idx_arcs_to ON arcs (to_id);
+
+-- UNIQUE: a circuit is owned by exactly one transformer slot; also indexes
+-- the ON DELETE CASCADE child keys so transformer_circuits deletes don't
+-- full-scan. (Cross-table sharing of a circuit between a two- and a
+-- three-winding transformer is not yet trigger-enforced.)
+CREATE UNIQUE INDEX idx_two_winding_transformers_circuit
+    ON two_winding_transformers (circuit);
+
+CREATE UNIQUE INDEX idx_three_winding_transformers_primary_circuit
+    ON three_winding_transformers (primary_circuit);
+
+CREATE UNIQUE INDEX idx_three_winding_transformers_secondary_circuit
+    ON three_winding_transformers (secondary_circuit);
+
+CREATE UNIQUE INDEX idx_three_winding_transformers_tertiary_circuit
+    ON three_winding_transformers (tertiary_circuit);
+
+CREATE INDEX idx_three_winding_transformers_star_bus
+    ON three_winding_transformers (star_bus);
+
+-- Unit System Registry Tables
+-- These tables are schema-level metadata, not runtime data.
+-- They are sealed after migration and protected by immutability triggers.
+CREATE TABLE unit_management_metadata (
+    KEY TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL,
+    description TEXT NULL
+) strict;
+
+CREATE TABLE quantity_types (
+    name TEXT PRIMARY KEY NOT NULL,
+    default_unit TEXT NOT NULL,
+    dimension TEXT NOT NULL,
+    description TEXT NULL
+) strict;
+
+-- Vocabulary of valid (quantity_type, unit) pairs. Seeded from units.json and
+-- sealed like the other registry tables; unit-string writes are validated
+-- against it.
+CREATE TABLE allowed_units (
+    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    unit TEXT NOT NULL,
+    PRIMARY KEY (quantity_type, unit)
+) strict;
+
+CREATE TABLE unit_conventions (
+    id INTEGER PRIMARY KEY,
+    table_name TEXT NOT NULL,
+    column_name TEXT NOT NULL,
+    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    unit TEXT NOT NULL,
+    -- Polymorphic units: when a column's quantity_type/unit depends on the value
+    -- of a sibling column (e.g. hydro_reservoirs.level_data_type), one row is
+    -- registered per discriminator value. discriminator_column names that sibling;
+    -- discriminator_value is the value this row applies to. Both NULL for the
+    -- common case of a column with a single fixed unit.
+    discriminator_column TEXT NULL,
+    discriminator_value TEXT NULL,
+    -- Optional second discriminator, for columns whose unit depends on a pair of
+    -- sibling columns. NULL for every current convention (single or no
+    -- discriminator); reserved for future use.
+    discriminator_column_2 TEXT NULL,
+    discriminator_value_2 TEXT NULL,
+    description TEXT NULL,
+    -- Distinct units per discriminator value for a polymorphic column.
+    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2)
+) strict;
+
+-- For non-polymorphic columns (no discriminator) enforce one row per column.
+-- A table-level UNIQUE can't do this because SQLite treats each NULL
+-- discriminator_value as distinct, so guard those rows with a partial index.
+CREATE UNIQUE INDEX uq_unit_conventions_no_discriminator
+    ON unit_conventions (table_name, column_name)
+    WHERE discriminator_value IS NULL;

@@ -1,5 +1,23 @@
+CREATE VIEW IF NOT EXISTS column_units AS
+SELECT
+    uc.table_name,
+    uc.column_name,
+    uc.unit,
+    uc.quantity_type,
+    qt.dimension,
+    uc.discriminator_column,
+    uc.discriminator_value,
+    uc.description
+FROM
+    unit_conventions uc
+    JOIN quantity_types qt ON uc.quantity_type = qt.name
+ORDER BY
+    uc.table_name,
+    uc.column_name;
+
 CREATE VIEW IF NOT EXISTS operational_data AS
-SELECT e.id AS entity_id,
+SELECT
+    e.id AS entity_id,
     e.entity_table,
     e.entity_type,
     json_extract(apl.value, '$.min') AS active_power_limit_min,
@@ -10,7 +28,8 @@ SELECT e.id AS entity_id,
     json_extract(rl.value, '$.down') AS ramp_down,
     oc.value AS operational_cost,
     json_type(oc.value) AS operational_cost_type
-FROM entities e
+FROM
+    entities e
     LEFT JOIN attributes apl ON e.id = apl.entity_id
     AND apl.name = 'active_power_limits'
     LEFT JOIN attributes mr ON e.id = mr.entity_id
@@ -21,7 +40,8 @@ FROM entities e
     AND rl.name = 'ramp_limits'
     LEFT JOIN attributes oc ON e.id = oc.entity_id
     AND oc.name = 'operation_cost'
-WHERE -- Only include entities that have at least one operational attribute
+WHERE
+    -- Only include entities that have at least one operational attribute
     (
         apl.entity_id IS NOT NULL
         OR mr.entity_id IS NOT NULL
