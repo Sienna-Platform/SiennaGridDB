@@ -20,6 +20,15 @@ def make_bus(conn, bus_id, name):
     return bus_id
 
 
+def make_dc_bus(conn, bus_id, name):
+    """Create a DC balancing-topology entity plus its row (entity_types.is_dc = 1)."""
+    make_entity(conn, bus_id, "balancing_topologies", "DCBus", is_topology=1, is_dc=1)
+    conn.execute(
+        "INSERT INTO balancing_topologies(id, name) VALUES (?, ?)", (bus_id, name)
+    )
+    return bus_id
+
+
 def make_arc(conn, arc_id, from_id, to_id):
     """Create an arc (entity + row) between two existing buses."""
     make_entity(conn, arc_id, "arcs", "Arc")
@@ -78,6 +87,23 @@ def _insert_circuit(conn, entity_id):
     )
 
 
+def _insert_two_terminal_hvdc(conn, entity_id):
+    arc_id = _arc_between_new_buses(conn)
+    conn.execute(
+        "INSERT INTO two_terminal_hvdc_lines(id, name, arc_id, converter_type) "
+        "VALUES (?, 'row', ?, 'VSC')",
+        (entity_id, arc_id),
+    )
+
+
+def _insert_synchronous_condenser(conn, entity_id):
+    bus = make_bus(conn, 1, "b1")
+    conn.execute(
+        "INSERT INTO synchronous_condensers(id, name, bus, rating) VALUES (?, 'row', ?, 2.0)",
+        (entity_id, bus),
+    )
+
+
 def _insert_two_winding(conn, entity_id):
     circuit = make_circuit(conn, 4, _arc_between_new_buses(conn))
     conn.execute(
@@ -105,6 +131,8 @@ _ENTITY_TABLE_CASES = [
     ("transformer_circuits", "TransformerCircuit", _insert_circuit),
     ("two_winding_transformers", "TwoWindingTransformer", _insert_two_winding),
     ("three_winding_transformers", "ThreeWindingTransformer", _insert_three_winding),
+    ("two_terminal_hvdc_lines", "TwoTerminalGenericHVDCLine", _insert_two_terminal_hvdc),
+    ("synchronous_condensers", "SynchronousCondenser", _insert_synchronous_condenser),
 ]
 _ENTITY_TABLE_IDS = [case[0] for case in _ENTITY_TABLE_CASES]
 
@@ -189,7 +217,7 @@ def test_three_winding_transformer_requires_distinct_circuits(fresh_db):
 
 
 def test_three_winding_transformer_pairwise_fields_all_or_none(fresh_db):
-    """The nine pairwise PSSE fields (r/x pairs + base powers) must be set
+    """The nine pairwise measured-impedance fields (r/x pairs + base powers) must be set
     together or all be absent."""
     star_bus, circuits = _three_winding_topology(fresh_db)
     make_entity(fresh_db, 60, "three_winding_transformers", "ThreeWindingTransformer")
@@ -270,19 +298,187 @@ def test_transformer_enum_checks_match_schema(db, table, column, definition):
 
 
 def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
-    """One value per (uuid, idx): a loader double-insert must fail loudly
+    """One value per (uri, idx): a loader double-insert must fail loudly
     instead of silently duplicating timepoints."""
+    make_entity(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('ts-1', 'MW', 'ActivePower')"
+        "INSERT INTO time_series_associations("
+        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "initial_timestamp, resolution, length, uri, features_hash) "
+        "VALUES (1, 1, 'thing', 0, 0, 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
+        "'static:load', ?)",
+        (b"\x0b" * 32,),
     )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 0, 1.5)"
+        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 0, 1.5)"
     )
     with pytest.raises(sqlite3.IntegrityError, match="idx"):
         fresh_db.execute(
-            "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 0, 2.5)"
+            "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 0, 2.5)"
         )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 1, 2.5)"
+        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 1, 2.5)"
     )
+
+
+def test_supplemental_attribute_association_identity_unique(fresh_db):
+    """Identity is the (component_id, attribute_id) pair (infrastore mirror);
+    the denormalized type labels are not part of it, so re-attaching the same
+    attribute under a different type spelling must still be rejected."""
+    make_entity(fresh_db, 1)
+    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    fresh_db.execute(
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
+    )
+    fresh_db.execute(
+        "INSERT INTO supplemental_attribute_associations("
+        "component_id, component_type, attribute_id, attribute_type) "
+        "VALUES (1, 'ThermalStandard', 2, 'GeographicInfo')"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        fresh_db.execute(
+            "INSERT INTO supplemental_attribute_associations("
+            "component_id, component_type, attribute_id, attribute_type) "
+            "VALUES (1, 'OtherSpelling', 2, 'OtherType')"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# AC/DC bus domain
+# tmodel_hvdc_lines is a DC-network branch between DC buses, reached from the AC
+# side through interconnecting_converters. Point-to-point HVDC
+# (two_terminal_hvdc_lines) and every AC branch run between AC topologies. The
+# two families were interchangeable before these triggers existed.
+# --------------------------------------------------------------------------- #
+def _ac_arc(conn):
+    return make_arc(conn, 3, make_bus(conn, 1, "ac1"), make_bus(conn, 2, "ac2"))
+
+
+def _dc_arc(conn):
+    return make_arc(conn, 6, make_dc_bus(conn, 4, "dc1"), make_dc_bus(conn, 5, "dc2"))
+
+
+def test_tmodel_hvdc_line_requires_dc_buses(fresh_db):
+    make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
+    with pytest.raises(sqlite3.IntegrityError, match="must connect DC buses"):
+        fresh_db.execute(
+            "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r) VALUES (99, 'dc', ?, 0.1)",
+            (_ac_arc(fresh_db),),
+        )
+
+
+def test_tmodel_hvdc_line_accepts_dc_buses(fresh_db):
+    make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
+    fresh_db.execute(
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r) VALUES (99, 'dc', ?, 0.1)",
+        (_dc_arc(fresh_db),),
+    )
+
+
+def test_two_terminal_hvdc_line_rejects_dc_buses(fresh_db):
+    """A point-to-point HVDC line terminates on AC buses; its DC side is internal."""
+    make_entity(fresh_db, 99, "two_terminal_hvdc_lines", "TwoTerminalVSCLine")
+    with pytest.raises(sqlite3.IntegrityError, match="must connect AC topologies"):
+        fresh_db.execute(
+            "INSERT INTO two_terminal_hvdc_lines(id, name, arc_id) VALUES (99, 'p2p', ?)",
+            (_dc_arc(fresh_db),),
+        )
+
+
+def test_transmission_line_rejects_dc_buses(fresh_db):
+    make_entity(fresh_db, 99, "transmission_lines", "Line")
+    with pytest.raises(sqlite3.IntegrityError, match="must connect AC topologies"):
+        fresh_db.execute(
+            "INSERT INTO transmission_lines(id, name, arc_id, continuous_rating, r, x) "
+            "VALUES (99, 'l', ?, 100.0, 0.01, 0.1)",
+            (_dc_arc(fresh_db),),
+        )
+
+
+def test_arc_domain_trigger_fires_on_update(fresh_db):
+    """Re-pointing an existing row's arc is checked too, not just the insert."""
+    make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
+    fresh_db.execute(
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r) VALUES (99, 'dc', ?, 0.1)",
+        (_dc_arc(fresh_db),),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="must connect DC buses"):
+        fresh_db.execute(
+            "UPDATE tmodel_hvdc_lines SET arc_id = ? WHERE id = 99", (_ac_arc(fresh_db),)
+        )
+
+
+def test_interconnecting_converter_bridges_ac_and_dc(fresh_db):
+    ac, dc = make_bus(fresh_db, 1, "ac"), make_dc_bus(fresh_db, 2, "dc")
+    make_entity(fresh_db, 99, "interconnecting_converters", "InterconnectingConverter")
+    fresh_db.execute(
+        "INSERT INTO interconnecting_converters(id, name, bus, dc_bus) VALUES (99, 'c', ?, ?)",
+        (ac, dc),
+    )
+
+
+@pytest.mark.parametrize(
+    "bus_kinds", [("ac", "ac"), ("dc", "dc"), ("dc", "ac")], ids=["ac-ac", "dc-dc", "swapped"]
+)
+def test_interconnecting_converter_rejects_wrong_domains(fresh_db, bus_kinds):
+    """bus must be AC and dc_bus DC -- including the swapped case, which a plain
+    pair of foreign keys would happily accept."""
+    make = {"ac": make_bus, "dc": make_dc_bus}
+    first = make[bus_kinds[0]](fresh_db, 1, "b1")
+    second = make[bus_kinds[1]](fresh_db, 2, "b2")
+    make_entity(fresh_db, 99, "interconnecting_converters", "InterconnectingConverter")
+    with pytest.raises(sqlite3.IntegrityError, match="must be an AC topology"):
+        fresh_db.execute(
+            "INSERT INTO interconnecting_converters(id, name, bus, dc_bus) "
+            "VALUES (99, 'c', ?, ?)",
+            (first, second),
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Identifier attributes
+# The unit triggers treat any numeric JSON value as physical. Bus numbers and node
+# references are not, so attribute_identifiers exempts them instead of forcing a
+# made-up unit onto a key.
+# --------------------------------------------------------------------------- #
+def _attr_owner(conn):
+    make_entity(conn, 1, "balancing_topologies", "ACBus", is_topology=1)
+    conn.execute("INSERT INTO balancing_topologies(id, name) VALUES (1, 'b1')")
+    return 1
+
+
+@pytest.mark.parametrize("name", ["number", "start_node", "end_node", "load_zone"])
+def test_identifier_attribute_needs_no_unit(fresh_db, name):
+    owner = _attr_owner(fresh_db)
+    fresh_db.execute(
+        "INSERT INTO attributes(entity_id, TYPE, name, value) VALUES (?, 'T', ?, '8901')",
+        (owner, name),
+    )
+
+
+def test_non_identifier_numeric_attribute_still_needs_a_unit(fresh_db):
+    """The exemption is scoped to the listed names, not to integers in general."""
+    owner = _attr_owner(fresh_db)
+    with pytest.raises(sqlite3.IntegrityError, match="require a vocabulary-valid unit"):
+        fresh_db.execute(
+            "INSERT INTO attributes(entity_id, TYPE, name, value) "
+            "VALUES (?, 'T', 'not_an_identifier', '8901')",
+            (owner,),
+        )
+
+
+def test_identifier_exemption_survives_update(fresh_db):
+    owner = _attr_owner(fresh_db)
+    fresh_db.execute(
+        "INSERT INTO attributes(entity_id, TYPE, name, value) VALUES (?, 'T', 'number', '1')",
+        (owner,),
+    )
+    fresh_db.execute("UPDATE attributes SET value = '2' WHERE name = 'number'")
+
+
+def test_dc_flag_requires_topology_type(fresh_db):
+    """is_dc is only meaningful for a topology type."""
+    with pytest.raises(sqlite3.IntegrityError, match="is_dc"):
+        fresh_db.execute(
+            "INSERT INTO entity_types(name, is_topology, is_dc) VALUES ('Bogus', 0, 1)"
+        )

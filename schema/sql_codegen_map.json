@@ -1,5 +1,5 @@
 {
-  "description": "DB-specific SQL codegen config consumed by scripts/generate_sql_schema.py. Per table: 'renames' maps a schema property name to its DB column name; 'foreign_keys' appends an FK clause to a (renamed) column; 'attribute_channel' lists schema properties stored in the generic attributes table under registered attribute-name conventions instead of dedicated columns (see schema/column_conventions.json table_name='attributes' rows); 'skip' lists properties intentionally not persisted; 'db_only' lists hand-written schema.sql columns that have no schema property (e.g. per-row unit discriminators like transmission_lines.parameter_units) so the drift gate does not flag them as missing-from-schema.",
+  "description": "DB-specific SQL codegen config consumed by scripts/generate_sql_schema.py. Per table: 'renames' maps a schema property name to its DB column name; 'foreign_keys' appends an FK clause to a (renamed) column; 'attribute_channel' lists schema properties stored in the generic attributes table under registered attribute-name conventions instead of dedicated columns (see schema/column_conventions.json table_name='attributes' rows); 'skip' lists properties intentionally not persisted; 'db_only' lists hand-written schema.sql columns that have no schema property (e.g. per-row unit discriminators like transmission_lines.unit_basis) so the drift gate does not flag them as missing-from-schema.",
   "tables": {
     "thermal_generators": {
       "renames": {"bus": "balancing_topology"},
@@ -7,14 +7,16 @@
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
         "prime_mover_type": "REFERENCES prime_mover_types (name)",
         "fuel": "REFERENCES fuels (name)"
-      }
+      },
+      "db_only": ["production_cost"]
     },
     "renewable_generators": {
       "renames": {"bus": "balancing_topology"},
       "foreign_keys": {
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
         "prime_mover_type": "REFERENCES prime_mover_types (name)"
-      }
+      },
+      "db_only": ["production_cost"]
     },
     "hydro_generators": {
       "renames": {"bus": "balancing_topology"},
@@ -22,7 +24,8 @@
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
         "prime_mover_type": "REFERENCES prime_mover_types (name)"
       },
-      "attribute_channel": ["efficiency", "active_power_limits_pump", "turbine_type"]
+      "attribute_channel": ["efficiency", "active_power_limits_pump", "turbine_type"],
+      "db_only": ["production_cost"]
     },
     "storage_units": {
       "renames": {"bus": "balancing_topology"},
@@ -35,56 +38,152 @@
     "hydro_reservoirs": {},
     "loads": {
       "renames": {"bus": "balancing_topology"},
-      "foreign_keys": {
-        "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
-      }
+      "foreign_keys": {"balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"}
     },
     "transmission_lines": {
       "renames": {"arc": "arc_id", "rating": "continuous_rating"},
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      },
-      "db_only": ["parameter_units"]
+      "foreign_keys": {"arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"},
+      "db_only": ["unit_basis", "line_length", "lte_rating", "ste_rating"]
     },
     "transmission_interchanges": {
-      "renames": {"arc": "arc_id"},
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      }
+      "foreign_keys": {"arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"},
+      "db_only": ["arc_id", "max_flow_from", "max_flow_to"]
     },
     "discrete_controlled_ac_branches": {
       "renames": {"arc": "arc_id"},
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      },
-      "skip": ["available", "active_power_flow", "reactive_power_flow"]
+      "foreign_keys": {"arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"},
+      "skip": ["available", "active_power_flow", "reactive_power_flow"],
+      "db_only": ["base_power"]
     },
     "transformer_circuits": {
+      "renames": {"arc": "arc_id", "parameter_units": "unit_basis"},
+      "foreign_keys": {"arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"}
+    },
+    "two_terminal_hvdc_lines": {
       "renames": {"arc": "arc_id"},
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      }
+      "foreign_keys": {"arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"},
+      "attribute_channel": [
+        "loss",
+        "r",
+        "transfer_setpoint",
+        "scheduled_dc_voltage",
+        "rectifier_bridges",
+        "rectifier_delay_angle",
+        "rectifier_delay_angle_limits",
+        "rectifier_rc",
+        "rectifier_xc",
+        "rectifier_base_voltage",
+        "rectifier_transformer_ratio",
+        "rectifier_tap_setting",
+        "rectifier_tap_limits",
+        "rectifier_tap_step",
+        "rectifier_capacitor_reactance",
+        "inverter_bridges",
+        "inverter_extinction_angle",
+        "inverter_extinction_angle_limits",
+        "inverter_rc",
+        "inverter_xc",
+        "inverter_base_voltage",
+        "inverter_transformer_ratio",
+        "inverter_tap_setting",
+        "inverter_tap_limits",
+        "inverter_tap_step",
+        "inverter_capacitor_reactance",
+        "power_mode",
+        "switch_mode_voltage",
+        "compounding_resistance",
+        "min_compounding_voltage",
+        "rating",
+        "rating_from",
+        "rating_to",
+        "g",
+        "dc_current",
+        "rated_dc_voltage",
+        "reactive_power_from",
+        "reactive_power_to",
+        "dc_control_from",
+        "dc_control_to",
+        "ac_control_from",
+        "ac_control_to",
+        "dc_setpoint_from",
+        "dc_setpoint_to",
+        "ac_setpoint_from",
+        "ac_setpoint_to",
+        "converter_loss_from",
+        "converter_loss_to",
+        "max_dc_current_from",
+        "max_dc_current_to",
+        "power_factor_weighting_fraction_from",
+        "power_factor_weighting_fraction_to",
+        "voltage_limits_from",
+        "voltage_limits_to",
+        "dc_voltage_droop_from",
+        "dc_voltage_droop_to",
+        "remote_bus_control_from",
+        "remote_bus_control_to",
+        "rated_ac_voltage_from",
+        "rated_ac_voltage_to",
+        "rmpct_from",
+        "rmpct_to"
+      ],
+      "skip": ["parameter_units", "dc_voltage_units", "admittance_units", "voltage_units", "setpoint_voltage_units"],
+      "db_only": ["converter_type"]
+    },
+    "tmodel_hvdc_lines": {
+      "renames": {"arc": "arc_id", "parameter_units": "unit_basis"},
+      "foreign_keys": {"arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"},
+      "db_only": ["base_power"]
     },
     "two_winding_transformers": {
-      "foreign_keys": {
-        "circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE"
-      }
+      "foreign_keys": {"circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE"},
+      "skip": ["admittance_units"]
     },
     "three_winding_transformers": {
+      "renames": {"parameter_units": "unit_basis"},
       "foreign_keys": {
         "primary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
         "secondary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
         "tertiary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
         "star_bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
-      }
+      },
+      "skip": ["admittance_units"]
     },
-    "balancing_topologies": {},
+    "balancing_topologies": {
+      "db_only": ["description"]
+    },
     "supply_technologies": {
-      "foreign_keys": {
-        "prime_mover_type": "REFERENCES prime_mover_types (name)"
-      }
+      "foreign_keys": {"prime_mover_type": "REFERENCES prime_mover_types (name)"}
     },
     "storage_technologies": {},
-    "transport_technologies": {}
+    "synchronous_condensers": {
+      "foreign_keys": {"bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"},
+      "skip": ["dynamic_injector"]
+    },
+    "sources": {
+      "renames": {"R_th": "r_th", "X_th": "x_th", "parameter_units": "unit_basis"},
+      "foreign_keys": {"bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"},
+      "skip": ["dynamic_injector"]
+    },
+    "fixed_admittance": {
+      "foreign_keys": {"bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"},
+      "skip": ["dynamic_injector", "admittance_units"],
+      "db_only": ["y_g", "y_b", "unit_basis", "base_power"]
+    },
+    "switched_admittance": {
+      "foreign_keys": {"bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"},
+      "skip": ["dynamic_injector", "admittance_units"],
+      "db_only": ["y_g", "y_b", "unit_basis", "base_power"]
+    },
+    "interconnecting_converters": {
+      "renames": {"voltage_setpoint_units": "unit_basis"}
+    },
+    "facts_control_devices": {
+      "renames": {"voltage_setpoint_units": "unit_basis"}
+    },
+    "transport_technologies": {},
+    "demand_technologies": {
+      "attribute_channel": ["peak_demand_mw", "value_of_lost_load", "unserved_demand_curve"],
+      "db_only": ["power_systems_type"]
+    }
   }
 }

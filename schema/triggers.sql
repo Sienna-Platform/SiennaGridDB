@@ -495,9 +495,9 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_two_terminal_lcc_lines_entity_exists BEFORE
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_entity_exists BEFORE
 INSERT
-    ON two_terminal_lcc_lines
+    ON two_terminal_hvdc_lines
     WHEN NOT EXISTS (
         SELECT
             1
@@ -505,13 +505,34 @@ INSERT
             entities
         WHERE
             id = NEW.id
-            AND entity_table = 'two_terminal_lcc_lines'
+            AND entity_table = 'two_terminal_hvdc_lines'
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table two_terminal_lcc_lines before insertion'
+        'Entity ID must exist in entities table with entity_table two_terminal_hvdc_lines before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_synchronous_condensers_entity_exists BEFORE
+INSERT
+    ON synchronous_condensers
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'synchronous_condensers'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table synchronous_condensers before insertion'
     );
 
 END;
@@ -537,26 +558,6 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_two_terminal_vsc_lines_entity_exists BEFORE
-INSERT
-    ON two_terminal_vsc_lines
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'two_terminal_vsc_lines'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'Entity ID must exist in entities table with entity_table two_terminal_vsc_lines before insertion'
-    );
-
-END;
 
 CREATE TRIGGER IF NOT EXISTS check_facts_control_devices_entity_exists BEFORE
 INSERT
@@ -1133,9 +1134,20 @@ WHERE
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS delete_two_terminal_lcc_lines_entity
+CREATE TRIGGER IF NOT EXISTS delete_two_terminal_hvdc_lines_entity
 AFTER
-    DELETE ON two_terminal_lcc_lines FOR EACH ROW
+    DELETE ON two_terminal_hvdc_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_synchronous_condensers_entity
+AFTER
+    DELETE ON synchronous_condensers FOR EACH ROW
 BEGIN
 DELETE FROM
     entities
@@ -1147,17 +1159,6 @@ END;
 CREATE TRIGGER IF NOT EXISTS delete_tmodel_hvdc_lines_entity
 AFTER
     DELETE ON tmodel_hvdc_lines FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_two_terminal_vsc_lines_entity
-AFTER
-    DELETE ON two_terminal_vsc_lines FOR EACH ROW
 BEGIN
 DELETE FROM
     entities
@@ -1366,49 +1367,169 @@ SELECT
 
 END;
 
--- =============================================================================
--- Time Series Metadata Unit Validation Triggers (registry-linked)
--- The (quantity_type, unit) pair on each series must be a registered vocabulary
--- entry in allowed_units.
--- =============================================================================
-CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_insert BEFORE
-INSERT
-    ON time_series_metadata
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            allowed_units au
-        WHERE
-            au.quantity_type = NEW.quantity_type
-            AND au.unit = NEW.unit
-    )
+-- unit_basis_rules (registry-linked): UPDATE and DELETE are blocked
+-- unconditionally; INSERT is blocked only after the registry is sealed.
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_update BEFORE
+UPDATE
+    ON unit_basis_rules
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_update BEFORE
-UPDATE
-    ON time_series_metadata
-    WHEN NOT EXISTS (
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_delete BEFORE DELETE ON unit_basis_rules
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_insert BEFORE
+INSERT
+    ON unit_basis_rules
+    WHEN EXISTS (
         SELECT
             1
         FROM
-            allowed_units au
+            unit_management_metadata
         WHERE
-            au.quantity_type = NEW.quantity_type
-            AND au.unit = NEW.unit
+            KEY = 'unit_conventions_checksum'
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+-- =============================================================================
+-- Time Series Association Unit Validation Triggers (registry-linked)
+-- quantity_kind is deliberately free-form (mirroring infrastore's catalog):
+-- composite economic quantities ($/MWh, MMBtu/MWh) must not require a schema
+-- migration. But a row that uses a REGISTERED quantity-type name must pair it
+-- with a registered unit -- a typo'd or contradictory unit on a known quantity
+-- is a defect, not a new vocabulary.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NEW.quantity_kind IS NOT NULL
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            quantity_types
+        WHERE
+            name = NEW.quantity_kind
+    )
+    AND (
+        NEW.units IS NULL
+        OR NOT EXISTS (
+            SELECT
+                1
+            FROM
+                allowed_units au
+            WHERE
+                au.quantity_type = NEW.quantity_kind
+                AND au.unit = NEW.units
+        )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations rows using a registered quantity_kind must carry a registered (quantity_kind, units) pair from allowed_units.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_update BEFORE
+UPDATE
+    ON time_series_associations
+    WHEN NEW.quantity_kind IS NOT NULL
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            quantity_types
+        WHERE
+            name = NEW.quantity_kind
+    )
+    AND (
+        NEW.units IS NULL
+        OR NOT EXISTS (
+            SELECT
+                1
+            FROM
+                allowed_units au
+            WHERE
+                au.quantity_type = NEW.quantity_kind
+                AND au.unit = NEW.units
+        )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations rows using a registered quantity_kind must carry a registered (quantity_kind, units) pair from allowed_units.'
+    );
+
+END;
+
+-- =============================================================================
+-- Time Series Association Owner-Domain Triggers
+-- owner_id references entities (both categories share the entities id-space
+-- here, unlike infrastore's independent streams), but a category-1 owner must
+-- actually be a supplemental attribute.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NEW.owner_category = 1
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.owner_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = 1.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain_update BEFORE
+UPDATE
+    OF owner_id,
+    owner_category ON time_series_associations
+    WHEN NEW.owner_category = 1
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.owner_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = 1.'
     );
 
 END;
@@ -1457,7 +1578,10 @@ SELECT
         )
         -- Unknown attribute with physical value: must have a vocabulary-valid
         -- (quantity_type, unit) pair from allowed_units.
-        -- Physical = anything except boolean, text, or null
+        -- Physical = anything except boolean, text, or null -- except that a
+        -- numeric identifier (bus number, node reference) is not physical at all,
+        -- so names listed in attribute_identifiers are exempt rather than being
+        -- forced to carry a made-up unit.
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -1466,6 +1590,14 @@ SELECT
             WHERE
                 table_name = 'attributes'
                 AND LOWER(column_name) = LOWER(NEW.name)
+        )
+        AND NOT EXISTS (
+            SELECT
+                1
+            FROM
+                attribute_identifiers
+            WHERE
+                LOWER(name) = LOWER(NEW.name)
         )
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
@@ -1525,7 +1657,8 @@ SELECT
             'Known attribute must use the registered unit and quantity_type from unit_conventions.'
         )
         -- Unknown attribute with physical value: must have a vocabulary-valid
-        -- (quantity_type, unit) pair from allowed_units.
+        -- (quantity_type, unit) pair from allowed_units. Identifier names are
+        -- exempt, as on insert -- see attribute_identifiers.
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -1534,6 +1667,14 @@ SELECT
             WHERE
                 table_name = 'attributes'
                 AND LOWER(column_name) = LOWER(NEW.name)
+        )
+        AND NOT EXISTS (
+            SELECT
+                1
+            FROM
+                attribute_identifiers
+            WHERE
+                LOWER(name) = LOWER(NEW.name)
         )
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
@@ -1558,111 +1699,47 @@ END;
 
 -- =============================================================================
 -- Time Series Data Validation Triggers
--- Units live on time_series_metadata (one row per uuid), so a series cannot
--- carry mixed units. Each static_time_series row must reference an existing
--- metadata row.
+-- Dense values are located by uri: each static_time_series row must belong to
+-- an array some association row declares via uri. Ingest order is therefore
+-- association first, values second -- an orphan array is a loader bug surfaced
+-- loudly, not data to keep.
 -- =============================================================================
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists BEFORE
 INSERT
     ON static_time_series
     WHEN NOT EXISTS (
         SELECT
             1
         FROM
-            time_series_metadata
+            time_series_associations
         WHERE
-            uuid = NEW.uuid
+            uri = NEW.uri
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata before insertion.'
+        'static_time_series.uri must exist in time_series_associations before insertion.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists_update BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists_update BEFORE
 UPDATE
-    OF uuid ON static_time_series
+    OF uri ON static_time_series
     WHEN NOT EXISTS (
         SELECT
             1
         FROM
-            time_series_metadata
+            time_series_associations
         WHERE
-            uuid = NEW.uuid
+            uri = NEW.uri
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata before insertion.'
-    );
-
-END;
-
--- =============================================================================
--- Deprecated time_series_associations.units guard
--- The column is deprecated in favor of time_series_metadata.unit. When set, it
--- must agree with the series metadata unit.
--- =============================================================================
-CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
-INSERT
-    ON time_series_associations
-    WHEN NEW.units IS NOT NULL
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-    )
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-            AND m.unit = NEW.units
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_update BEFORE
-UPDATE
-    ON time_series_associations
-    WHEN NEW.units IS NOT NULL
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-    )
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-            AND m.unit = NEW.units
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
+        'static_time_series.uri must exist in time_series_associations before insertion.'
     );
 
 END;
@@ -1672,14 +1749,15 @@ END;
 -- The DB stores no system/device base, so cost payloads must express their
 -- variable curve in NATURAL_UNITS. Relative-base payloads are uninterpretable.
 -- NULL/absent power_units passes (payload may be a plain curve). Applies to the
--- seven cost-bearing operation_cost(s) columns.
+-- eight cost-bearing columns: production_cost on the three generator tables and
+-- the operation_cost(s) blobs elsewhere.
 -- The authoritative list of guarded cost payload paths is
--- column_conventions.json (operation_cost* rows); keep in sync.
+-- column_conventions.json (production_cost / operation_cost* rows); keep in sync.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_insert BEFORE
 INSERT
     ON thermal_generators
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
 BEGIN
 SELECT
     RAISE(
@@ -1692,7 +1770,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_update BEFORE
 UPDATE
     ON thermal_generators
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
 BEGIN
 SELECT
     RAISE(
@@ -1705,7 +1783,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_renewable_generators_cost_units_insert BEFORE
 INSERT
     ON renewable_generators
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
     OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
 BEGIN
 SELECT
@@ -1719,7 +1797,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_renewable_generators_cost_units_update BEFORE
 UPDATE
     ON renewable_generators
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
     OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
 BEGIN
 SELECT
@@ -1733,7 +1811,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_insert BEFORE
 INSERT
     ON hydro_generators
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
 BEGIN
 SELECT
     RAISE(
@@ -1746,7 +1824,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_update BEFORE
 UPDATE
     ON hydro_generators
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
 BEGIN
 SELECT
     RAISE(
@@ -1864,6 +1942,36 @@ SELECT
 
 END;
 
+-- sources carries PSY ImportExportCost, whose two guarded paths are the import
+-- and export offer curves rather than a `variable` curve.
+CREATE TRIGGER IF NOT EXISTS validate_sources_cost_units_insert BEFORE
+INSERT
+    ON sources
+    WHEN json_extract(NEW.operation_cost, '$.import_offer_curves.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_cost, '$.export_offer_curves.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_sources_cost_units_update BEFORE
+UPDATE
+    ON sources
+    WHEN json_extract(NEW.operation_cost, '$.import_offer_curves.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+    OR json_extract(NEW.operation_cost, '$.export_offer_curves.power_units') IN ('SYSTEM_BASE', 'DEVICE_BASE')
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
 -- =============================================================================
 -- EmissionsData supplemental-attribute payload guard
 -- supplemental_attributes stores free-form JSON per TYPE; for TYPE =
@@ -1881,7 +1989,7 @@ INSERT
     AND (
         json_extract(NEW.value, '$.mass_unit') NOT IN ('KG', 'LB', 'SHORT_TON', 'METRIC_TON')
         OR json_extract(NEW.value, '$.energy_unit') NOT IN ('MMBTU', 'GJ', 'MWH')
-        OR json_extract(NEW.value, '$.pollutant') NOT IN ('CO2', 'CO2E', 'CH4', 'N2O', 'NOX', 'SO2', 'PM25', 'PM10', 'HG', 'HAP', 'CUSTOM')
+        OR json_extract(NEW.value, '$.pollutant') NOT IN ('CO2', 'CO2E', 'CH4', 'N2O', 'NOX', 'SO2', 'CO', 'VOC', 'PM25', 'PM10', 'HG', 'HAP', 'CUSTOM')
         OR json_extract(NEW.value, '$.basis') NOT IN ('FUEL_INPUT', 'POWER_OUTPUT')
         OR json_extract(NEW.value, '$.pollutant') IS NULL
         OR json_extract(NEW.value, '$.basis') IS NULL
@@ -1911,7 +2019,7 @@ UPDATE
     AND (
         json_extract(NEW.value, '$.mass_unit') NOT IN ('KG', 'LB', 'SHORT_TON', 'METRIC_TON')
         OR json_extract(NEW.value, '$.energy_unit') NOT IN ('MMBTU', 'GJ', 'MWH')
-        OR json_extract(NEW.value, '$.pollutant') NOT IN ('CO2', 'CO2E', 'CH4', 'N2O', 'NOX', 'SO2', 'PM25', 'PM10', 'HG', 'HAP', 'CUSTOM')
+        OR json_extract(NEW.value, '$.pollutant') NOT IN ('CO2', 'CO2E', 'CH4', 'N2O', 'NOX', 'SO2', 'CO', 'VOC', 'PM25', 'PM10', 'HG', 'HAP', 'CUSTOM')
         OR json_extract(NEW.value, '$.basis') NOT IN ('FUEL_INPUT', 'POWER_OUTPUT')
         OR json_extract(NEW.value, '$.pollutant') IS NULL
         OR json_extract(NEW.value, '$.basis') IS NULL
@@ -1930,6 +2038,304 @@ SELECT
     RAISE(
         ABORT,
         'EmissionsData payload must use MassUnit/EnergyUnit/PollutantType/EmissionBasis enum values with a basis-consistent energy_unit (FUEL_INPUT: MMBTU or GJ; POWER_OUTPUT: MWH).'
+    );
+
+END;
+
+-- =============================================================================
+-- Bus-domain triggers (AC vs DC)
+-- The two HVDC families are not interchangeable: tmodel_hvdc_lines is a
+-- DC-network branch and must run between DC buses (entity_types.is_dc = 1),
+-- reached from the AC side through interconnecting_converters, while every AC
+-- branch and every point-to-point two_terminal_hvdc_lines row must run between
+-- AC topologies (is_dc = 0). A foreign key cannot express this: arcs reference
+-- entities generically, and the domain lives on the entity's type.
+-- Not enforced here: transmission_interchanges, a market construct between
+-- areas rather than a physical branch.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_insert BEFORE
+INSERT
+    ON transmission_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON transmission_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_discrete_controlled_ac_branches_arc_domain_insert BEFORE
+INSERT
+    ON discrete_controlled_ac_branches
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'discrete_controlled_ac_branches.arc_id must connect AC topologies (entity_types.is_dc = 0)'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_discrete_controlled_ac_branches_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON discrete_controlled_ac_branches
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'discrete_controlled_ac_branches.arc_id must connect AC topologies (entity_types.is_dc = 0)'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_insert BEFORE
+INSERT
+    ON transformer_circuits
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transformer_circuits.arc_id must connect AC topologies (entity_types.is_dc = 0)'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON transformer_circuits
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transformer_circuits.arc_id must connect AC topologies (entity_types.is_dc = 0)'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_insert BEFORE
+INSERT
+    ON two_terminal_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0): a point-to-point HVDC line terminates on AC buses and its DC side is internal. Use tmodel_hvdc_lines between DC buses for a multi-terminal DC network.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON two_terminal_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0): a point-to-point HVDC line terminates on AC buses and its DC side is internal. Use tmodel_hvdc_lines between DC buses for a multi-terminal DC network.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_insert BEFORE
+INSERT
+    ON tmodel_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 1
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1): it is a DC-network branch, reached from the AC side through interconnecting_converters. Use two_terminal_hvdc_lines for point-to-point HVDC between AC buses.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON tmodel_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 1
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1): it is a DC-network branch, reached from the AC side through interconnecting_converters. Use two_terminal_hvdc_lines for point-to-point HVDC between AC buses.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_interconnecting_converters_bus_domain_insert BEFORE
+INSERT
+    ON interconnecting_converters
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            (
+                e.id = NEW.bus
+                AND et.is_dc <> 0
+            )
+            OR (
+                e.id = NEW.dc_bus
+                AND et.is_dc <> 1
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'interconnecting_converters.bus must be an AC topology (entity_types.is_dc = 0) and dc_bus a DC bus (is_dc = 1)'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_interconnecting_converters_bus_domain_update BEFORE
+UPDATE
+    OF bus,
+    dc_bus ON interconnecting_converters
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            (
+                e.id = NEW.bus
+                AND et.is_dc <> 0
+            )
+            OR (
+                e.id = NEW.dc_bus
+                AND et.is_dc <> 1
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'interconnecting_converters.bus must be an AC topology (entity_types.is_dc = 0) and dc_bus a DC bus (is_dc = 1)'
     );
 
 END;

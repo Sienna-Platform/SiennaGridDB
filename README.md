@@ -19,33 +19,32 @@ Schema for the SQL database for Sienna Applications
 cargo install just
 ```
 
-### Create an example database and run some queries on it
+### Create a database with the schema
 
 ```console
-just test
+just new-db              # builds griddb-example.sqlite
+just new-db $DB_NAME     # or a database of your choosing
 ```
 
-### Run example queries on a griddb schema database
-
-To create a database with the schema use the following command:
+`new-db` runs the whole chain in order — schema, triggers, unit registry, views — then
+prints a row count. `just` is optional; the underlying commands are four `sqlite3` calls:
 
 ```console
-just queries $DB_NAME
+for f in schema.sql triggers.sql unit_registry.sql views.sql; do sqlite3 $DB_NAME < schema/$f; done
 ```
 
 ## Units
 
 The schema stores physical quantities in **natural units** — MW, MVAr, MVA, kV, and so
-on — with one deliberate exception: branch electrical parameters (`transmission_lines.r`,
-`x`, `b`, `g`) are **stored flexibly in per-unit on system base OR natural units**. A
-per-row discriminator column, `transmission_lines.parameter_units`
-(`SYSTEM_BASE` | `NATURAL_UNITS`), records which basis a row uses; all of `r`/`x`/`b`/`g`
-on a line share that one basis. The unit registry carries both options for each column
-(`SYSTEM_BASE` → `pu`; `NATURAL_UNITS` → `ohm` for `r`/`x`, `S` for `b`/`g`), matching the
-PowerSystems.jl data model and the schemas' `x-unit: "pu"` (system-base) annotation. `r`
-and `x` are scalar `REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as
-`json_valid`-checked text). Costs stay in natural currency units, and `operation_cost`
-JSON blobs must carry `NATURAL_UNITS`.
+on — with one deliberate exception: branch and device electrical parameters
+(`transmission_lines.r`/`x`/`b`/`g`, `transformer_circuits.r`/`x`, admittances, HVDC
+resistances, and similar) are **stored flexibly in per-unit on a component base OR
+natural units**. A per-row discriminator column, `unit_basis`
+(`COMPONENT_BASE` | `NATURAL_UNITS`), records which basis a row uses. `r`/`x` are scalar
+`REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as `json_valid`-checked text).
+Costs stay in natural currency units, and `operation_cost` JSON blobs must carry
+`NATURAL_UNITS`. See `docs/units-architecture.md` §5 for the full two-axis design,
+including how a `COMPONENT_BASE` row resolves its base without leaving the database.
 
 ### The unit registry
 
@@ -57,17 +56,29 @@ them:
 | `quantity_types` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
 | `allowed_units` | The units permitted for each quantity type (e.g. `MW` for `ActivePower`). |
 | `unit_conventions` | The column→(quantity_type, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
-| `column_units` (view) | Joins `unit_conventions` with `quantity_types` to show table, column, unit, quantity, and dimension in one place. |
+| `unit_basis_rules` | For each of the 5 quantity types that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
+| `column_units` (view) | Joins `unit_conventions` with `quantity_types` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
-Current registry: **39 quantity types, 46 allowed units, 133 conventions.**
+Current registry: **41 quantity types, 56 allowed units, 333 unit conventions, 5 unit basis rules.**
+
+Some columns are deliberately *not* registered. A convention's `discriminator_column`
+names a sibling column, so a field whose unit depends on a basis choice or a control mode
+cannot be registered once it lives in the generic `attributes` table — the sibling is an
+attribute too, not a column. Those rows carry their own `attributes.unit` and
+`attributes.quantity_type` instead, validated against `allowed_units` on write. This is
+how the point-to-point HVDC fields (LCC impedances, VSC setpoints) are handled.
 
 The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary
 in `Core/units.json`, so the registry can never drift from the source of truth.
 
 ### Time-series units
 
-`time_series_metadata` carries a `unit` column, so units are recorded **per series** rather
-than assumed schema-wide.
+`time_series_associations` carries `units`/`quantity_kind`/`unit_system` per association row,
+mirroring infrastore's catalog so rows deserialize straight into a store, and `association_id` —
+the store-minted id a time-series-backed cost payload uses to name its series. `quantity_kind` is
+free-form (composite economic quantities must not require a vocabulary change), but a row using
+a registered quantity-type name is trigger-checked against `allowed_units` — see
+`docs/units-architecture.md` §4–6 for the full contract.
 
 ### Regenerate
 
