@@ -67,11 +67,9 @@ DROP TABLE IF EXISTS sources;
 
 DROP TABLE IF EXISTS two_terminal_hvdc_lines;
 
-DROP TABLE IF EXISTS two_terminal_lcc_lines;
 
 DROP TABLE IF EXISTS tmodel_hvdc_lines;
 
-DROP TABLE IF EXISTS two_terminal_vsc_lines;
 
 DROP TABLE IF EXISTS facts_control_devices;
 
@@ -115,7 +113,6 @@ PRAGMA foreign_keys = ON;
 
 -- NOTE: This table should not be interacted directly since it gets populated
 -- automatically.
--- Table of certain entities of griddb schema.
 CREATE TABLE entities (
     id INTEGER PRIMARY KEY,
     entity_table TEXT NOT NULL,
@@ -123,7 +120,6 @@ CREATE TABLE entities (
     FOREIGN KEY (entity_type) REFERENCES entity_types (name)
 ) strict;
 
--- Table of possible entity types
 -- is_dc marks the DC side of the network (PSY DCBus). It is a property of the
 -- type, not of the row, and it is what separates the two HVDC families: a
 -- tmodel_hvdc_lines arc runs between is_dc = 1 topologies, every AC branch and
@@ -141,7 +137,6 @@ CREATE TABLE entity_types (
 -- However, users could use any combination of `prime_mover` and `fuel` for
 -- their own application. The only constraint is that the uniqueness is enforced
 -- by the combination of (prime_mover, fuel)
--- Categories to classify generating units and supply technologies
 CREATE TABLE prime_mover_types (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -160,7 +155,6 @@ CREATE TABLE storage_technology_types (
     description TEXT NULL
 ) strict;
 
--- Investment regions
 CREATE TABLE planning_regions (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -182,7 +176,6 @@ CREATE TABLE balancing_topologies (
 -- NOTE: The purpose of this table is to provide links different entities that
 -- naturally have a relantionship not model dependent (e.g., transmission lines,
 -- transmission interchanges, etc.).
--- Physical connection between entities.
 CREATE TABLE arcs (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     from_id INTEGER NOT NULL,
@@ -245,8 +238,7 @@ CREATE TABLE discrete_controlled_ac_branches (
 -- unnamed subcomponents, so no name column. r/x are stored flexibly per the
 -- unit_basis discriminator (COMPONENT_BASE -> pu on base_power/
 -- base_voltage_primary; NATURAL_UNITS -> ohm); the MinMax band columns' units
--- follow control_objective, see unit_conventions. `available` is INTEGER for
--- STRICT (BOOLEAN only exists in the legacy non-strict generator tables).
+-- follow control_objective, see unit_conventions.
 CREATE TABLE transformer_circuits (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
@@ -347,7 +339,6 @@ CREATE TABLE three_winding_transformers (
 -- between areas or balancing topologies. In contrast with the transmission
 -- lines, this entities are used to enforce given physical limits of certain
 -- markets.
--- Transmission interchanges between two balancing topologies or areas
 CREATE TABLE transmission_interchanges (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -373,11 +364,9 @@ CREATE TABLE thermal_generators (
     ramp_limits JSON NULL,
     -- Time limits (JSON: {"up": ..., "down": ...}, hours):
     time_limits JSON NULL,
-    -- Operational flags:
     must_run BOOLEAN NOT NULL DEFAULT FALSE,
     available BOOLEAN NOT NULL DEFAULT TRUE,
     "status" BOOLEAN NOT NULL DEFAULT FALSE,
-    -- Initial setpoints:
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
     -- Production (variable) cost curve: the schemas' ProductionVariableCostCurve
@@ -394,18 +383,13 @@ CREATE TABLE thermal_generators (
         -- a CHECK passes on NULL, so an unlabelled curve would slip through.
         CHECK (ifnull(json_extract(production_cost, '$.variable_cost_type'), '')
             IN ('COST', 'FUEL'))
-        -- Six ValueCurve forms: the three static ones and their time-series-backed
-        -- counterparts, whose function_data carries an association_id instead of
-        -- coefficients (SiennaSchemas Core/common.json ValueCurve).
+        -- Three static ValueCurve forms plus their time-series-backed counterparts.
         CHECK (ifnull(json_extract(production_cost, '$.value_curve.curve_type'), '')
             IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE',
                 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL',
                 'TIME_SERIES_AVERAGE_RATE'))
-        -- A FuelCurve without a fuel price cannot be turned into money. The price
-        -- is either a fixed number (fuel_cost) or a time series (fuel_cost_time_series),
-        -- never both and never neither. Upstream states "exactly one is set" only in
-        -- prose -- no oneOf, no dependentSchemas -- so this CHECK is the only place
-        -- the rule is actually enforced.
+        -- A FuelCurve needs exactly one price source: fuel_cost or
+        -- fuel_cost_time_series, never both, never neither. Not enforced upstream.
         CHECK (json_extract(production_cost, '$.variable_cost_type') <> 'FUEL'
             OR (json_extract(production_cost, '$.fuel_cost') IS NOT NULL)
              <> (json_extract(production_cost, '$.fuel_cost_time_series') IS NOT NULL)),
@@ -424,16 +408,13 @@ CREATE TABLE renewable_generators (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     rating REAL NOT NULL CHECK (rating >= 0),
     base_power REAL NOT NULL CHECK (base_power > 0),
-    -- Renewable-specific:
     power_factor REAL NOT NULL DEFAULT 1.0 CHECK (
         power_factor > 0
         AND power_factor <= 1.0
     ),
     -- Power limits (JSON: {"min": ..., "max": ...}):
     reactive_power_limits JSON NULL,
-    -- Operational flags:
     available BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Initial setpoints:
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
     -- Production (variable) cost curve; see thermal_generators.production_cost.
@@ -471,9 +452,7 @@ CREATE TABLE hydro_generators (
     ramp_limits JSON NULL,
     -- Time limits (JSON: {"up": ..., "down": ...}, hours):
     time_limits JSON NULL,
-    -- Operational flags:
     available BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Initial setpoints:
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
     -- HydroTurbine/HydroPumpTurbine fields (nullable for HydroDispatch):
@@ -487,26 +466,16 @@ CREATE TABLE hydro_generators (
     -- admissible here as well.
     production_cost JSON NOT NULL DEFAULT '{"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}'
         CHECK (json_valid(production_cost))
-        -- ifnull, not a bare IN: json_extract returns NULL for an absent key and
-        -- a CHECK passes on NULL, so an unlabelled curve would slip through.
+        -- Same CHECKs as thermal_generators.production_cost; see the rationale there.
         CHECK (ifnull(json_extract(production_cost, '$.variable_cost_type'), '')
             IN ('COST', 'FUEL'))
-        -- Six ValueCurve forms: the three static ones and their time-series-backed
-        -- counterparts, whose function_data carries an association_id instead of
-        -- coefficients (SiennaSchemas Core/common.json ValueCurve).
         CHECK (ifnull(json_extract(production_cost, '$.value_curve.curve_type'), '')
             IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE',
                 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL',
                 'TIME_SERIES_AVERAGE_RATE'))
-        -- A FuelCurve without a fuel price cannot be turned into money. The price
-        -- is either a fixed number (fuel_cost) or a time series (fuel_cost_time_series),
-        -- never both and never neither. Upstream states "exactly one is set" only in
-        -- prose -- no oneOf, no dependentSchemas -- so this CHECK is the only place
-        -- the rule is actually enforced.
         CHECK (json_extract(production_cost, '$.variable_cost_type') <> 'FUEL'
             OR (json_extract(production_cost, '$.fuel_cost') IS NOT NULL)
              <> (json_extract(production_cost, '$.fuel_cost_time_series') IS NOT NULL)),
-    -- Remaining cost members (fixed):
     operation_cost JSON NOT NULL DEFAULT '{"cost_type": "HYDRO_GEN", "fixed": 0.0}'
         CHECK (json_extract(operation_cost, '$.variable') IS NULL)
     -- Note: efficiency (varies by type), turbine_type, and HydroPumpTurbine-specific
@@ -538,12 +507,9 @@ CREATE TABLE storage_units (
     efficiency JSON NOT NULL,
     -- Reactive power (JSON: {"min": ..., "max": ...}):
     reactive_power_limits JSON NULL,
-    -- Initial setpoints:
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
-    -- Status:
     available BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Storage-specific with defaults:
     conversion_factor REAL NOT NULL DEFAULT 1.0 CHECK (conversion_factor > 0),
     storage_target REAL NOT NULL DEFAULT 0.0,
     cycle_limits INTEGER NOT NULL DEFAULT 10000 CHECK (cycle_limits > 0),
@@ -596,7 +562,6 @@ CREATE TABLE hydro_reservoir_connections (
     PRIMARY KEY (source_id, sink_id)
 ) strict;
 
--- investment for expansion problems.
 -- Investment technology options for expansion problems
 CREATE TABLE supply_technologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -608,7 +573,6 @@ CREATE TABLE supply_technologies (
     unit_size REAL NULL,
     -- Capacity limits (JSON: {"min": ..., "max": ...}, MW):
     capacity_limits JSON NULL,
-    -- Fuel information:
     fuel TEXT NOT NULL DEFAULT '["OTHER"]',
     start_fuel_mmbtu_per_mw REAL NULL,
     -- Fuel cofire limits (JSON: {"fuel1": {"min": ..., "max": ...}, "fuel2": {"min": ..., "max": ...}}):
@@ -617,7 +581,6 @@ CREATE TABLE supply_technologies (
     cofire_start_limits JSON NULL,
     -- CO2 emissions (JSON: {"fuel1": ..., "fuel2": ...}, tons per MMBTU):
     co2 JSON NULL,
-    -- Operational information:
     available BOOLEAN NOT NULL DEFAULT TRUE,
     -- Ramp limits (JSON: {"up": ..., "down": ...}, MW/min):
     ramp_limits JSON NULL,
@@ -625,12 +588,8 @@ CREATE TABLE supply_technologies (
     time_limits JSON NULL,
     outage_factor REAL NULL,
     min_generation_fraction REAL NULL,
-    -- Financial data:
-    -- Capital cost (complex structure, stored as JSON):
     capital_costs JSON NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
-    -- Cost (complex structure, stored as JSON):
     operation_costs JSON NOT NULL DEFAULT '{"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}',
-    -- Other financial parameters (complex structure, stored as JSON):
     financial_data JSON NOT NULL
 );
 
@@ -649,7 +608,6 @@ CREATE TABLE storage_technologies (
     capacity_limits_charge JSON NULL,
     capacity_limits_discharge JSON NULL,
     capacity_limits_energy JSON NULL,
-    -- Operational information:
     available BOOLEAN NOT NULL DEFAULT TRUE,
     -- Duration limits (JSON: {"min": ..., "max": ...}, hours):
     duration_limits JSON NULL,
@@ -657,14 +615,10 @@ CREATE TABLE storage_technologies (
     efficiency JSON NULL,
     min_discharge_fraction REAL NULL,
     losses REAL NULL,
-    -- Financial data:
-    -- Capital cost (complex structure, stored as JSON):
     capital_costs_charge JSON NULL,
     capital_costs_discharge JSON NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
     capital_costs_energy JSON NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
-    -- Cost (complex structure, stored as JSON):
     operation_costs JSON NOT NULL DEFAULT '{"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}',
-    -- Other financial parameters (complex structure, stored as JSON):
     financial_data JSON NOT NULL
 );
 
@@ -724,10 +678,8 @@ VALUES
     ('end_node', 'Transport technology to-node reference'),
     ('load_zone', 'Load zone reference');
 
--- NOTE: Supplemental are optional parameters that can be linked to entities.
--- The main purpose of this is to provide a way to save relevant information
--- but that could or could not be used for modeling. not `text`. Examples of
--- this field are geolocation (e.g., lat, long), outages, etc.)
+-- Optional entity data that may or may not be used for modeling
+-- (geolocation, outages, ...).
 CREATE TABLE supplemental_attributes (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     TYPE TEXT NOT NULL,
@@ -787,67 +739,21 @@ CREATE TABLE combined_cycle_associations (
     PRIMARY KEY (plant_id, entity_id, hrsg_index)
 ) strict;
 
--- Mirrors infrastore's catalog table column-for-column
--- (crates/infrastore-core/src/metadata/schema.rs) so a GridDB row deserializes
--- straight into an infrastore store at the modeling stage, and so the same row
--- projects onto the SiennaSchemas wire form (TimeSeries/*.json) that
--- SystemDocument.time_series_associations carries.
---
--- Audited against infrastore 2026-08-26. The deliberate divergences, so they are
--- not re-litigated:
---   * GridDB-side integrity only, no row-shape change: the owner_id FK, `strict`,
---     and the drop-and-recreate preamble (infrastore's DDL is idempotent
---     CREATE ... IF NOT EXISTS because it re-applies on every writable open).
---   * uri: GridDB has it, infrastore does not -- it derives the wire `uri` at
---     export from data_hash. The schema allows either: "No required format ...
---     the backing store decides what it means ... Never parsed or interpreted
---     here." NOT unique here on purpose: several associations may name one
---     shared array, which is what lets a dense array be stored once.
---   * data_hash nullable here, NOT NULL there; element_shape NOT NULL with a
---     json_valid CHECK here, bare nullable TEXT there. Both follow the wire form,
---     which marks data_hash optional and element_shape required.
---   * scenario_count exists here and NOT in infrastore's catalog, because
---     TimeSeries/Scenarios.json requires it. Raise upstream.
---   * infrastore's parent_child_associations has no counterpart: GridDB models
---     those edges in richer domain tables (plant_associations w/ group_index,
---     combined_cycle_associations w/ role + hrsg_index, hydro_reservoir_connections).
--- Column semantics that are on-disk contracts there:
---   * owner_category / time_series_type are small INTEGER codes
---     (OwnerCategory::code / TimeSeriesType::code), not names -- see the
---     time_series_readable CASE arms for the decode.
---   * unit_system is 'natural_units' | 'component_base' (infrastore
---     UnitSystem::as_str, lowercase -- NOT the component tables'
---     unit_basis vocabulary) and deliberately carries no CHECK, so a third
---     basis can land without a format bump.
---   * quantity_kind is free-form (QUDT local names recommended); a CHECK would
---     turn composite economic quantities ($/MWh) into schema migrations. Rows
---     that use a registered quantity-type name are trigger-validated against
---     allowed_units (see validate_time_series_associations_units_insert).
---   * uri / data_hash / element_shape follow the SiennaSchemas wire form
---     (TimeSeries/*.json), where infrastore's catalog diverges from it: uri is
---     the required locator for the dense values (here: the key into
---     static_time_series), data_hash is an OPTIONAL content hash of that
---     array, and element_shape is required ('[]' = scalar element).
---   * features_hash / timestamps_hash are content-address SHA-256 BLOBs: the
---     feature map (feature_sets) and the explicit timestamp vector
---     (timestamp_sets; NonSequentialTimeSeries only).
---   * resolution / interval / horizon are ISO-8601 duration strings ('PT1H',
---     'P1Y') so calendar periods are distinguishable from fixed ones.
---   * time_reference is 'utc', 'zoneless', a fixed offset, or an IANA zone
---     name; NULL means unspecified, not UTC.
---   * component_field names the owner's field these values vary
---     (e.g. 'max_active_power'); free-form, never interpreted here.
+-- Mirrors infrastore's catalog table column-for-column so a row deserializes
+-- straight into a store, and projects onto the SiennaSchemas wire form.
+-- owner_category / time_series_type are small INTEGER codes, not names (decode
+-- in time_series_readable). unit_system is lowercase 'natural_units' |
+-- 'component_base' -- NOT the component tables' unit_basis vocabulary -- and
+-- carries no CHECK so a third basis can land without a format bump.
+-- quantity_kind is free-form: a CHECK would turn composite economic quantities
+-- ($/MWh) into schema migrations. resolution / interval / horizon are ISO-8601
+-- durations so calendar periods stay distinguishable from fixed ones.
+-- time_reference NULL means unspecified, not UTC.
 CREATE TABLE time_series_associations (
     id INTEGER PRIMARY KEY,
-    -- The store-minted surrogate id, carried verbatim. This is the value the wire
-    -- schemas require (TimeSeries/*.json association_id, readOnly) and the value a
-    -- cost payload references: a TIME_SERIES_* function data, FuelCurve's
-    -- fuel_cost_time_series, MarketBidTimeSeriesCost's start_up_association_id and
-    -- the two curve *_association_id fields all name a series by this number.
-    -- Distinct from `id` on purpose: `id` is a bare rowid SQLite may reuse after a
-    -- delete, and a reused reference resolving to a different series is exactly the
-    -- failure the minted id exists to prevent. Store-local -- resolve it against the
-    -- store the document came from, never an independently built one.
+    -- The store-minted surrogate id, carried verbatim; what cost payloads and the
+    -- wire schemas reference. Distinct from `id` on purpose: `id` is a rowid SQLite
+    -- may reuse after a delete. Store-local -- resolve against the source store.
     association_id INTEGER NOT NULL,
     owner_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     owner_type TEXT NOT NULL,
@@ -861,7 +767,6 @@ CREATE TABLE time_series_associations (
     interval TEXT,
     count INTEGER,
     -- Scenarios only (time_series_type = 5), which requires it alongside count.
-    -- infrastore's catalog has no counterpart column yet; see the plan's Part D.
     scenario_count INTEGER,
     timestamps_hash BLOB,
     units TEXT,
@@ -903,18 +808,11 @@ CREATE TABLE timestamp_sets (
     data BLOB NOT NULL
 ) strict;
 
--- The store's uniqueness invariant is (owner_id, owner_category,
--- time_series_type, name, resolution, interval, features). Two indexes enforce
--- and serve it, and BOTH must be kept: uq_ts_assoc serves equality/IS NULL
--- lookups but cannot enforce uniqueness when resolution or interval IS NULL
--- (SQLite treats NULLs as distinct); uq_ts_assoc_coalesced closes that gap by
--- COALESCE-ing to the empty string, never a valid ISO-8601 period.
--- Mirrors infrastore's uq_ts_assoc_id. With ids minted from a monotonic sequence
--- upstream a violation is unreachable, so this asserts internal consistency
--- rather than detecting a collision -- and it is what makes association_id a
--- resolvable key for the cost payloads that reference it.
 CREATE UNIQUE INDEX uq_ts_assoc_id ON time_series_associations (association_id);
 
+-- Both are needed: uq_ts_assoc cannot enforce uniqueness when resolution or
+-- interval IS NULL (SQLite treats NULLs as distinct); the coalesced twin closes
+-- that gap with the empty string, never a valid ISO-8601 period.
 CREATE UNIQUE INDEX uq_ts_assoc ON time_series_associations
     (owner_id, owner_category, time_series_type, name, resolution, interval, features_hash);
 
@@ -1124,9 +1022,8 @@ CREATE TABLE two_terminal_hvdc_lines (
 -- enforce_tmodel_hvdc_lines_arc_domain. It is the multi-terminal HVDC building
 -- block, paired with interconnecting_converters at each AC/DC boundary -- not a
 -- point-to-point device. For point-to-point HVDC use two_terminal_hvdc_lines.
--- Only the resistance r is unit-flexible in this slice; l/c are out of scope (no
--- Inductance/pu or Capacitance/pu vocabulary yet).
--- TODO(l, c and other non-unit fields deferred).
+-- Only r is unit-flexible: there is no Inductance/pu or Capacitance/pu
+-- vocabulary for l and c.
 CREATE TABLE tmodel_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -1139,7 +1036,7 @@ CREATE TABLE tmodel_hvdc_lines (
 
 -- FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly
 -- per unit_basis (COMPONENT_BASE: pu on bus base_voltage, the native external form;
--- NATURAL_UNITS: kV). TODO(non-unit fields).
+-- NATURAL_UNITS: kV).
 CREATE TABLE facts_control_devices (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -1160,12 +1057,8 @@ CREATE TABLE facts_control_devices (
 -- converter. dc_setpoint/ac_setpoint are mode-multiplexed by dc_control/ac_control;
 -- their voltage-mode values (DC_VOLTAGE, DC_VOLTAGE_DROOP, AC_VOLTAGE) are further
 -- discriminated by unit_basis (pu/kV) via the registry's second discriminator
--- column. This table keeps its setpoints as columns (unlike the
--- consolidated two_terminal_hvdc_lines, whose variant-specific setpoints moved to
--- attributes), so the sibling-column discriminator still resolves here.
--- TODO(non-unit fields: active_power, rating, active_power_limits, base_power,
--- reactive_power_limits, dc_current, max_dc_current, loss_function,
--- dc_voltage_droop, dynamic_injector).
+-- column. Setpoints stay as columns here, so the sibling-column discriminator
+-- resolves.
 CREATE TABLE interconnecting_converters (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -1178,9 +1071,8 @@ CREATE TABLE interconnecting_converters (
     dc_control TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
     ac_setpoint REAL NOT NULL DEFAULT 1.0,
     ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
-    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE','NATURAL_UNITS')),
-    -- Remote-bus voltage control, droop compensation, and
-    -- reactive/active power-factor weighting (added to PSY in e6cab24c1):
+    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    -- Remote-bus voltage control, droop, and power-factor weighting:
     remote_bus_control INTEGER NULL CHECK (remote_bus_control IS NULL OR remote_bus_control >= 1),
     rmpct REAL NOT NULL DEFAULT 100.0 CHECK (rmpct >= 0),
     power_factor_weighting_fraction REAL NOT NULL DEFAULT 1.0 CHECK (power_factor_weighting_fraction >= 0),
@@ -1231,9 +1123,7 @@ CREATE UNIQUE INDEX idx_three_winding_transformers_tertiary_circuit
 CREATE INDEX idx_three_winding_transformers_star_bus
     ON three_winding_transformers (star_bus);
 
--- Unit System Registry Tables
--- These tables are schema-level metadata, not runtime data.
--- They are sealed after migration and protected by immutability triggers.
+-- Registry metadata, not runtime data; sealed and trigger-protected.
 CREATE TABLE unit_management_metadata (
     KEY TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL,

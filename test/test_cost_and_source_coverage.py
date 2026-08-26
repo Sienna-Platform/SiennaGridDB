@@ -65,9 +65,7 @@ def insert_thermal(conn, gen_id, bus_id, production_cost):
     )
 
 
-# --------------------------------------------------------------------------
 # Piecewise round trip
-# --------------------------------------------------------------------------
 
 
 def test_piecewise_cost_curve_round_trips_unaltered(fresh_db):
@@ -117,7 +115,6 @@ def test_piecewise_step_incremental_curve_is_accepted(fresh_db):
 
 
 def test_relative_power_units_still_rejected_for_piecewise(fresh_db):
-    """The NATURAL_UNITS guard applies whatever the curve form is."""
     bus = make_bus(fresh_db, 1, "bus-1")
     cost = json.loads(json.dumps(PIECEWISE_IO_COST))
     cost["power_units"] = "SYSTEM_BASE"
@@ -125,9 +122,7 @@ def test_relative_power_units_still_rejected_for_piecewise(fresh_db):
         insert_thermal(fresh_db, 2, bus, cost)
 
 
-# --------------------------------------------------------------------------
 # Curve-form conventions in the registry
-# --------------------------------------------------------------------------
 
 CURVE_FORM_EXPECTATIONS = [
     (
@@ -258,15 +253,13 @@ def test_storage_units_registers_its_real_curve_paths(db):
     assert "operation_cost.discharge_variable_cost" in paths
 
 
-# --------------------------------------------------------------------------
 # sources / fixed_admittance field coverage
-# --------------------------------------------------------------------------
 
 SOURCE_SKIPPED = {"id", "dynamic_injector", "R_th", "X_th"}
 
 
 def test_every_source_schema_field_has_a_column(db):
-    """The coverage gap this change closed: no Source field may be droppable."""
+    """No Source field may be droppable by a loader."""
     props = set(load_schemas_json("Operations/StaticInjection/Source.json")["properties"])
     columns = {r[1] for r in db.execute("PRAGMA table_info(sources)")}
     columns |= {"R_th", "X_th"}  # stored lowercase; a rename, not a gap
@@ -339,9 +332,7 @@ def test_source_base_voltage_must_be_positive(fresh_db):
         )
 
 
-# --------------------------------------------------------------------------
 # production_cost: the payload must say which kind of curve it is
-# --------------------------------------------------------------------------
 
 
 def fuel_curve(fuel_cost=4.0, curve_type="INCREMENTAL", fuel_cost_time_series=None):
@@ -384,8 +375,7 @@ def test_fuel_curve_without_any_fuel_price_is_rejected(fresh_db):
 
 
 def test_fuel_curve_with_time_series_price_is_accepted(fresh_db):
-    """Upstream split fuel_cost into a fixed number and an association id;
-    a time-varying price is a valid FuelCurve."""
+    """A time-varying price is a valid FuelCurve."""
     bus = make_bus(fresh_db, 1, "bus-1")
     insert_thermal(
         fresh_db, 2, bus, fuel_curve(fuel_cost=None, fuel_cost_time_series=77)
@@ -435,7 +425,7 @@ def test_time_series_backed_curve_types_are_accepted(fresh_db, curve_type):
 
 
 def test_unknown_curve_type_is_still_rejected(fresh_db):
-    """Widening to six forms must not have opened the enum."""
+    """The enum stays closed."""
     bus = make_bus(fresh_db, 1, "bus-1")
     with pytest.raises(sqlite3.IntegrityError):
         insert_thermal(fresh_db, 2, bus, fuel_curve(curve_type="TIME_SERIES_GUESS"))

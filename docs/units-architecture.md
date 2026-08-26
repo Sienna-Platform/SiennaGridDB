@@ -184,19 +184,16 @@ physical quantity, and — under `NATURAL_UNITS` — which representation of it?
 
 ### Axis 1: `unit_basis`, exactly two values
 
-One discriminator column, `unit_basis`, on eight tables — `transmission_lines`,
-`transformer_circuits`, `fixed_admittance`, `switched_admittance`, `sources`, `tmodel_hvdc_lines`,
-`facts_control_devices`, `interconnecting_converters` (time series carry the same two-valued
+One discriminator column, `unit_basis`, on nine tables — `transmission_lines`,
+`transformer_circuits`, `three_winding_transformers`, `fixed_admittance`, `switched_admittance`,
+`sources`, `tmodel_hvdc_lines`, `facts_control_devices`, `interconnecting_converters` (time series
+carry the same two-valued
 choice as `time_series_associations.unit_system`, in infrastore's lowercase spelling — see §6):
 
 - **`NATURAL_UNITS`** — a physical unit (ohm, S, MVAr, MW, kV). Self-contained, no base needed.
 - **`COMPONENT_BASE`** — dimensionless pu against bases reachable from the row.
 
-This replaced three differently-named, differently-valued columns: `parameter_units`
-(`SYSTEM_BASE`/`NATURAL_UNITS`), `admittance_units` (`SYSTEM_BASE`/`NATURAL_UNITS`/`DEVICE_MVAR`),
-and `voltage_setpoint_units` (`SYSTEM_BASE`/`NATURAL_UNITS`).
-
-### Why two values, where upstream SiennaSchemas has three
+### Why two basis values
 
 Upstream distinguishes `DEVICE_BASE` / `SYSTEM_BASE` / `NATURAL_UNITS`. `DEVICE_BASE` and
 `SYSTEM_BASE` differ *only* in **which number** the base is — a transformer winding's own
@@ -289,9 +286,8 @@ Together these give one invariant, checked by `test_pu_conventions_have_resolvab
 it names resolves *structurally* — the named column exists, or every FK hop's table/column/FK
 exists. That is a schema-shape guarantee, not a data guarantee: it says the base is reachable, not
 that any given row's base is populated — see the second Accepted limitation above. Not every pu
-column carries a `unit_basis` discriminator, though — `two_winding_transformers.magnetizing_shunt`
-and `three_winding_transformers.r_12`/`x_12`/etc. are pu-only, with no `NATURAL_UNITS` sibling row,
-because their governing table has no such column to discriminate on.
+column carries a `unit_basis` discriminator, though — the `magnetizing_shunt` halves on both
+transformer tables are pu-only, with no `NATURAL_UNITS` sibling row.
 
 `attributes` rows are exempt from base references: an attribute's owner is polymorphic (`entity_id`
 → `entities`), so no single static path applies regardless of which table is on the other end. They
@@ -308,7 +304,7 @@ keep their inline `unit`/`quantity_type` instead; the exemption is recorded in
   annotations carry units, not quantity types, so there's nothing on the other side to contradict.
   `test_pu_conventions_have_resolvable_basis` only exercises columns with a `COMPONENT_BASE` +
   `NATURAL_UNITS` sibling pair; pu-only columns with no such sibling arm (the
-  `three_winding_transformers.r_12`-style rows above) are not covered by any dimensional check.
+  `magnetizing_shunt` rows above) are not covered by any dimensional check.
 
 ## 6. The infrastore mirror: association tables are a wire contract
 

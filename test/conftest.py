@@ -2,7 +2,7 @@
 
 The database is built purely with Python's ``sqlite3`` by ``executescript``-ing
 the four schema files in order, with ``PRAGMA foreign_keys = ON``. No sqlite3
-CLI dependency (Phase 2 removed it).
+CLI dependency.
 """
 
 import json

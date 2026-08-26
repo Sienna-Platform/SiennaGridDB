@@ -59,8 +59,6 @@ them:
 | `unit_basis_rules` | For each of the 5 quantity types that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_types` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
-Current registry: **41 quantity types, 56 allowed units, 333 unit conventions, 5 unit basis rules.**
-
 Some columns are deliberately *not* registered. A convention's `discriminator_column`
 names a sibling column, so a field whose unit depends on a basis choice or a control mode
 cannot be registered once it lives in the generic `attributes` table — the sibling is an
@@ -129,8 +127,8 @@ Just as the OpenAPI specs generate the Python and Julia model packages, the JSON
 generate SQLite DDL here. `scripts/generate_sql_schema.py` projects the components mapped
 in `schema/schema_map.json` into `schema/generated_schema.sql`, applying the DB-specific
 config in `schema/sql_codegen_map.json` (column renames, foreign keys, and the
-attribute-channel property lists — e.g. branch `r`/`x`/`b`/`g` live in the `attributes`
-table, not as columns). The generated file is a **reference projection**: the production
+attribute-channel property lists — e.g. the `two_terminal_hvdc_lines` converter
+fields live in the `attributes` table, not as columns). The generated file is a **reference projection**: the production
 DDL remains the hand-written `schema/schema.sql`, and the two are compared mechanically:
 
 ```console

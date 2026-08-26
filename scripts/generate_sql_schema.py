@@ -164,7 +164,7 @@ def bound_checks(column, prop):
 def _units_entry(key, value):
     """Render one x-units entry. A dict value is a nested discriminator (a field
     whose unit depends on a second discriminator column); a plain value is a
-    unit string, rendered exactly as before."""
+    unit string."""
     if isinstance(value, dict):
         disc2 = value.get("x-unit-discriminator", "?")
         inner = ", ".join(f"{k2}: {v2}" for k2, v2 in sorted(value.get("x-units", {}).items()))

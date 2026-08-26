@@ -88,7 +88,7 @@ python3 -c "import json;print(sorted({e['column'] for e in json.load(open('schem
 ## Warnings / stale bits
 
 - **`schema/schema.sql` DROPs all tables** — test-only; never apply to a live dataset.
-- Stale scaffolding, do not build on it: the root `openapi.json` is a leftover stub referencing a nonexistent `schemas/` dir; `test/load_models.py` imports a bygone `python_models` package (predecessor of power-openapi-models); `scripts/check-schema-sync.sh` expects a `SiennaOpenAPIModels.jl/src/dbinterface/` package that doesn't exist (the planned Julia DB-interface layer).
+- Stale scaffolding, do not build on it: the root `openapi.json` is a leftover stub referencing a nonexistent `schemas/` dir; `scripts/check-schema-sync.sh` expects a `SiennaOpenAPIModels.jl/src/dbinterface/` package that doesn't exist (the planned Julia DB-interface layer).
 - No table records **which devices contribute to which service**. Service/reserve membership has no association table here and no schema upstream, unlike `supplemental_attributes_association`. If reserve participation needs to round-trip, that gap is the blocker.
 
 <tone_preference>

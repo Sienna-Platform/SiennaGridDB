@@ -17,9 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # TODO after SiennaSchemas release: switch to the release tarball instead of pinning the PR branch.
-      # feat/association-id, not jm/units: jm/units predates the time-series-backed
-      # cost family and the minted association_id, so it would gate this repo against
-      # a vocabulary that no longer exists upstream.
+      # feat/association-id, not jm/units: jm/units predates the association_id vocabulary.
       - name: Checkout SiennaSchemas (feat/association-id branch)
         uses: actions/checkout@v4
         with:

@@ -12,7 +12,6 @@ from conftest import load_schemas_json, make_entity
 
 
 def make_bus(conn, bus_id, name):
-    """Create a balancing-topology entity plus its table row (FK-able bus)."""
     make_entity(conn, bus_id, "balancing_topologies", "ACBus", is_topology=1)
     conn.execute(
         "INSERT INTO balancing_topologies(id, name) VALUES (?, ?)", (bus_id, name)
@@ -30,7 +29,6 @@ def make_dc_bus(conn, bus_id, name):
 
 
 def make_arc(conn, arc_id, from_id, to_id):
-    """Create an arc (entity + row) between two existing buses."""
     make_entity(conn, arc_id, "arcs", "Arc")
     conn.execute(
         "INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)",
@@ -40,7 +38,6 @@ def make_arc(conn, arc_id, from_id, to_id):
 
 
 def make_circuit(conn, circuit_id, arc_id):
-    """Create a transformer circuit (entity + row) on an existing arc."""
     make_entity(conn, circuit_id, "transformer_circuits", "TransformerCircuit")
     conn.execute(
         "INSERT INTO transformer_circuits(id, arc_id) VALUES (?, ?)",
@@ -65,11 +62,9 @@ def _three_winding_topology(conn):
     return star_bus, circuits
 
 
-# --------------------------------------------------------------------------- #
 # Entity supertype triggers, one guard + one cascade test per subtype table.
 # Each insert callable provisions its own prerequisites and inserts a row with
 # the given entity id.
-# --------------------------------------------------------------------------- #
 def _insert_discrete_branch(conn, entity_id):
     arc_id = _arc_between_new_buses(conn)
     conn.execute(
@@ -152,8 +147,7 @@ def test_requires_matching_entity(fresh_db, table, entity_type, insert_row):
     "table, entity_type, insert_row", _ENTITY_TABLE_CASES, ids=_ENTITY_TABLE_IDS
 )
 def test_delete_cleans_entity(fresh_db, table, entity_type, insert_row):
-    """With a matching entities row the insert succeeds, and deleting the row
-    removes its supertype row (no orphaned entities)."""
+    """Deleting a subtype row must not orphan its entities row."""
     make_entity(fresh_db, 99, table, entity_type)
     insert_row(fresh_db, 99)
     fresh_db.execute(f"DELETE FROM {table} WHERE id = 99")
@@ -165,8 +159,7 @@ def test_delete_cleans_entity(fresh_db, table, entity_type, insert_row):
 
 def test_every_entity_table_has_supertype_triggers(db):
     """Every table whose id references entities must carry both boilerplate
-    triggers. discrete_controlled_ac_branches shipped without either and nobody
-    noticed; this turns the next such omission into a hard failure."""
+    triggers."""
     tables = [
         row[0]
         for row in db.execute(
@@ -188,9 +181,7 @@ def test_every_entity_table_has_supertype_triggers(db):
     assert missing == []
 
 
-# --------------------------------------------------------------------------- #
 # Transformer CHECK constraints
-# --------------------------------------------------------------------------- #
 def test_two_winding_transformer_rejects_three_winding_shunt_location(fresh_db):
     """shunt_location is the TwoWindingTransformerShuntLocation enum; STAR only
     exists on the three-winding enum."""
@@ -266,12 +257,10 @@ def test_transformer_circuit_control_fields_roundtrip(fresh_db):
         )
 
 
-# --------------------------------------------------------------------------- #
 # Transformer enum drift gate: the CHECK IN-lists in schema.sql hardcode enum
 # members $ref'd from SiennaSchemas Operations/common.json by the transformer
 # schemas. Editing an enum there without updating schema.sql (or vice versa)
 # fails here; the schema files are the source of truth.
-# --------------------------------------------------------------------------- #
 _TRANSFORMER_ENUM_COLUMNS = [
     ("two_winding_transformers", "shunt_location",
      "TwoWindingTransformerShuntLocation"),
@@ -343,13 +332,11 @@ def test_supplemental_attribute_association_identity_unique(fresh_db):
         )
 
 
-# --------------------------------------------------------------------------- #
 # AC/DC bus domain
 # tmodel_hvdc_lines is a DC-network branch between DC buses, reached from the AC
 # side through interconnecting_converters. Point-to-point HVDC
 # (two_terminal_hvdc_lines) and every AC branch run between AC topologies. The
 # two families were interchangeable before these triggers existed.
-# --------------------------------------------------------------------------- #
 def _ac_arc(conn):
     return make_arc(conn, 3, make_bus(conn, 1, "ac1"), make_bus(conn, 2, "ac2"))
 
@@ -435,12 +422,10 @@ def test_interconnecting_converter_rejects_wrong_domains(fresh_db, bus_kinds):
         )
 
 
-# --------------------------------------------------------------------------- #
 # Identifier attributes
 # The unit triggers treat any numeric JSON value as physical. Bus numbers and node
 # references are not, so attribute_identifiers exempts them instead of forcing a
 # made-up unit onto a key.
-# --------------------------------------------------------------------------- #
 def _attr_owner(conn):
     make_entity(conn, 1, "balancing_topologies", "ACBus", is_topology=1)
     conn.execute("INSERT INTO balancing_topologies(id, name) VALUES (1, 'b1')")

@@ -129,8 +129,8 @@ def ref_definition_name(ref):
 
 class Report:
     def __init__(self):
-        self.fails = []   # list of (layer, message)
-        self.warns = []   # list of (layer, message)
+        self.fails = []
+        self.warns = []
 
     def fail(self, layer, message):
         self.fails.append((layer, message))
@@ -287,7 +287,6 @@ def layer1(report, conventions, schema_map, schemas_path, allowed_pairs, doc_cac
                 )
                 contradiction += 1
                 continue
-            # unit matches; verify the (quantity, unit) pair is coherent in the vocabulary.
             if (reg_qt, schema_unit) not in allowed_pairs:
                 report.fail(
                     "L1",
@@ -378,8 +377,8 @@ def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_p
     """Compare a schema x-units discriminator map against the registry's discriminator rows.
 
     Registry rows are keyed on (discriminator_value, discriminator_value_2); rows with no
-    second discriminator carry discriminator_value_2=None (the pre-nesting shape). Flat
-    schema x-units values compare on the primary discriminator only (secondary=None); a
+    second discriminator carry discriminator_value_2=None. Flat schema x-units values
+    compare on the primary discriminator only (secondary=None); a
     nested schema x-units value (a field whose unit depends on a second discriminator)
     expands into (primary_value, secondary_value) pairs via _expand_schema_units_map. Before
     comparing, _collapse_basis_keys maps DEVICE_BASE/SYSTEM_BASE key components onto
@@ -469,7 +468,6 @@ ATTRIBUTES_WHITELIST_TABLE = "attributes"
 
 
 def build_db(schema_dir):
-    """Build an in-memory DB from the four schema/*.sql files. Returns connection."""
     con = sqlite3.connect(":memory:")
     for fname in ("schema.sql", "triggers.sql", "unit_registry.sql", "views.sql"):
         path = os.path.join(schema_dir, fname)
@@ -641,7 +639,7 @@ def psy_type_matches(def_name, psy_dtype):
 
     PSY data_type may be wrapped (e.g. 'Union{Nothing, MinMax}'); match by word boundary.
     FunctionData/ValueCurve/MinMax are the mirrored classes. A ValueCurve $ref against a
-    FunctionData PSY field (the historical drift) must NOT match.
+    FunctionData PSY field must NOT match.
     """
     return bool(re.search(r"\b" + re.escape(def_name) + r"\b", psy_dtype))
 
@@ -649,7 +647,7 @@ def psy_type_matches(def_name, psy_dtype):
 # --------------------------------------------------------------------------- self-test
 
 
-def run_self_test(schema_map, schemas_path, psy_structs):
+def run_self_test(psy_structs):
     """Regression fixture: HydroReservoir.head_to_volume_factor.
 
     Inject a stale ValueCurve $ref in memory (the historical drift) and assert L3(b) flags it
@@ -745,7 +743,6 @@ def main(argv=None):
     conventions = load_json(conventions_path)["conventions"]
     allowed_pairs = build_units_vocabulary(units_json)
 
-    # verify mapped files
     missing_files = verify_map_files(schema_map, schemas_path)
     if missing_files:
         print("ERROR: schema_map.json references non-existent files:")
@@ -753,23 +750,20 @@ def main(argv=None):
             print("  " + f)
         return 2
 
-    # self-test mode
     if args.self_test:
         if args.psy_path is None:
             print("ERROR: --self-test requires --psy-path")
             return 2
         psy_structs = load_psy_structs(os.path.abspath(args.psy_path))
-        ok = run_self_test(schema_map, schemas_path, psy_structs)
+        ok = run_self_test(psy_structs)
         return 0 if ok else 1
 
     report = Report()
     doc_cache = {}
 
-    # L1
     l1_stats = layer1(report, conventions, schema_map, schemas_path, allowed_pairs,
                       doc_cache)
 
-    # L2
     if args.db:
         con = sqlite3.connect(args.db)
     else:
@@ -777,14 +771,11 @@ def main(argv=None):
     l2_stats = layer2(report, conventions, con)
     con.close()
 
-    # L3
     if args.psy_path:
         psy_structs = load_psy_structs(os.path.abspath(args.psy_path))
         l3_stats = layer3(report, schema_map, schemas_path, psy_structs, doc_cache)
     else:
         l3_stats = None
-
-    # ------- output, per layer -------
     for layer, label, stats in (
         ("L1", "L1  SCHEMAS <-> REGISTRY", l1_stats),
         ("L2", "L2  REGISTRY <-> DB", l2_stats),
@@ -801,7 +792,6 @@ def main(argv=None):
             lines.append("  WARN " + m)
         print_section(label, lines)
 
-    # L3 section
     if l3_stats is None:
         print_section("L3  SCHEMAS <-> PSY", ["SKIPPED (no --psy-path)"])
     else:

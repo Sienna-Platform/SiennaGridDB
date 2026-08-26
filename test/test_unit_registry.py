@@ -1,4 +1,4 @@
-"""Unit-registry test suite (UIP section 6.1).
+"""Unit-registry test suite.
 
 Covers, positively and negatively: the build (row counts, FK integrity, seal
 presence, verify tool), seal honesty (tamper detection incl. quantity_types),
@@ -21,63 +21,8 @@ import pytest
 from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
-# Temperature (degC) removed: unused by any schema component.
-# +3 for the Duration split: CalendarPeriod (yr, planning spans), OperationalDuration
-# (min, scheduling durations), FractionPerTime (1/min, decay/self-discharge rates) --
-# Duration itself stays but is re-typed to seconds-only (continuous time constants).
 EXPECTED_QUANTITY_TYPES = 41
-# +1 MJ for ElectricalEnergy (RealEnergy rename), +1 Mt/MWh for EmissionRate (carbon caps),
-# -1 Temperature/degC (unused, removed)
-# Duration split: -3 (Duration/h, Duration/min, Duration/yr all dropped),
-# +4 (CalendarPeriod/yr, OperationalDuration/min, FractionPerTime/1/min, ElectricalEnergy/MWmin)
-# +6 upstream scale units (ActivePower kW/GW/TW, ElectricalEnergy kWh/GWh/TWh)
 EXPECTED_ALLOWED_UNITS = 62
-# +3 for discrete_controlled_ac_branches.{r,x,rating}
-# +49 for the transformer tables: transformer_circuits (36: tap, alpha, r, x,
-# 12 control_limits + 12 controlled_quantity_limits discriminated by
-# control_objective, ratings, flows, base power/voltages),
-# three_winding_transformers (11: pairwise r/x, pairwise base powers,
-# magnetizing_shunt.real/.imag), two_winding_transformers (2:
-# magnetizing_shunt.real/.imag)
-# HVDC consolidation: -45 (the two_terminal_lcc_lines and two_terminal_vsc_lines
-# tables are gone), +5 for two_terminal_hvdc_lines' own columns, +29 fixed
-# attributes.* conventions for the demoted fields whose unit is unambiguous.
-# +2 for the transformer_circuits.{r,x} natural-units arms (discriminated like
-# transmission_lines).
-# +5 for synchronous_condensers (PSY SynchronousCondenser: the schema component
-# existed but the DB had no table for it at all).
-# +20 attributes.* conventions for the physical quantities that previously had no
-# convention at all (bus voltage/angle, branch flows, load and area powers,
-# technology voltage/capacity/costs), each traced to a schema x-unit annotation.
-# +16 for the sources coverage close-out (8 physical columns, 2 ImportExportCost
-# weekly energy limits, 6 discriminated import/export offer curve arms).
-# +17 net for curve-form-aware variable costs: each operation_cost.<curve> row
-# becomes one row per declared curve form (INPUT_OUTPUT is a cost rate, USD/h;
-# INCREMENTAL and AVERAGE_RATE are per-energy, USD/MWh), plus FuelCurve heat-rate
-# arms where the schema permits one, and storage_units' bogus .variable path
-# replaced by .charge_variable_cost/.discharge_variable_cost.
-# +2 for transmission_lines.base_power and discrete_controlled_ac_branches.base_power:
-# a per-row snapshot of the system base their SYSTEM_BASE r/x/b/g arm normalizes
-# against (previously unrecorded anywhere in the database).
-# +4 for the base columns added alongside the two-basis-units design that were never
-# registered: balancing_topologies.base_voltage, fixed_admittance.base_power,
-# switched_admittance.base_power, tmodel_hvdc_lines.base_power -- each a per-row
-# snapshot of the base its own table's COMPONENT_BASE arm normalizes against,
-# registered the same way as the pre-existing base columns above.
-# +1 for the EnergyReservoirStorage vocabulary absorption: storage_capacity becomes
-# polymorphic on the new energy_units discriminator (one row -> two, MWh/MWmin), and
-# self_discharge retypes from Fraction/1 to FractionPerTime/1/min (still one row).
-# -2 for the infrastore-mirror time-series redesign: time_series_metadata (and its
-# base_power/base_voltage snapshots) is gone; units ride the association row and a
-# COMPONENT_BASE series is interpreted against its owner's own base columns.
-# +6 for the three_winding_transformers two-basis absorption: r_12/x_12/r_23/x_23/
-# r_31/x_31 each gain a NATURAL_UNITS ohm arm alongside the existing pu arm, now
-# discriminated by the new unit_basis column (upstream parameter_units pattern).
-# +2 attribute-name conventions for the TwoTerminalVSCLine rated AC voltages
-# (kV; rated_dc_voltage was already registered). The basis-dependent VSC fields
-# (voltage_limits_from/to, dc_voltage_droop_from/to) stay unregistered: a pu
-# attributes row has no resolvable base -- the polymorphic-owner exemption is
-# reserved for the bus-owned magnitude/voltage_limits pair.
 EXPECTED_UNIT_CONVENTIONS = 340
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
@@ -112,9 +57,7 @@ COMPLETENESS_ALLOWLIST = {
 }
 
 
-# --------------------------------------------------------------------------- #
 # Helpers
-# --------------------------------------------------------------------------- #
 def insert_attribute(conn, entity_id, name, value, unit=None, quantity_type=None):
     conn.execute(
         "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_type) "
@@ -140,9 +83,7 @@ def run_verify(db_path):
     )
 
 
-# --------------------------------------------------------------------------- #
 # Build
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     "table, expected",
     [
@@ -180,11 +121,8 @@ def test_verify_tool_passes_on_clean_db(built_db_path):
     assert "MATCH" in result.stdout
 
 
-# --------------------------------------------------------------------------- #
 # Seal honesty (tamper detection)
-# --------------------------------------------------------------------------- #
 def test_verify_detects_quantity_types_tamper(fresh_db, fresh_db_path):
-    """quantity_types tampering is the blind spot the old checksum flunked."""
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
         "UPDATE quantity_types SET default_unit = 'bogus' WHERE name = 'ActivePower'"
@@ -231,9 +169,7 @@ def test_verify_fails_when_seal_row_missing(fresh_db, fresh_db_path):
     assert "unsealed" in result.stderr
 
 
-# --------------------------------------------------------------------------- #
 # Seal enforcement (protected registry tables)
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("table", SEALED_TABLES)
 def test_seal_blocks_delete(fresh_db, table):
     with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
@@ -296,7 +232,6 @@ def test_seal_blocks_insert_metadata(fresh_db):
 
 
 def test_seal_blocks_insert_or_replace_metadata(fresh_db):
-    """INSERT OR REPLACE on the seal key must not slip past the guard."""
     with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
         fresh_db.execute(
             "INSERT OR REPLACE INTO unit_management_metadata(key, value) "
@@ -333,9 +268,7 @@ def test_registry_rerun_is_noop_failure_not_corruption(fresh_db, fresh_db_path):
     assert after == before
 
 
-# --------------------------------------------------------------------------- #
 # Attributes
-# --------------------------------------------------------------------------- #
 def test_attribute_known_name_wrong_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
@@ -434,9 +367,7 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
         insert_attribute(fresh_db, 3, "poly_attr", "3.0", "s", "Duration")
 
 
-# --------------------------------------------------------------------------- #
 # Time series (infrastore-mirror catalog)
-# --------------------------------------------------------------------------- #
 def _insert_association(
     conn,
     owner_id,
@@ -585,7 +516,6 @@ def test_association_uniqueness_null_resolution_enforced(fresh_db):
 
 
 def test_association_owner_category_attribute_domain_enforced(fresh_db):
-    """owner_category = 1 requires the owner to be a supplemental attribute."""
     make_entity(fresh_db, 1)
     with pytest.raises(
         sqlite3.IntegrityError,
@@ -661,9 +591,7 @@ def test_scenarios_association_carries_scenario_count(fresh_db):
     assert row == ("Scenarios", 24, 10)
 
 
-# --------------------------------------------------------------------------- #
 # Hydro level_data_type CHECK
-# --------------------------------------------------------------------------- #
 HYDRO_ENUM_VALUES = ["USABLE_VOLUME", "TOTAL_VOLUME", "HEAD", "ENERGY"]
 
 
@@ -693,9 +621,7 @@ def test_hydro_level_data_type_volume_rejected(fresh_db):
         _insert_reservoir(fresh_db, eid, "VOLUME")
 
 
-# --------------------------------------------------------------------------- #
 # Transmission-line unit_basis discriminator + STRICT
-# --------------------------------------------------------------------------- #
 def _insert_line(conn, entity_id, r=0.1, x=0.2, unit_basis=None):
     # transmission_lines.arc_id (NOT NULL) -> arcs -> entities; provision an
     # arc with two distinct endpoint entities so the FK/NOT NULL are satisfied.
@@ -751,7 +677,6 @@ def test_transmission_line_unit_basis_bad_value_rejected(fresh_db):
 
 
 def test_transmission_line_r_text_rejected_under_strict(fresh_db):
-    """STRICT is restored: a TEXT value in the REAL column r is a datatype mismatch."""
     eid = make_entity(fresh_db, 1, entity_table="transmission_lines")
     with pytest.raises(sqlite3.IntegrityError, match="REAL column"):
         _insert_line(fresh_db, eid, r="not_a_number")
@@ -779,9 +704,7 @@ def test_transmission_line_discriminated_registry_rows(db):
     assert [tuple(r) for r in rows] == expected
 
 
-# --------------------------------------------------------------------------- #
 # Cost payloads
-# --------------------------------------------------------------------------- #
 def _thermal_production_cost(power_units):
     """The production curve is its own column; operation_cost keeps the rest and
     may not carry a `variable` copy (CHECK on thermal_generators.operation_cost)."""
@@ -916,7 +839,7 @@ def _insert_storage_technology(conn, tech_id, operation_costs):
     ],
 )
 def test_storage_unit_relative_base_cost_rejected(fresh_db, operation_cost):
-    """[2] StorageCost with a relative base on EITHER charge or discharge variable
+    """StorageCost with a relative base on EITHER charge or discharge variable
     cost must be rejected. The old guard probed $.variable.power_units, a key that
     does not exist on StorageCost, so it was DEAD (never fired)."""
     topo = _setup_topology(fresh_db)
@@ -943,7 +866,6 @@ def test_storage_unit_natural_units_cost_accepted(fresh_db):
     ],
 )
 def test_storage_technology_relative_base_cost_rejected(fresh_db, operation_costs):
-    """[2] storage_technologies.operation_costs StorageCost guard (charge/discharge)."""
     with pytest.raises(
         sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
     ):
@@ -989,9 +911,7 @@ def test_every_cost_bearing_table_has_both_cost_unit_triggers(db):
     assert missing == [], f"cost-bearing tables missing guard triggers: {missing}"
 
 
-# --------------------------------------------------------------------------- #
 # Completeness
-# --------------------------------------------------------------------------- #
 def _table_columns(conn, table):
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
 
@@ -1007,7 +927,7 @@ def test_completeness_registered_columns_exist(db):
         "SELECT table_name, column_name, discriminator_column FROM unit_conventions"
     ).fetchall()
     missing = []
-    for table_name, column_name, discriminator in rows:
+    for table_name, column_name, _ in rows:
         if table_name == "attributes":
             continue
         base_column = column_name.split(".")[0]
@@ -1103,9 +1023,7 @@ def test_completeness_all_physical_columns_registered_or_allowlisted(db):
     )
 
 
-# --------------------------------------------------------------------------- #
 # EmissionsData supplemental-attribute payload guard
-# --------------------------------------------------------------------------- #
 EMISSIONS_OK = (
     '{"name": "co2_rate", "pollutant": "CO2", "basis": "FUEL_INPUT",'
     ' "energy_unit": "MMBTU", "mass_unit": "KG", "start_up_adder": 0.0,'
@@ -1198,7 +1116,7 @@ def test_emissions_optional_fields_absent_pass(fresh_db):
 
 
 def test_emissions_power_output_missing_energy_unit_rejected(fresh_db):
-    """[4] regression: basis=POWER_OUTPUT with energy_unit OMITTED must be
+    """basis=POWER_OUTPUT with energy_unit OMITTED must be
     rejected. Previously the ``energy_unit <> 'MWH'`` term evaluated to NULL
     (not TRUE) when energy_unit was absent, silently passing the insert."""
     make_supplemental_entity(fresh_db, 1)
@@ -1250,14 +1168,12 @@ def test_other_supplemental_types_unaffected(fresh_db):
     )
 
 
-# --------------------------------------------------------------------------- #
 # EmissionsData enum drift gate: the trigger hardcodes the pollutant / mass_unit
 # / energy_unit / basis enum members copied from EmissionsData.json's
 # properties (each a $ref into Core/common.json definitions). If someone edits
 # one of these enums in the schemas without updating the trigger, this test
 # FAILS. It does not change the trigger's values; it locks them to the schema
 # source of truth.
-# --------------------------------------------------------------------------- #
 import posixpath  # noqa: E402
 import re  # noqa: E402
 
@@ -1321,11 +1237,9 @@ def test_emissions_enum_lists_match_schema(db, action):
         )
 
 
-# --------------------------------------------------------------------------- #
-# Flexible unit-basis columns (externally-sourced fields, UIP Phase 2)
-# --------------------------------------------------------------------------- #
+# Flexible unit-basis columns
 def test_flexible_basis_columns_registered(db):
-    """Every discriminated externally-sourced column added in Phase 2 has exactly the
+    """Every discriminated externally-sourced column has exactly the
     expected set of unit_basis discriminator values in unit_conventions -- no missing
     or extra basis. This only checks the DISTINCT discriminator_value set (two values,
     COMPONENT_BASE/NATURAL_UNITS, everywhere); it does not see that y_b/y_g pack TWO
@@ -1376,7 +1290,7 @@ def test_merged_hvdc_columns_registered(db):
 @pytest.mark.parametrize(
     "name,expected",
     [
-        # Physical quantities that previously had no convention at all.
+        # Physical quantities registered on attributes.
         ("magnitude", "Voltage/pu"),
         ("base_voltage", "Voltage/kV"),
         ("angle", "Angle/rad"),
@@ -1448,13 +1362,10 @@ def test_interconnecting_converter_setpoints_two_discriminator(db):
     assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
 
 
-# --------------------------------------------------------------------------- #
-# Basis resolvability invariant (UIP two-basis-units design): every pu
-# convention names a unit_basis_rules entry and every base ref it declares
-# resolves to a real, reachable column. generate_unit_registry.py does not
-# validate this (see the design ledger's Task 3 note) -- this is the only
-# check that catches a typo'd ref or a new pu column with no rule.
-# --------------------------------------------------------------------------- #
+# Basis resolvability invariant: every pu convention names a unit_basis_rules
+# entry and every base ref resolves to a real, reachable column.
+# generate_unit_registry.py does not validate this, so this is the only check
+# that catches a typo'd ref or a new pu column with no rule.
 ATTRIBUTES_BASE_REF_EXEMPT = {("attributes", "magnitude"), ("attributes", "voltage_limits")}
 
 
@@ -1568,11 +1479,9 @@ def test_pu_conventions_have_resolvable_basis(db):
     )
 
 
-# --------------------------------------------------------------------------- #
 # unit_basis CHECK constraint, on every table that carries the column (derived
 # from a scratch build of the live schema, not hardcoded, so a newly added
 # table is covered automatically).
-# --------------------------------------------------------------------------- #
 def _discover_unit_basis_tables():
     conn = sqlite3.connect(":memory:")
     conn.execute("PRAGMA foreign_keys = ON")
@@ -1751,11 +1660,9 @@ def test_unit_basis_rejects_a_third_value(fresh_db, table):
         UNIT_BASIS_BUILDERS[table](fresh_db, 1, "BOGUS_BASIS")
 
 
-# --------------------------------------------------------------------------- #
 # Two-arm NATURAL_UNITS registration: y_b/y_g each carry TWO NATURAL_UNITS
 # rows differing only by quantity_type (the electrical form vs the PSS/E
 # form at 1.0 pu voltage).
-# --------------------------------------------------------------------------- #
 def test_admittance_natural_units_two_arms_registered(db):
     """Finer-grained than test_flexible_basis_columns_registered, which only
     sees the distinct discriminator_value SET and would still pass if one of
@@ -1782,9 +1689,7 @@ def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(
     quantity_type) rather than a generic stand-in: no attributes name in the
     real seed has two arms (y_b/y_g are physical columns, not attributes
     rows), so register a synthetic one with that exact shape and confirm both
-    arms are accepted and a cross pair is rejected. The ledger's Task 4 note
-    records this mechanism was empirically confirmed but never captured in a
-    test; this closes that gap."""
+    arms are accepted and a cross pair is rejected."""
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
         "INSERT INTO unit_conventions"
@@ -1809,10 +1714,8 @@ def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(
         insert_attribute(fresh_db, 3, "shunt_susceptance_arm", "0.01", "MW", "ActivePower")
 
 
-# --------------------------------------------------------------------------- #
 # time_series_associations unit_system (infrastore mirror: lowercase spellings,
 # deliberately no CHECK -- a third basis must not require a format bump)
-# --------------------------------------------------------------------------- #
 def test_association_unit_system_round_trips_lowercase(fresh_db):
     make_entity(fresh_db, 1)
     fresh_db.execute(
@@ -1828,9 +1731,7 @@ def test_association_unit_system_round_trips_lowercase(fresh_db):
     assert system == "component_base"
 
 
-# --------------------------------------------------------------------------- #
 # unit_basis_rules seal protection
-# --------------------------------------------------------------------------- #
 def test_unit_basis_rules_update_blocked(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
         fresh_db.execute(
@@ -1851,9 +1752,7 @@ def test_unit_basis_rules_post_seal_insert_blocked(fresh_db):
         )
 
 
-# --------------------------------------------------------------------------- #
 # column_units view: base refs exposed + row-count parity with unit_conventions
-# --------------------------------------------------------------------------- #
 def test_column_units_view_exposes_base_ref_columns(db):
     cols = [row[1] for row in db.execute("PRAGMA table_info(column_units)")]
     assert {"base_power_ref", "base_voltage_ref", "base_expression"} <= set(cols)
@@ -1867,21 +1766,14 @@ def test_column_units_view_row_count_matches_unit_conventions(db):
     assert view_count == conv_count == EXPECTED_UNIT_CONVENTIONS
 
 
-# --------------------------------------------------------------------------- #
-# Part C judgment call: dimensional sanity for unit_basis-discriminated
-# columns. See task-7-report.md for the full reasoning; summary: worth adding
-# in a DB-derived, non-brittle form (cross-arm consistency), with a documented
-# coverage gap for pu-only columns that carry no sibling arm to compare
-# against.
-# --------------------------------------------------------------------------- #
 def test_unit_basis_arms_share_quantity_type(db):
     """For any column discriminated by unit_basis (whether as the primary
     discriminator_column, or as discriminator_column_2 on a column already
     multiplexed by a sibling like dc_control), the COMPONENT_BASE (pu) arm's
     quantity_type must be one of the NATURAL_UNITS arm(s)' quantity_types.
 
-    This targets the Task 6 finding directly: nothing else stops a pu arm's
-    quantity_type from silently diverging from its physical meaning (e.g.
+    Nothing else stops a pu arm's quantity_type from silently diverging from
+    its physical meaning (e.g.
     Resistance -> Voltage on transmission_lines.r), because (Voltage, pu) is
     independently a legal vocabulary pair -- changing ONLY the pu arm's
     quantity_type, leaving its NATURAL_UNITS sibling as Resistance/ohm, is
@@ -1909,7 +1801,7 @@ def test_unit_basis_arms_share_quantity_type(db):
         "WHERE discriminator_column = 'unit_basis' OR discriminator_column_2 = 'unit_basis'"
     ).fetchall()
     by_group = {}
-    for table_name, column_name, disc_col, disc_val, disc_col2, disc_val2, quantity_type in rows:
+    for table_name, column_name, disc_col, disc_val, _disc_col2, disc_val2, quantity_type in rows:
         if disc_col == "unit_basis":
             key, basis = (table_name, column_name), disc_val
         else:
