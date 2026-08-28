@@ -825,6 +825,16 @@ CREATE TABLE time_series_associations (
     percentiles_json TEXT,
     element_type TEXT NOT NULL DEFAULT 'f64',
     element_shape TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(element_shape)),
+    -- Full native shape of the stored array as a JSON array of non-negative
+    -- integers ([length, *element_shape] for static types; forecasts prepend
+    -- their window/percentile/scenario axes). NULL means unspecified and
+    -- consumers fall back to horizon/count/percentiles/scenario_count, exact
+    -- only for the static types. Wire-only for now: infrastore's catalog has
+    -- no counterpart yet, same as scenario_count.
+    array_shape TEXT NULL CHECK (
+        array_shape IS NULL
+        OR (json_valid(array_shape) AND json_type(array_shape) = 'array')
+    ),
     application_data TEXT,
     uri TEXT NOT NULL,
     data_hash BLOB,
@@ -836,7 +846,18 @@ CREATE TABLE time_series_associations (
 -- Deliberately NO foreign key and NO cascade (mirroring infrastore): rows are
 -- shared, so deleting one association must not delete a set another still uses.
 CREATE TABLE feature_sets (
-    key TEXT NOT NULL,
+    -- The wire schemas reserve the catalog's own field names as feature keys
+    -- (TimeSeriesFeatures propertyNames) and infrastore rejects them in
+    -- validate_features; this CHECK is the only enforcement at the DB layer.
+    key TEXT NOT NULL CHECK (key NOT IN (
+        'application_data', 'array_shape', 'association_id', 'component_field',
+        'count', 'data', 'data_hash', 'dtype', 'element_shape', 'element_type',
+        'ext', 'features', 'horizon', 'id', 'initial_timestamp', 'interval',
+        'length', 'name', 'owner_category', 'owner_id', 'owner_type',
+        'percentiles', 'quantity_kind', 'resolution', 'scenario_count',
+        'time_reference', 'time_series_type', 'timestamps', 'unit_system',
+        'units', 'uri'
+    )),
     value_kind TEXT NOT NULL CHECK (value_kind IN ('int', 'float', 'bool', 'str')),
     value_int INTEGER,
     value_float REAL,
@@ -913,7 +934,7 @@ SELECT id, association_id, owner_id, owner_type,
        initial_timestamp, resolution, length, horizon, interval, count,
        scenario_count,
        units, quantity_kind, unit_system, time_reference, component_field,
-       element_type, element_shape, application_data, uri,
+       element_type, element_shape, array_shape, application_data, uri,
        CASE WHEN data_hash IS NULL THEN NULL
             ELSE lower(hex(data_hash)) END AS data_hash,
        lower(hex(features_hash)) AS features_hash,

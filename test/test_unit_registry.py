@@ -1845,3 +1845,44 @@ def test_unit_basis_arms_share_quantity_type(db):
         and not bases["COMPONENT_BASE"] <= bases["NATURAL_UNITS"]
     }
     assert mismatched == {}, f"unit_basis arms disagree on quantity_type: {mismatched}"
+
+
+def test_association_array_shape_round_trips(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
+    fresh_db.execute(
+        "UPDATE time_series_associations SET array_shape = '[24, 3]' "
+        "WHERE association_id = 1"
+    )
+    (shape,) = fresh_db.execute(
+        "SELECT array_shape FROM time_series_readable WHERE association_id = 1"
+    ).fetchone()
+    assert shape == "[24, 3]"
+
+
+def test_association_array_shape_rejects_non_array(fresh_db):
+    """array_shape must be a JSON array; a bare number is malformed data,
+    not a shape."""
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
+    with pytest.raises(sqlite3.IntegrityError):
+        fresh_db.execute(
+            "UPDATE time_series_associations SET array_shape = '24' "
+            "WHERE association_id = 1"
+        )
+
+
+def test_feature_set_rejects_reserved_key(fresh_db):
+    """The wire schemas reserve the catalog's own field names as feature keys;
+    the DB CHECK is the only enforcement at this layer."""
+    with pytest.raises(sqlite3.IntegrityError):
+        fresh_db.execute(
+            "INSERT INTO feature_sets(key, value_kind, value_str, features_hash) "
+            "VALUES ('association_id', 'str', 'x', ?)",
+            (b"\x03" * 32,),
+        )
+    fresh_db.execute(
+        "INSERT INTO feature_sets(key, value_kind, value_str, features_hash) "
+        "VALUES ('scenario', 'str', 'high-load', ?)",
+        (b"\x03" * 32,),
+    )
