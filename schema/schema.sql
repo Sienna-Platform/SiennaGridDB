@@ -7,7 +7,7 @@
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
 -- Schema/registry revision; bump on every future registry or schema change.
-PRAGMA user_version = 12;
+PRAGMA user_version = 13;
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -366,10 +366,20 @@ CREATE TABLE thermal_generators (
     "status" BOOLEAN NOT NULL DEFAULT FALSE,
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
-    -- Production (variable) cost curve: the schemas' ProductionVariableCostCurve
-    -- (Core/common.json). It is its own column rather than a member of the
-    -- operation_cost blob because it
-    -- is the part that gets read, compared and repriced. The payload states which
+    -- NOMENCLATURE: the schemas define ONE OperationalCost object per device;
+    -- the DB stores it in TWO columns on purpose. production_cost holds only
+    -- its `variable` member (the schemas' ProductionVariableCostCurve,
+    -- Core/common.json) -- the part that gets read, compared and repriced, so
+    -- it earns a queryable column of its own. operation_cost holds the REST of
+    -- the object (fixed, start-up, shut-down, ...) verbatim. A split, not a
+    -- duplication: operation_cost's CHECK forbids a `$.variable` member, so
+    -- the curve has exactly one home. The split exists only where the cost
+    -- object has a single production curve to pull out (the three generator
+    -- tables); cost objects without one -- StorageCost's charge/discharge
+    -- pair, ImportExportCost's offer curves -- stay whole in operation_cost,
+    -- and `operation_costs` (plural) on the technology tables is the schemas'
+    -- own plural field name, not a DB variation.
+    -- The payload states which
     -- kind of curve it is: COST is money, FUEL is a heat rate whose money comes
     -- from fuel_cost -- so a reader never has to guess the unit of value_curve.
     -- The curve form matters too: INPUT_OUTPUT y is a cost rate at a power level,

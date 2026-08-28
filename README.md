@@ -42,8 +42,12 @@ resistances, and similar) are **stored flexibly in per-unit on a component base 
 natural units**. A per-row discriminator column, `unit_basis`
 (`COMPONENT_BASE` | `NATURAL_UNITS`), records which basis a row uses. `r`/`x` are scalar
 `REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as `json_valid`-checked text).
-Costs stay in natural currency units, and `operation_cost` JSON blobs must carry
-`NATURAL_UNITS`.
+Costs stay in natural currency units, and the cost JSON blobs must carry
+`NATURAL_UNITS`. The schemas' one `OperationalCost` object is stored in two columns on the
+generator tables: `production_cost` holds only its `variable` curve (the queryable,
+repriced part) and `operation_cost` holds the rest of the object, with a CHECK forbidding
+a duplicated `variable` member. Cost objects without a single production curve
+(storage, sources) stay whole in `operation_cost`/`operation_costs`.
 
 ### The unit registry
 
