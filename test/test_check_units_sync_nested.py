@@ -35,11 +35,11 @@ NESTED_PROP = {
         "DC_POWER": "MW",
         "DC_VOLTAGE": {
             "x-unit-discriminator": "voltage_units",
-            "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"},
+            "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
         },
         "DC_VOLTAGE_DROOP": {
             "x-unit-discriminator": "voltage_units",
-            "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"},
+            "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
         },
     },
 }
@@ -54,14 +54,8 @@ ALLOWED_PAIRS = {
 def _matching_registry_rows():
     """Registry rows matching NESTED_PROP exactly (the sync-clean case).
 
-    The schema side (NESTED_PROP) keeps SYSTEM_BASE/NATURAL_UNITS -- upstream
-    SiennaSchemas vocabulary is untouched. But _l1_discriminated compares the
-    (collapsed) schema map against these registry rows AS STORED, and GridDB's
-    unit_conventions narrowed SYSTEM_BASE onto one discriminator
-    value, COMPONENT_BASE (see check_units_sync.py's module docstring and
-    BASIS_ALIAS). So the registry-side fixture below must use COMPONENT_BASE,
-    the value a real row would carry post-migration, not the pre-migration
-    SYSTEM_BASE the schema still uses.
+    Both sides speak the same two-value basis vocabulary (COMPONENT_BASE |
+    NATURAL_UNITS), so the registry fixture mirrors the schema map key-for-key.
     """
     return [
         {"discriminator_value": "DC_POWER", "quantity_type": "ActivePower", "unit": "MW"},
@@ -96,17 +90,17 @@ def test_expand_schema_units_map_nested():
     expanded = _expand_schema_units_map(NESTED_PROP["x-units"])
     assert expanded == {
         ("DC_POWER", None): "MW",
-        ("DC_VOLTAGE", "SYSTEM_BASE"): "pu",
+        ("DC_VOLTAGE", "COMPONENT_BASE"): "pu",
         ("DC_VOLTAGE", "NATURAL_UNITS"): "kV",
-        ("DC_VOLTAGE_DROOP", "SYSTEM_BASE"): "pu",
+        ("DC_VOLTAGE_DROOP", "COMPONENT_BASE"): "pu",
         ("DC_VOLTAGE_DROOP", "NATURAL_UNITS"): "kV",
     }
 
 
 def test_expand_schema_units_map_flat_unchanged():
-    flat = {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "ohm"}
+    flat = {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"}
     assert _expand_schema_units_map(flat) == {
-        ("SYSTEM_BASE", None): "pu",
+        ("COMPONENT_BASE", None): "pu",
         ("NATURAL_UNITS", None): "ohm",
     }
 

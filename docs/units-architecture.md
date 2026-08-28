@@ -131,11 +131,13 @@ choice as `time_series_associations.unit_system`, in infrastore's lowercase spel
 
 ### Why two basis values
 
-Upstream distinguishes `COMPONENT_BASE` / `SYSTEM_BASE` / `NATURAL_UNITS`. `COMPONENT_BASE` and
-`SYSTEM_BASE` differ *only* in **which number** the base is — a transformer winding's own
-`SBASE1-2` versus a line's `SBASE` — not in how the pu value is interpreted once that number is
-known. Once a row stores or can reach the number, the label recording *where the value came from*
-is redundant; two values suffice where upstream needs three.
+Upstream's `UnitSystem` enum is exactly `COMPONENT_BASE` / `NATURAL_UNITS`, and `unit_basis`
+matches it 1:1. `COMPONENT_BASE` means *pu against the base recorded on the component*: by
+design the base is a per-component property — a transformer circuit's own `base_power`, a
+line's `base_power` snapshotting the system base — so no system-level table has to exist.
+Which number the component's base happens to record (its own winding base, the system base)
+is the component's business; the label only says *where to find the number*, and the pu value
+is interpreted the same way once it's found.
 
 ### Axis 2: `quantity_type` also selects the natural-unit representation
 
