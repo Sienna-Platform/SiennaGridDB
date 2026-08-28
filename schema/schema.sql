@@ -823,14 +823,22 @@ CREATE TABLE time_series_associations (
     time_reference TEXT,
     component_field TEXT,
     percentiles_json TEXT,
+    -- Three columns describe the stored values at two levels, per the wire
+    -- schemas. ONE TIMESTEP: element_type says what a single step's value
+    -- means and how it is laid out (a dtype spelling like 'f64', a
+    -- 'tuple(N,dtype)', or a function-data kind); element_shape is that
+    -- element's trailing dims after the time axis, '[]' for scalar steps.
+    -- THE WHOLE ARRAY: array_shape is the full native geometry the store
+    -- holds, whose trailing axes end with element_shape --
+    -- [length, *element_shape] for static types, while forecasts prepend
+    -- their window/percentile/scenario axes. It is not derivable from the
+    -- other fields for forecasts (their layout is a producer convention), so
+    -- NULL means unspecified and consumers fall back to
+    -- horizon/count/percentiles/scenario_count, exact only for static types.
     element_type TEXT NOT NULL DEFAULT 'f64',
     element_shape TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(element_shape)),
-    -- Full native shape of the stored array as a JSON array of non-negative
-    -- integers ([length, *element_shape] for static types; forecasts prepend
-    -- their window/percentile/scenario axes). NULL means unspecified and
-    -- consumers fall back to horizon/count/percentiles/scenario_count, exact
-    -- only for the static types. Wire-only for now: infrastore's catalog has
-    -- no counterpart yet, same as scenario_count.
+    -- Wire-only for now: infrastore's catalog has no counterpart yet, same
+    -- as scenario_count.
     array_shape TEXT NULL CHECK (
         array_shape IS NULL
         OR (json_valid(array_shape) AND json_type(array_shape) = 'array')

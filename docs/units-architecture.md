@@ -330,6 +330,15 @@ GridDB follows the schemas: `uri` is NOT NULL and keys `static_time_series`, `el
 NOT NULL (default `'[]'` = scalar), `data_hash` is nullable. A row deserializing into a store that
 demands a hash computes it from the dense values at ingest.
 
+**Two shape columns describe two different things.** `element_shape` is the shape of *one
+timestep's* element — the trailing dims after the time axis, `'[]'` for scalar steps — and pairs
+with `element_type`, which says what that element means (`f64`, `tuple(N,dtype)`, a function-data
+kind). `array_shape` is the *whole stored array's* native geometry, whose trailing axes end with
+`element_shape`: `[length, *element_shape]` for static types, with forecasts prepending their
+window/percentile/scenario axes. It exists because a forecast's layout is a producer convention
+that cannot be reconstructed from `horizon`/`count`/`percentiles`/`scenario_count`; it is nullable
+(and wire-only for now — infrastore's catalog has no counterpart yet, same as `scenario_count`).
+
 **`unit_system` uses infrastore's spelling, not the component tables'.** Lowercase
 `'natural_units'` / `'component_base'`, NULL meaning unspecified, and deliberately no CHECK — a
 third basis must land without a format bump. Same two-valued concept as §5's `unit_basis`, a
