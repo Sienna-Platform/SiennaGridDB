@@ -7,7 +7,7 @@
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
 -- Schema/registry revision; bump on every future registry or schema change.
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -982,13 +982,25 @@ CREATE TABLE static_time_series (
     value REAL NOT NULL
 ) strict;
 
--- Series-level unit metadata: one row per time series uuid, so a series cannot
--- carry mixed units. Validated against allowed_units and enforced on
+-- Series-level metadata: one row per time series uuid, so a series cannot
+-- carry mixed units. Units validated against allowed_units and enforced on
 -- static_time_series inserts by triggers.
 CREATE TABLE time_series_metadata (
     uuid TEXT PRIMARY KEY,
     unit TEXT NOT NULL,
-    quantity_type TEXT NOT NULL REFERENCES quantity_types (name)
+    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    -- How the series' timestamps were spelled, per the wire schemas'
+    -- TimeReference: 'utc' | 'zoneless' | a fixed offset | an IANA zone name.
+    -- Shape is not checked here (tz-database question). NULL means
+    -- unspecified, which is deliberately not the same as utc.
+    time_reference TEXT NULL,
+    -- Full native shape of the stored array as a JSON array of non-negative
+    -- integers ([length, *element_shape] for static series). NULL means
+    -- unspecified and consumers fall back to the series' field metadata.
+    array_shape TEXT NULL CHECK (
+        array_shape IS NULL
+        OR (json_valid(array_shape) AND json_type(array_shape) = 'array')
+    )
 ) strict;
 
 -- UNIQUE: one value per (series, timepoint); loader double-inserts must fail

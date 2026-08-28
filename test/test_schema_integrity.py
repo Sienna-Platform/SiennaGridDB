@@ -462,3 +462,28 @@ def test_dc_flag_requires_topology_type(fresh_db):
         fresh_db.execute(
             "INSERT INTO entity_types(name, is_topology, is_dc) VALUES ('Bogus', 0, 1)"
         )
+
+
+def test_time_series_metadata_carries_time_reference_and_shape(fresh_db):
+    fresh_db.execute(
+        "INSERT INTO time_series_metadata"
+        "(uuid, unit, quantity_type, time_reference, array_shape) "
+        "VALUES ('ts-2', 'MW', 'ActivePower', 'America/Denver', '[8760]')"
+    )
+    (tr, shape) = fresh_db.execute(
+        "SELECT time_reference, array_shape FROM time_series_metadata "
+        "WHERE uuid = 'ts-2'"
+    ).fetchone()
+    assert tr == "America/Denver"
+    assert shape == "[8760]"
+
+
+def test_time_series_metadata_rejects_non_array_shape(fresh_db):
+    """array_shape must be a JSON array; a bare number or object is malformed
+    data, not a shape."""
+    with pytest.raises(sqlite3.IntegrityError):
+        fresh_db.execute(
+            "INSERT INTO time_series_metadata"
+            "(uuid, unit, quantity_type, array_shape) "
+            "VALUES ('ts-3', 'MW', 'ActivePower', '8760')"
+        )
