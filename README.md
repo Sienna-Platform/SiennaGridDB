@@ -50,6 +50,8 @@ Costs stay in natural currency units, and the cost JSON blobs must carry
 the curve (the part that gets read, compared and repriced) with zero stored
 duplication. Cost objects without a single production curve (storage, sources) stay
 whole in `operation_cost`/`operation_costs`.
+See `docs/units-architecture.md` §5 for the full two-axis design, including how a
+`COMPONENT_BASE` row resolves its base without leaving the database.
 
 ### The unit registry
 
@@ -61,7 +63,8 @@ them:
 | `quantity_types` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
 | `allowed_units` | The units permitted for each quantity type (e.g. `MW` for `ActivePower`). |
 | `unit_conventions` | The column→(quantity_type, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
-| `column_units` (view) | Joins `unit_conventions` with `quantity_types` to show table, column, unit, quantity, and dimension in one place. |
+| `unit_basis_rules` | For each of the 5 quantity types that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
+| `column_units` (view) | Joins `unit_conventions` with `quantity_types` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
 Some columns are deliberately *not* registered. A convention's `discriminator_column`
 names a sibling column, so a field whose unit depends on a basis choice or a control mode

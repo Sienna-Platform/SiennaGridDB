@@ -26,6 +26,30 @@ Three layers:
         (c) PSY needs_conversion field whose mapped schema property lacks any x-unit/x-units
             => WARN list.
 
+Basis vocabulary (L1): upstream SiennaSchemas expresses per-unit basis with three values;
+GridDB deliberately narrowed to two, because COMPONENT_BASE and SYSTEM_BASE differ only in
+WHICH NUMBER a pu value is normalized against, not in how the number is interpreted -- and
+GridDB rows now carry or can reach that number themselves (base_power/base_voltage columns,
+or base_power_ref/base_voltage_ref FK paths), so the upstream label is redundant here. L1
+maps schema discriminator values through this table before comparing key sets/units, so the
+narrowing is recognized as consistent rather than reported as a contradiction:
+
+    schema COMPONENT_BASE -> GridDB COMPONENT_BASE
+    schema SYSTEM_BASE   -> GridDB COMPONENT_BASE
+    schema NATURAL_UNITS -> GridDB NATURAL_UNITS
+    schema COMPONENT_MVAR -> GridDB NATURAL_UNITS, disambiguated by quantity_type
+                            (ReactivePower for a susceptance column, ActivePower for a
+                            conductance column) rather than a separate basis value. Not
+                            runtime-enforced by the collapsing helper below: the registry
+                            rows this applies to (fixed_admittance/switched_admittance
+                            y_b/y_g) don't resolve to a schema property today -- schema
+                            names the field "Y" (a ComplexNumber), not "y_b"/"y_g" -- so
+                            this arm is documented, not exercised, until that gap closes.
+
+A schema basis key with no GridDB counterpart, a GridDB key with no schema counterpart, or a
+genuine unit disagreement within a matched arm all still FAIL -- this table only teaches the
+checker that two upstream keys collapsing onto one GridDB key is not, by itself, one of those.
+
 Stdlib only. Deterministic ordering. Exit non-zero on any FAIL, zero on warns-only.
 """
 
@@ -39,6 +63,17 @@ import sys
 from _common import load_json
 
 POWER_UNITS = ("MW", "MVAr", "MVA")
+
+# Schema basis discriminator values that GridDB's `unit_basis` column narrows to two values.
+# SYSTEM_BASE collapses onto COMPONENT_BASE (see module docstring); a key absent from this
+# map (e.g. AC_VOLTAGE, DC_POWER, MWH -- a different discriminator entirely) passes through
+# unchanged, so unrelated discriminators are never touched by this mapping.
+BASIS_ALIAS = {
+    "SYSTEM_BASE": "COMPONENT_BASE",
+}
+# The recognized basis vocabulary itself (post- and pre-mapping values), used to detect
+# whether a flat x-units map is a basis discriminator at all before applying BASIS_ALIAS to it.
+BASIS_VOCAB = frozenset({"COMPONENT_BASE", "SYSTEM_BASE", "NATURAL_UNITS"})
 
 # common.json definition names that mirror a PSY struct data_type; L3(b) compares these
 # against the PSY field's data_type string.
@@ -95,8 +130,8 @@ def ref_definition_name(ref):
 
 class Report:
     def __init__(self):
-        self.fails = []   # list of (layer, message)
-        self.warns = []   # list of (layer, message)
+        self.fails = []
+        self.warns = []
 
     def fail(self, layer, message):
         self.fails.append((layer, message))
@@ -197,6 +232,53 @@ def layer1(report, conventions, schema_map, schemas_path, allowed_pairs, doc_cac
                 continue
 
             checked_pairs += 1
+
+            if ann["unit"] is None and _is_flat_basis_map(ann["units_map"]):
+                # Registry offers no discriminator for this column at all -- a single pu row
+                # is the whole story (three_winding_transformers.r_12/x_12 etc: a genuine
+                # component base, always COMPONENT_BASE, never NATURAL_UNITS). Compare against
+                # the schema's collapsed COMPONENT_BASE arm rather than a nonexistent scalar
+                # x-unit.
+                collapsed, collapse_conflicts = _collapse_basis_keys(
+                    _expand_schema_units_map(ann["units_map"]))
+                if collapse_conflicts:
+                    for orig_key, mapped_key, unit_a, unit_b in collapse_conflicts:
+                        report.fail(
+                            "L1",
+                            "basis collapse contradiction %s.%s: %s and existing entry both "
+                            "map to %s but disagree on unit (%s vs %s)"
+                            % (comp, base_column, _discriminator_key_label(orig_key),
+                               _discriminator_key_label(mapped_key), unit_a, unit_b),
+                        )
+                    contradiction += len(collapse_conflicts)
+                    continue
+                component_unit = collapsed.get(("COMPONENT_BASE", None))
+                if component_unit is None:
+                    report.fail(
+                        "L1",
+                        "no COMPONENT_BASE arm in schema x-units for %s.%s: registry is a "
+                        "single component-base-only row (%s/%s) but schema x-units keys are %s"
+                        % (comp, base_column, reg_qt, reg_unit, sorted(ann["units_map"])),
+                    )
+                    contradiction += 1
+                elif component_unit != reg_unit:
+                    report.fail(
+                        "L1",
+                        "unit contradiction (component-base-only) %s.%s: schema COMPONENT_BASE "
+                        "arm=%s vs registry unit=%s (%s/%s)"
+                        % (comp, base_column, component_unit, reg_unit, reg_qt, reg_unit),
+                    )
+                    contradiction += 1
+                elif (reg_qt, reg_unit) not in allowed_pairs:
+                    report.fail(
+                        "L1",
+                        "quantity/unit not in vocabulary for %s.%s: registry (%s, %s) but "
+                        "schema COMPONENT_BASE arm=%s has no matching allowed_units row"
+                        % (comp, base_column, reg_qt, reg_unit, component_unit),
+                    )
+                    contradiction += 1
+                continue
+
             schema_unit = ann["unit"]
             if schema_unit != reg_unit:
                 report.fail(
@@ -206,7 +288,6 @@ def layer1(report, conventions, schema_map, schemas_path, allowed_pairs, doc_cac
                 )
                 contradiction += 1
                 continue
-            # unit matches; verify the (quantity, unit) pair is coherent in the vocabulary.
             if (reg_qt, schema_unit) not in allowed_pairs:
                 report.fail(
                     "L1",
@@ -253,15 +334,57 @@ def _discriminator_key_label(key):
     return f"{primary}/{secondary}"
 
 
+def _is_flat_basis_map(units_map):
+    """A (non-nested) x-units map whose keys are exactly the basis vocabulary.
+
+    Distinguishes a basis discriminator (COMPONENT_BASE/SYSTEM_BASE/NATURAL_UNITS) from an
+    unrelated x-units map keyed on a different concept (e.g. storage_capacity's energy_units:
+    MWH/MWMIN) so the basis-collapsing logic only ever fires on genuine basis maps.
+    """
+    if not units_map:
+        return False
+    if any(isinstance(v, dict) for v in units_map.values()):
+        return False
+    return set(units_map) <= BASIS_VOCAB
+
+
+def _collapse_basis_keys(expanded_map):
+    """Map SYSTEM_BASE onto COMPONENT_BASE in each (primary, secondary) key of an
+    already-expanded schema map, leaving non-basis key components (AC_VOLTAGE, DC_POWER, ...)
+    untouched. Two schema keys collapsing onto the same GridDB key is expected (that is the
+    whole point of the narrowing); it is only a problem when they disagree on unit, which would
+    mean COMPONENT_BASE and SYSTEM_BASE were annotated with different units for the same column
+    -- a genuine contradiction this must still catch, not silently paper over.
+
+    Returns (collapsed_map, conflicts) where conflicts is a list of
+    (original_key, mapped_key, first_unit, conflicting_unit).
+    """
+    def _map_component(value):
+        return BASIS_ALIAS.get(value, value) if value is not None else None
+
+    collapsed = {}
+    conflicts = []
+    for key, unit in expanded_map.items():
+        primary, secondary = key
+        mapped_key = (_map_component(primary), _map_component(secondary))
+        if mapped_key in collapsed and collapsed[mapped_key] != unit:
+            conflicts.append((key, mapped_key, collapsed[mapped_key], unit))
+        else:
+            collapsed[mapped_key] = unit
+    return collapsed, conflicts
+
+
 def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_pairs):
     """Compare a schema x-units discriminator map against the registry's discriminator rows.
 
     Registry rows are keyed on (discriminator_value, discriminator_value_2); rows with no
-    second discriminator carry discriminator_value_2=None (the pre-nesting shape). Flat
-    schema x-units values compare on the primary discriminator only (secondary=None); a
+    second discriminator carry discriminator_value_2=None. Flat schema x-units values
+    compare on the primary discriminator only (secondary=None); a
     nested schema x-units value (a field whose unit depends on a second discriminator)
-    expands into (primary_value, secondary_value) pairs via _expand_schema_units_map and
-    compares against the matching registry rows.
+    expands into (primary_value, secondary_value) pairs via _expand_schema_units_map. Before
+    comparing, _collapse_basis_keys maps SYSTEM_BASE key components onto
+    COMPONENT_BASE (see module docstring) so GridDB's two-value narrowing of the upstream
+    three-value basis vocabulary reads as consistent, not a key-set mismatch.
 
     Returns the number of WARNs emitted (0 if none).
     """
@@ -295,7 +418,19 @@ def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_p
             )
         return 0
 
-    schema_map = _expand_schema_units_map(units_map)
+    raw_schema_map = _expand_schema_units_map(units_map)
+    schema_map, collapse_conflicts = _collapse_basis_keys(raw_schema_map)
+    if collapse_conflicts:
+        for orig_key, mapped_key, unit_a, unit_b in collapse_conflicts:
+            report.fail(
+                "L1",
+                "basis collapse contradiction %s.%s on %s: %s and existing entry both map to "
+                "%s but disagree on unit (%s vs %s)"
+                % (table, column, comp, _discriminator_key_label(orig_key),
+                   _discriminator_key_label(mapped_key), unit_a, unit_b),
+            )
+        return 0
+
     schema_keys = set(schema_map.keys())
     reg_keys = set(reg_map.keys())
     if schema_keys != reg_keys:
@@ -334,7 +469,6 @@ ATTRIBUTES_WHITELIST_TABLE = "attributes"
 
 
 def build_db(schema_dir):
-    """Build an in-memory DB from the four schema/*.sql files. Returns connection."""
     con = sqlite3.connect(":memory:")
     for fname in ("schema.sql", "triggers.sql", "unit_registry.sql", "views.sql"):
         path = os.path.join(schema_dir, fname)
@@ -516,7 +650,7 @@ def psy_type_matches(def_name, psy_dtype):
 
     PSY data_type may be wrapped (e.g. 'Union{Nothing, MinMax}'); match by word boundary.
     FunctionData/ValueCurve/MinMax are the mirrored classes. A ValueCurve $ref against a
-    FunctionData PSY field (the historical drift) must NOT match.
+    FunctionData PSY field must NOT match.
     """
     return bool(re.search(r"\b" + re.escape(def_name) + r"\b", psy_dtype))
 
@@ -524,7 +658,7 @@ def psy_type_matches(def_name, psy_dtype):
 # --------------------------------------------------------------------------- self-test
 
 
-def run_self_test(schema_map, schemas_path, psy_structs):
+def run_self_test(psy_structs):
     """Regression fixture: HydroReservoir.head_to_volume_factor.
 
     Inject a stale ValueCurve $ref in memory (the historical drift) and assert L3(b) flags it
@@ -620,7 +754,6 @@ def main(argv=None):
     conventions = load_json(conventions_path)["conventions"]
     allowed_pairs = build_units_vocabulary(units_json)
 
-    # verify mapped files
     missing_files = verify_map_files(schema_map, schemas_path)
     if missing_files:
         print("ERROR: schema_map.json references non-existent files:")
@@ -628,23 +761,20 @@ def main(argv=None):
             print("  " + f)
         return 2
 
-    # self-test mode
     if args.self_test:
         if args.psy_path is None:
             print("ERROR: --self-test requires --psy-path")
             return 2
         psy_structs = load_psy_structs(os.path.abspath(args.psy_path))
-        ok = run_self_test(schema_map, schemas_path, psy_structs)
+        ok = run_self_test(psy_structs)
         return 0 if ok else 1
 
     report = Report()
     doc_cache = {}
 
-    # L1
     l1_stats = layer1(report, conventions, schema_map, schemas_path, allowed_pairs,
                       doc_cache)
 
-    # L2
     if args.db:
         con = sqlite3.connect(args.db)
     else:
@@ -652,14 +782,11 @@ def main(argv=None):
     l2_stats = layer2(report, conventions, con)
     con.close()
 
-    # L3
     if args.psy_path:
         psy_structs = load_psy_structs(os.path.abspath(args.psy_path))
         l3_stats = layer3(report, schema_map, schemas_path, psy_structs, doc_cache)
     else:
         l3_stats = None
-
-    # ------- output, per layer -------
     for layer, label, stats in (
         ("L1", "L1  SCHEMAS <-> REGISTRY", l1_stats),
         ("L2", "L2  REGISTRY <-> DB", l2_stats),
@@ -676,7 +803,6 @@ def main(argv=None):
             lines.append("  WARN " + m)
         print_section(label, lines)
 
-    # L3 section
     if l3_stats is None:
         print_section("L3  SCHEMAS <-> PSY", ["SKIPPED (no --psy-path)"])
     else:

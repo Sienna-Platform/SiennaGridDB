@@ -1292,6 +1292,123 @@ def test_interconnecting_converter_setpoints_two_discriminator(db):
     assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
 
 
+# Basis resolvability invariant: every pu convention names a unit_basis_rules
+# entry and every base ref resolves to a real, reachable column.
+# generate_unit_registry.py does not validate this, so this is the only check
+# that catches a typo'd ref or a new pu column with no rule.
+ATTRIBUTES_BASE_REF_EXEMPT = {("attributes", "magnitude"), ("attributes", "voltage_limits")}
+
+
+def _table_exists(conn, table):
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone() is not None
+
+
+def _is_entity_subtype(conn, table):
+    """True if table.id is itself an FK to entities(id) -- the table-per-type
+    pattern every concrete entity table follows."""
+    return any(
+        fk[2] == "entities" and fk[3] == "id" and fk[4] == "id"
+        for fk in conn.execute(f"PRAGMA foreign_key_list({table})")
+    )
+
+
+def _resolves_ref(conn, table, ref):
+    """Resolve a base_power_ref/base_voltage_ref path.
+
+    No '->': a same-row column, checked directly. With '->': a chain of FK
+    hops ``local_col->table.col[->table.col...]``; each hop's local column
+    must be a genuine FK on the current table, targeting either the named
+    table directly or ``entities`` when the named table is itself an
+    entities-subtype (id REFERENCES entities(id)) -- the table-per-type
+    pattern arcs.from_id/to_id use (they FK to entities; the concrete subtype
+    is resolved by entity_type/application convention, not a row-level FK to
+    the concrete table, e.g. arc endpoints are always balancing_topologies in
+    practice but the FK itself only promises "some entity"). The final
+    segment names the base column itself, which must exist as a real column
+    (no FK requirement) on the last table in the chain.
+    """
+    if "->" not in ref:
+        return ref in _table_columns(conn, table)
+    parts = ref.split("->")
+    current_table = table
+    local_col = parts[0]
+    for hop in parts[1:]:
+        target_table, target_col = hop.split(".", 1)
+        if not _table_exists(conn, target_table):
+            return False
+        fks = list(conn.execute(f"PRAGMA foreign_key_list({current_table})"))
+        matches = [fk for fk in fks if fk[3] == local_col]
+        if not matches:
+            return False
+        direct = any(fk[2] == target_table for fk in matches)
+        polymorphic = any(fk[2] == "entities" for fk in matches) and _is_entity_subtype(
+            conn, target_table
+        )
+        if not (direct or polymorphic):
+            return False
+        current_table = target_table
+        local_col = target_col
+    return target_col in _table_columns(conn, current_table)
+
+
+def test_pu_conventions_have_resolvable_basis(db):
+    """THE resolvability invariant. For every unit='pu' convention (excluding
+    the two documented attributes exemptions): (a) a unit_basis_rules row
+    exists for its quantity_type, (b) it names at least one base ref, and (c)
+    every base_power_ref/base_voltage_ref it declares resolves."""
+    rows = db.execute(
+        "SELECT table_name, column_name, quantity_type, base_power_ref, base_voltage_ref "
+        "FROM unit_conventions WHERE unit = 'pu'"
+    ).fetchall()
+    assert rows, "no pu conventions found -- fixture/schema regression"
+
+    rule_types = {r[0] for r in db.execute("SELECT quantity_type FROM unit_basis_rules")}
+
+    exempt_seen = set()
+    failures = []
+    for table_name, column_name, quantity_type, base_power_ref, base_voltage_ref in rows:
+        key = (table_name, column_name)
+        if table_name == "attributes":
+            exempt_seen.add(key)
+            if key not in ATTRIBUTES_BASE_REF_EXEMPT:
+                failures.append(
+                    f"{table_name}.{column_name}: pu attributes row not in the "
+                    "documented base-ref exemption allowlist"
+                )
+            continue
+
+        if quantity_type not in rule_types:
+            failures.append(
+                f"{table_name}.{column_name}: no unit_basis_rules row for "
+                f"quantity_type={quantity_type}"
+            )
+
+        if base_power_ref is None and base_voltage_ref is None:
+            failures.append(
+                f"{table_name}.{column_name}: pu row carries neither "
+                "base_power_ref nor base_voltage_ref"
+            )
+
+        for label, ref in (
+            ("base_power_ref", base_power_ref),
+            ("base_voltage_ref", base_voltage_ref),
+        ):
+            if ref is None:
+                continue
+            if not _resolves_ref(db, table_name, ref):
+                failures.append(
+                    f"{table_name}.{column_name}.{label}={ref!r} does not resolve"
+                )
+
+    assert failures == [], "\n".join(failures)
+    assert exempt_seen == ATTRIBUTES_BASE_REF_EXEMPT, (
+        "attributes pu rows exempt from base refs must be EXACTLY "
+        f"{ATTRIBUTES_BASE_REF_EXEMPT}, got {exempt_seen}"
+    )
+
+
 # unit_basis CHECK constraint, on every table that carries the column (derived
 # from a scratch build of the live schema, not hardcoded, so a newly added
 # table is covered automatically).
@@ -1525,3 +1642,94 @@ def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(
         sqlite3.IntegrityError, match="Known attribute must use the registered unit"
     ):
         insert_attribute(fresh_db, 3, "shunt_susceptance_arm", "0.01", "MW", "ActivePower")
+
+
+# unit_basis_rules seal protection
+def test_unit_basis_rules_update_blocked(fresh_db):
+    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+        fresh_db.execute(
+            "UPDATE unit_basis_rules SET base_expression = 'bogus' WHERE quantity_type = 'Voltage'"
+        )
+
+
+def test_unit_basis_rules_delete_blocked(fresh_db):
+    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+        fresh_db.execute("DELETE FROM unit_basis_rules WHERE quantity_type = 'Voltage'")
+
+
+def test_unit_basis_rules_post_seal_insert_blocked(fresh_db):
+    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+        fresh_db.execute(
+            "INSERT INTO unit_basis_rules(quantity_type, base_expression) "
+            "VALUES ('ActivePower', 'base_power')"
+        )
+
+
+# column_units view: base refs exposed + row-count parity with unit_conventions
+def test_column_units_view_exposes_base_ref_columns(db):
+    cols = [row[1] for row in db.execute("PRAGMA table_info(column_units)")]
+    assert {"base_power_ref", "base_voltage_ref", "base_expression"} <= set(cols)
+
+
+def test_column_units_view_row_count_matches_unit_conventions(db):
+    """The LEFT JOIN to unit_basis_rules must not drop NATURAL_UNITS (and other
+    non-pu) rows, which have no unit_basis_rules match."""
+    (view_count,) = db.execute("SELECT COUNT(*) FROM column_units").fetchone()
+    (conv_count,) = db.execute("SELECT COUNT(*) FROM unit_conventions").fetchone()
+    assert view_count == conv_count == EXPECTED_UNIT_CONVENTIONS
+
+
+def test_unit_basis_arms_share_quantity_type(db):
+    """For any column discriminated by unit_basis (whether as the primary
+    discriminator_column, or as discriminator_column_2 on a column already
+    multiplexed by a sibling like dc_control), the COMPONENT_BASE (pu) arm's
+    quantity_type must be one of the NATURAL_UNITS arm(s)' quantity_types.
+
+    Nothing else stops a pu arm's quantity_type from silently diverging from
+    its physical meaning (e.g.
+    Resistance -> Voltage on transmission_lines.r), because (Voltage, pu) is
+    independently a legal vocabulary pair -- changing ONLY the pu arm's
+    quantity_type, leaving its NATURAL_UNITS sibling as Resistance/ohm, is
+    exactly the cross-arm mismatch this test catches, entirely from the DB
+    (no hardcoded column-name list). A subset check (not equality) is
+    deliberate: fixed_admittance/switched_admittance's y_b/y_g legitimately
+    carry TWO NATURAL_UNITS quantity_types for one COMPONENT_BASE quantity
+    (the two-arm regression -- Susceptance/S AND ReactivePower/MVAr both
+    represent the same COMPONENT_BASE Susceptance arm), which equality would
+    wrongly flag.
+
+    Known scope limit: this cannot see (a) a mutation that changes BOTH arms
+    of a column consistently, or (b) a pu-only column with no unit_basis
+    discriminator at all (three_winding_transformers.r_12 and its pairwise
+    siblings, two_winding_transformers.magnetizing_shunt.*) since there is no
+    sibling arm to compare against. Closing that residual would need either a
+    maintained name->quantity_type map -- the brittle list this project wants
+    to avoid -- or a schema-level dimensional annotation that does not exist
+    today.
+    """
+    rows = db.execute(
+        "SELECT table_name, column_name, discriminator_column, discriminator_value, "
+        "discriminator_column_2, discriminator_value_2, quantity_type "
+        "FROM unit_conventions "
+        "WHERE discriminator_column = 'unit_basis' OR discriminator_column_2 = 'unit_basis'"
+    ).fetchall()
+    by_group = {}
+    for table_name, column_name, disc_col, disc_val, _disc_col2, disc_val2, quantity_type in rows:
+        if disc_col == "unit_basis":
+            key, basis = (table_name, column_name), disc_val
+        else:
+            # unit_basis is the SECOND discriminator (interconnecting_converters
+            # dc_setpoint/ac_setpoint): group per primary discriminator value, since
+            # DC_POWER and DC_VOLTAGE are legitimately different quantities.
+            key, basis = (table_name, column_name, disc_val), disc_val2
+        by_group.setdefault(key, {"COMPONENT_BASE": set(), "NATURAL_UNITS": set()})
+        by_group[key][basis].add(quantity_type)
+
+    assert by_group, "no unit_basis-discriminated columns found -- fixture regression"
+    mismatched = {
+        key: bases
+        for key, bases in by_group.items()
+        if bases["COMPONENT_BASE"] and bases["NATURAL_UNITS"]
+        and not bases["COMPONENT_BASE"] <= bases["NATURAL_UNITS"]
+    }
+    assert mismatched == {}, f"unit_basis arms disagree on quantity_type: {mismatched}"

@@ -1,12 +1,16 @@
 """Tests for scripts/check_units_sync.py's handling of NESTED x-units (a field
-whose unit depends on TWO discriminators, e.g. TwoTerminalVSCLine.dc_setpoint_from
-and InterconnectingConverter.dc_setpoint).
+whose unit depends on TWO discriminators). The live example is
+InterconnectingConverter.dc_setpoint, discriminated by dc_control and then by
+voltage_setpoint_units.
 
 These exercise `_l1_discriminated` (and its `_expand_schema_units_map` helper)
-directly with in-memory fixtures -- deliberately NOT via schema_map.json/
-sql_codegen_map.json, which the real TwoTerminalVSCLine/InterconnectingConverter
-components must not be added to (out of scope; would trigger unrelated
-generated_schema.sql churn).
+directly with in-memory fixtures -- deliberately NOT via schema_map.json /
+sql_codegen_map.json. The table, column and component names passed below are
+inert labels used only in the failure messages: the fixture is synthetic and the
+assertions never read them, so they are modelled on the old
+TwoTerminalVSCLine.dc_setpoint_from field (folded into two_terminal_hvdc_lines,
+where the variant-specific setpoints now live in the attributes channel) and left
+alone to keep the nested shape unambiguous.
 """
 
 import sys
@@ -14,7 +18,7 @@ import sys
 from conftest import SCRIPTS_DIR
 
 sys.path.insert(0, str(SCRIPTS_DIR))
-from check_units_sync import (  # noqa: E402
+from check_units_sync import (
     Report,
     _expand_schema_units_map,
     _l1_discriminated,
@@ -48,12 +52,22 @@ ALLOWED_PAIRS = {
 
 
 def _matching_registry_rows():
-    """Registry rows matching NESTED_PROP exactly (the sync-clean case)."""
+    """Registry rows matching NESTED_PROP exactly (the sync-clean case).
+
+    The schema side (NESTED_PROP) keeps SYSTEM_BASE/NATURAL_UNITS -- upstream
+    SiennaSchemas vocabulary is untouched. But _l1_discriminated compares the
+    (collapsed) schema map against these registry rows AS STORED, and GridDB's
+    unit_conventions narrowed SYSTEM_BASE onto one discriminator
+    value, COMPONENT_BASE (see check_units_sync.py's module docstring and
+    BASIS_ALIAS). So the registry-side fixture below must use COMPONENT_BASE,
+    the value a real row would carry post-migration, not the pre-migration
+    SYSTEM_BASE the schema still uses.
+    """
     return [
         {"discriminator_value": "DC_POWER", "quantity_type": "ActivePower", "unit": "MW"},
         {
             "discriminator_value": "DC_VOLTAGE",
-            "discriminator_value_2": "SYSTEM_BASE",
+            "discriminator_value_2": "COMPONENT_BASE",
             "quantity_type": "Voltage",
             "unit": "pu",
         },
@@ -65,7 +79,7 @@ def _matching_registry_rows():
         },
         {
             "discriminator_value": "DC_VOLTAGE_DROOP",
-            "discriminator_value_2": "SYSTEM_BASE",
+            "discriminator_value_2": "COMPONENT_BASE",
             "quantity_type": "Voltage",
             "unit": "pu",
         },
