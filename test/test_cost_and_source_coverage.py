@@ -117,7 +117,7 @@ def test_piecewise_step_incremental_curve_is_accepted(fresh_db):
 def test_relative_power_units_still_rejected_for_piecewise(fresh_db):
     bus = make_bus(fresh_db, 1, "bus-1")
     cost = json.loads(json.dumps(PIECEWISE_IO_COST))
-    cost["power_units"] = "SYSTEM_BASE"
+    cost["power_units"] = "COMPONENT_BASE"
     with pytest.raises(sqlite3.IntegrityError, match="power_units"):
         insert_thermal(fresh_db, 2, bus, cost)
 

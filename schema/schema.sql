@@ -7,7 +7,7 @@
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
 -- Schema/registry revision; bump on every future registry or schema change.
-PRAGMA user_version = 10;
+PRAGMA user_version = 11;
 
 DROP TABLE IF EXISTS thermal_generators;
 

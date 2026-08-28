@@ -365,9 +365,9 @@ def test_units_comment_flat_x_units_unchanged():
     ', '-joined 'key: value' pairs, sorted by key."""
     prop = {
         "x-unit-discriminator": "parameter_units",
-        "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "ohm"},
+        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"},
     }
-    assert units_comment(prop, {}) == " -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)"
+    assert units_comment(prop, {}) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)"
 
 
 def test_units_comment_discriminator_renamed():
@@ -376,10 +376,10 @@ def test_units_comment_discriminator_renamed():
     unit_basis) must not leave the comment pointing at the upstream name."""
     prop = {
         "x-unit-discriminator": "parameter_units",
-        "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "ohm"},
+        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"},
     }
     renames = {"parameter_units": "unit_basis"}
-    assert units_comment(prop, renames) == " -- Units: per unit_basis (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)"
+    assert units_comment(prop, renames) == " -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)"
 
 
 def test_units_comment_nested_x_units():
@@ -391,7 +391,7 @@ def test_units_comment_nested_x_units():
             "DC_POWER": "MW",
             "DC_VOLTAGE": {
                 "x-unit-discriminator": "voltage_units",
-                "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"},
+                "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
             },
         },
     }
@@ -399,9 +399,9 @@ def test_units_comment_nested_x_units():
     assert "dc_control_from" in comment
     assert "DC_POWER: MW" in comment
     assert "voltage_units" in comment
-    assert "SYSTEM_BASE: pu" in comment
+    assert "COMPONENT_BASE: pu" in comment
     assert "NATURAL_UNITS: kV" in comment
     assert comment == (
         " -- Units: per dc_control_from (DC_POWER: MW; "
-        "DC_VOLTAGE: per voltage_units [NATURAL_UNITS: kV, SYSTEM_BASE: pu])"
+        "DC_VOLTAGE: per voltage_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])"
     )

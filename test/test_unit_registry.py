@@ -640,7 +640,7 @@ def _insert_thermal(conn, gen_id, topo_id, production_cost):
     )
 
 
-@pytest.mark.parametrize("power_units", ["SYSTEM_BASE", "COMPONENT_BASE"])
+@pytest.mark.parametrize("power_units", ["COMPONENT_BASE", "BOGUS_UNITS"])
 def test_cost_relative_base_variable_rejected(fresh_db, power_units):
     topo = _setup_topology(fresh_db)
     with pytest.raises(
@@ -665,18 +665,18 @@ def test_cost_update_relative_base_rejected(fresh_db):
     ):
         fresh_db.execute(
             "UPDATE thermal_generators SET production_cost = ? WHERE id = 2",
-            (_thermal_production_cost("SYSTEM_BASE"),),
+            (_thermal_production_cost("COMPONENT_BASE"),),
         )
 
 
-def test_renewable_curtailment_cost_system_base_rejected(fresh_db):
+def test_renewable_curtailment_cost_relative_base_rejected(fresh_db):
     """curtailment_cost stays inside operation_cost, so it keeps its own guard."""
     topo = _setup_topology(fresh_db)
     make_entity(fresh_db, 2, entity_table="renewable_generators")
     fresh_db.execute("INSERT INTO prime_mover_types(name) VALUES ('PV')")
     curtailment_cost = (
         '{"cost_type":"RENEWABLE","fixed":0,'
-        '"curtailment_cost":{"variable_cost_type":"COST","power_units":"SYSTEM_BASE",'
+        '"curtailment_cost":{"variable_cost_type":"COST","power_units":"COMPONENT_BASE",'
         '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
         '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}}'
     )
@@ -739,7 +739,7 @@ def _insert_storage_technology(conn, tech_id, operation_costs):
 @pytest.mark.parametrize(
     "operation_cost",
     [
-        _storage_cost(charge_pu="SYSTEM_BASE"),
+        _storage_cost(charge_pu="COMPONENT_BASE"),
         _storage_cost(discharge_pu="COMPONENT_BASE"),
     ],
 )
@@ -766,7 +766,7 @@ def test_storage_unit_natural_units_cost_accepted(fresh_db):
 @pytest.mark.parametrize(
     "operation_costs",
     [
-        _storage_cost(charge_pu="SYSTEM_BASE"),
+        _storage_cost(charge_pu="COMPONENT_BASE"),
         _storage_cost(discharge_pu="COMPONENT_BASE"),
     ],
 )

@@ -1691,7 +1691,9 @@ END;
 -- =============================================================================
 -- Cost Payload Power-Units Guard
 -- The DB stores no system/component base, so cost payloads must express their
--- variable curve in NATURAL_UNITS. Relative-base payloads are uninterpretable.
+-- variable curve in NATURAL_UNITS. Any other value -- COMPONENT_BASE or junk --
+-- is uninterpretable here and rejected loudly (upstream's UnitSystem enum has no
+-- other member; a value the enum doesn't know is malformed data, not a basis).
 -- NULL/absent power_units passes (payload may be a plain curve). Applies to the
 -- nine cost-bearing columns: production_cost on the three generator tables and
 -- the operation_cost(s) blobs elsewhere (renewable_generators carries two:
@@ -1702,7 +1704,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_insert BEFORE
 INSERT
     ON thermal_generators
-    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1715,7 +1717,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_update BEFORE
 UPDATE
     ON thermal_generators
-    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1728,8 +1730,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_renewable_generators_cost_units_insert BEFORE
 INSERT
     ON renewable_generators
-    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1742,8 +1744,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_renewable_generators_cost_units_update BEFORE
 UPDATE
     ON renewable_generators
-    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1756,7 +1758,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_insert BEFORE
 INSERT
     ON hydro_generators
-    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1769,7 +1771,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_update BEFORE
 UPDATE
     ON hydro_generators
-    WHEN json_extract(NEW.production_cost, '$.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.production_cost, '$.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1782,8 +1784,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_storage_units_cost_units_insert BEFORE
 INSERT
     ON storage_units
-    WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1796,8 +1798,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_storage_units_cost_units_update BEFORE
 UPDATE
     ON storage_units
-    WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1810,7 +1812,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_hydro_reservoirs_cost_units_insert BEFORE
 INSERT
     ON hydro_reservoirs
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1823,7 +1825,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_hydro_reservoirs_cost_units_update BEFORE
 UPDATE
     ON hydro_reservoirs
-    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_cost, '$.variable.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1836,7 +1838,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_supply_technologies_cost_units_insert BEFORE
 INSERT
     ON supply_technologies
-    WHEN json_extract(NEW.operation_costs, '$.variable.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_costs, '$.variable.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1849,7 +1851,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_supply_technologies_cost_units_update BEFORE
 UPDATE
     ON supply_technologies
-    WHEN json_extract(NEW.operation_costs, '$.variable.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_costs, '$.variable.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1862,8 +1864,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_storage_technologies_cost_units_insert BEFORE
 INSERT
     ON storage_technologies
-    WHEN json_extract(NEW.operation_costs, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_costs, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_costs, '$.charge_variable_cost.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_costs, '$.discharge_variable_cost.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1876,8 +1878,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_storage_technologies_cost_units_update BEFORE
 UPDATE
     ON storage_technologies
-    WHEN json_extract(NEW.operation_costs, '$.charge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_costs, '$.discharge_variable_cost.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_costs, '$.charge_variable_cost.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_costs, '$.discharge_variable_cost.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1892,8 +1894,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_sources_cost_units_insert BEFORE
 INSERT
     ON sources
-    WHEN json_extract(NEW.operation_cost, '$.import_offer_curves.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_cost, '$.export_offer_curves.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_cost, '$.import_offer_curves.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.export_offer_curves.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
@@ -1906,8 +1908,8 @@ END;
 CREATE TRIGGER IF NOT EXISTS validate_sources_cost_units_update BEFORE
 UPDATE
     ON sources
-    WHEN json_extract(NEW.operation_cost, '$.import_offer_curves.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
-    OR json_extract(NEW.operation_cost, '$.export_offer_curves.power_units') IN ('SYSTEM_BASE', 'COMPONENT_BASE')
+    WHEN json_extract(NEW.operation_cost, '$.import_offer_curves.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.export_offer_curves.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
