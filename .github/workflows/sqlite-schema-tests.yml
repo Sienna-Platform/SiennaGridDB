@@ -17,11 +17,12 @@ jobs:
       - uses: actions/checkout@v4
 
       # TODO after SiennaSchemas release: switch to the release tarball instead of pinning the PR branch.
-      - name: Checkout SiennaSchemas (jm/units branch)
+      # feat/association-id, not jm/units: jm/units predates the association_id vocabulary.
+      - name: Checkout SiennaSchemas (feat/association-id branch)
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/SiennaSchemas
-          ref: jm/units
+          ref: feat/association-id
           path: SiennaSchemas
 
       # TODO after psy6 merges to PowerSystems main: drop `ref`.
@@ -34,6 +35,15 @@ jobs:
           path: PowerSystems.jl
           fetch-depth: 1
 
+      # Without this, test/test_load_models.py importorskips and its two model
+      # round-trip tests silently never run in CI.
+      - name: Checkout power-openapi-models for the model round-trip tests
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/power-openapi-models
+          path: power-openapi-models
+          fetch-depth: 1
+
       - uses: extractions/setup-just@v3
 
       - uses: actions/setup-python@v5
@@ -41,7 +51,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python dependencies
-        run: pip install pytest
+        # pydantic is power-openapi-models' only runtime dep; without it the
+        # model round-trip tests importorskip instead of running.
+        run: pip install pytest "pydantic>=2"
 
       - name: Build database
         run: just new-db

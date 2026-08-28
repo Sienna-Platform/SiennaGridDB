@@ -19,33 +19,31 @@ Schema for the SQL database for Sienna Applications
 cargo install just
 ```
 
-### Create an example database and run some queries on it
+### Create a database with the schema
 
 ```console
-just test
+just new-db              # builds griddb-example.sqlite
+just new-db $DB_NAME     # or a database of your choosing
 ```
 
-### Run example queries on a griddb schema database
-
-To create a database with the schema use the following command:
+`new-db` runs the whole chain in order — schema, triggers, unit registry, views — then
+prints a row count. `just` is optional; the underlying commands are four `sqlite3` calls:
 
 ```console
-just queries $DB_NAME
+for f in schema.sql triggers.sql unit_registry.sql views.sql; do sqlite3 $DB_NAME < schema/$f; done
 ```
 
 ## Units
 
 The schema stores physical quantities in **natural units** — MW, MVAr, MVA, kV, and so
-on — with one deliberate exception: branch electrical parameters (`transmission_lines.r`,
-`x`, `b`, `g`) are **stored flexibly in per-unit on system base OR natural units**. A
-per-row discriminator column, `transmission_lines.parameter_units`
-(`SYSTEM_BASE` | `NATURAL_UNITS`), records which basis a row uses; all of `r`/`x`/`b`/`g`
-on a line share that one basis. The unit registry carries both options for each column
-(`SYSTEM_BASE` → `pu`; `NATURAL_UNITS` → `ohm` for `r`/`x`, `S` for `b`/`g`), matching the
-PowerSystems.jl data model and the schemas' `x-unit: "pu"` (system-base) annotation. `r`
-and `x` are scalar `REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as
-`json_valid`-checked text). Costs stay in natural currency units, and `operation_cost`
-JSON blobs must carry `NATURAL_UNITS`.
+on — with one deliberate exception: branch and device electrical parameters
+(`transmission_lines.r`/`x`/`b`/`g`, `transformer_circuits.r`/`x`, admittances, HVDC
+resistances, and similar) are **stored flexibly in per-unit on a component base OR
+natural units**. A per-row discriminator column, `unit_basis`
+(`COMPONENT_BASE` | `NATURAL_UNITS`), records which basis a row uses. `r`/`x` are scalar
+`REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as `json_valid`-checked text).
+Costs stay in natural currency units, and `operation_cost` JSON blobs must carry
+`NATURAL_UNITS`.
 
 ### The unit registry
 
@@ -58,6 +56,13 @@ them:
 | `allowed_units` | The units permitted for each quantity type (e.g. `MW` for `ActivePower`). |
 | `unit_conventions` | The column→(quantity_type, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_types` to show table, column, unit, quantity, and dimension in one place. |
+
+Some columns are deliberately *not* registered. A convention's `discriminator_column`
+names a sibling column, so a field whose unit depends on a basis choice or a control mode
+cannot be registered once it lives in the generic `attributes` table — the sibling is an
+attribute too, not a column. Those rows carry their own `attributes.unit` and
+`attributes.quantity_type` instead, validated against `allowed_units` on write. This is
+how the point-to-point HVDC fields (LCC impedances, VSC setpoints) are handled.
 
 Current registry: **39 quantity types, 46 allowed units, 133 conventions.**
 
@@ -118,8 +123,8 @@ Just as the OpenAPI specs generate the Python and Julia model packages, the JSON
 generate SQLite DDL here. `scripts/generate_sql_schema.py` projects the components mapped
 in `schema/schema_map.json` into `schema/generated_schema.sql`, applying the DB-specific
 config in `schema/sql_codegen_map.json` (column renames, foreign keys, and the
-attribute-channel property lists — e.g. branch `r`/`x`/`b`/`g` live in the `attributes`
-table, not as columns). The generated file is a **reference projection**: the production
+attribute-channel property lists — e.g. the `two_terminal_hvdc_lines` converter
+fields live in the `attributes` table, not as columns). The generated file is a **reference projection**: the production
 DDL remains the hand-written `schema/schema.sql`, and the two are compared mechanically:
 
 ```console

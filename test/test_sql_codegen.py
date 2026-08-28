@@ -13,7 +13,7 @@ import pytest
 from conftest import SCHEMA_DIR, SCHEMAS_PATH, SCRIPTS_DIR, load_schemas_json
 
 sys.path.insert(0, str(SCRIPTS_DIR))
-from generate_sql_schema import units_comment  # noqa: E402
+from generate_sql_schema import units_comment
 
 GENERATE_SCRIPT = SCRIPTS_DIR / "generate_sql_schema.py"
 GENERATED_SQL = SCHEMA_DIR / "generated_schema.sql"
@@ -85,7 +85,7 @@ def test_attribute_channel_properties_not_columns(generated_db):
 
 def test_branch_parameters_are_first_class_columns(fresh_db):
     """r/x/b/g are first-class transmission_lines columns, each stored flexibly in
-    per-unit (system base) OR natural units, recorded per row by parameter_units.
+    per-unit (component base) OR natural units, recorded per row by unit_basis.
     Under STRICT, r/x are REAL and b/g are TEXT (json_valid-checked FromTo halves)."""
     cols = {
         row[1]: row[2]
@@ -101,17 +101,17 @@ def test_branch_parameters_are_first_class_columns(fresh_db):
             "SELECT column_name, discriminator_value, quantity_type, unit "
             "FROM unit_conventions WHERE table_name = 'transmission_lines' "
             "AND column_name IN ('r', 'x', 'b', 'g') "
-            "AND discriminator_column = 'parameter_units'"
+            "AND discriminator_column = 'unit_basis'"
         ).fetchall()
     )
     assert registered == {
-        ("r", "SYSTEM_BASE", "Resistance", "pu"),
+        ("r", "COMPONENT_BASE", "Resistance", "pu"),
         ("r", "NATURAL_UNITS", "Resistance", "ohm"),
-        ("x", "SYSTEM_BASE", "Reactance", "pu"),
+        ("x", "COMPONENT_BASE", "Reactance", "pu"),
         ("x", "NATURAL_UNITS", "Reactance", "ohm"),
-        ("b", "SYSTEM_BASE", "Susceptance", "pu"),
+        ("b", "COMPONENT_BASE", "Susceptance", "pu"),
         ("b", "NATURAL_UNITS", "Susceptance", "S"),
-        ("g", "SYSTEM_BASE", "Conductance", "pu"),
+        ("g", "COMPONENT_BASE", "Conductance", "pu"),
         ("g", "NATURAL_UNITS", "Conductance", "S"),
     }
 
@@ -180,7 +180,8 @@ def test_branch_parameter_columns_store_values(fresh_db):
 def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     """r/x/rating are first-class discrete_controlled_ac_branches columns (pu, pu,
     MVA -- this component has no natural-units option in PSY, unlike transmission_lines),
-    and are registered in unit_conventions with no discriminator."""
+    and are registered in unit_conventions with no discriminator. base_power is the
+    per-row system-base snapshot r/x normalize against, mirroring transmission_lines."""
     cols = {
         row[1]: row[2]
         for row in fresh_db.execute("PRAGMA table_info(discrete_controlled_ac_branches)")
@@ -188,6 +189,7 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     assert cols["r"] == "REAL"
     assert cols["x"] == "REAL"
     assert cols["rating"] == "REAL"
+    assert cols["base_power"] == "REAL"
     assert cols["discrete_branch_type"] == "TEXT"
     assert cols["branch_status"] == "TEXT"
     assert cols["normal_branch_status"] == "TEXT"
@@ -202,6 +204,7 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
         ("r", "Resistance", "pu"),
         ("x", "Reactance", "pu"),
         ("rating", "ApparentPower", "MVA"),
+        ("base_power", "ApparentPower", "MVA"),
     }
 
 
@@ -244,9 +247,9 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
 
 
 def test_transformer_circuits_columns_and_units(fresh_db):
-    """Circuit r/x are first-class pu columns (device base; no natural-units
-    option in PSY, so no parameter_units discriminator -- mirrors
-    discrete_controlled_ac_branches), and the two MinMax control bands are
+    """Circuit r/x are first-class impedance columns stored flexibly in pu on the
+    component base OR natural-units ohm, recorded per row by unit_basis exactly
+    as transmission_lines does it, and the two MinMax control bands are
     registered per control_objective value."""
     cols = {
         row[1]: row[2]
@@ -258,6 +261,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
     assert cols["alpha"] == "REAL"
     assert cols["control_limits"] == "TEXT"
     assert cols["controlled_quantity_limits"] == "TEXT"
+    assert cols["unit_basis"] == "TEXT"
     assert "name" not in cols  # circuits are unnamed subcomponents
 
     registered = set(
@@ -267,11 +271,11 @@ def test_transformer_circuits_columns_and_units(fresh_db):
             "AND discriminator_column IS NULL"
         ).fetchall()
     )
+    # r/x are absent here on purpose: they carry a unit_basis discriminator,
+    # asserted separately below.
     assert registered == {
         ("tap", "Dimensionless", "1"),
         ("alpha", "Angle", "rad"),
-        ("r", "Resistance", "pu"),
-        ("x", "Reactance", "pu"),
         ("rating", "ApparentPower", "MVA"),
         ("rating_b", "ApparentPower", "MVA"),
         ("rating_c", "ApparentPower", "MVA"),
@@ -280,6 +284,20 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("base_power", "ApparentPower", "MVA"),
         ("base_voltage_primary", "Voltage", "kV"),
         ("base_voltage_secondary", "Voltage", "kV"),
+    }
+
+    assert {
+        (col, disc): (qt, unit)
+        for col, disc, qt, unit in fresh_db.execute(
+            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
+            "AND discriminator_column = 'unit_basis'"
+        )
+    } == {
+        ("r", "COMPONENT_BASE"): ("Resistance", "pu"),
+        ("r", "NATURAL_UNITS"): ("Resistance", "ohm"),
+        ("x", "COMPONENT_BASE"): ("Reactance", "pu"),
+        ("x", "NATURAL_UNITS"): ("Reactance", "ohm"),
     }
 
     control_bands = {
@@ -338,8 +356,8 @@ def test_transformer_tables_magnetizing_shunt_units(fresh_db):
 
 
 def test_units_comment_plain_x_unit_unchanged():
-    assert units_comment({"x-unit": "MW"}) == " -- Units: MW"
-    assert units_comment({}) == ""
+    assert units_comment({"x-unit": "MW"}, {}) == " -- Units: MW"
+    assert units_comment({}, {}) == ""
 
 
 def test_units_comment_flat_x_units_unchanged():
@@ -349,7 +367,19 @@ def test_units_comment_flat_x_units_unchanged():
         "x-unit-discriminator": "parameter_units",
         "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "ohm"},
     }
-    assert units_comment(prop) == " -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)"
+    assert units_comment(prop, {}) == " -- Units: per parameter_units (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)"
+
+
+def test_units_comment_discriminator_renamed():
+    """The table's renames apply to the discriminator name in the comment: the
+    discriminator names a sibling column, so a renamed column (parameter_units ->
+    unit_basis) must not leave the comment pointing at the upstream name."""
+    prop = {
+        "x-unit-discriminator": "parameter_units",
+        "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "ohm"},
+    }
+    renames = {"parameter_units": "unit_basis"}
+    assert units_comment(prop, renames) == " -- Units: per unit_basis (NATURAL_UNITS: ohm, SYSTEM_BASE: pu)"
 
 
 def test_units_comment_nested_x_units():
@@ -365,7 +395,7 @@ def test_units_comment_nested_x_units():
             },
         },
     }
-    comment = units_comment(prop)
+    comment = units_comment(prop, {})
     assert "dc_control_from" in comment
     assert "DC_POWER: MW" in comment
     assert "voltage_units" in comment

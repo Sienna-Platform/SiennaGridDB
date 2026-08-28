@@ -161,24 +161,28 @@ def bound_checks(column, prop):
     return checks
 
 
-def _units_entry(key, value):
+def _units_entry(key, value, renames):
     """Render one x-units entry. A dict value is a nested discriminator (a field
     whose unit depends on a second discriminator column); a plain value is a
-    unit string, rendered exactly as before."""
+    unit string."""
     if isinstance(value, dict):
         disc2 = value.get("x-unit-discriminator", "?")
+        disc2 = renames.get(disc2, disc2)
         inner = ", ".join(f"{k2}: {v2}" for k2, v2 in sorted(value.get("x-units", {}).items()))
         return f"{key}: per {disc2} [{inner}]"
     return f"{key}: {value}"
 
 
-def units_comment(prop):
+def units_comment(prop, renames):
+    # The discriminator names a sibling column, so the table's renames apply to
+    # it the same way they apply to the column itself.
     if "x-units" in prop:
         disc = prop.get("x-unit-discriminator", "?")
+        disc = renames.get(disc, disc)
         units_map = prop["x-units"]
         nested = any(isinstance(v, dict) for v in units_map.values())
         sep = "; " if nested else ", "
-        pairs = sep.join(_units_entry(k, v) for k, v in sorted(units_map.items()))
+        pairs = sep.join(_units_entry(k, v, renames) for k, v in sorted(units_map.items()))
         return f" -- Units: per {disc} ({pairs})"
     if "x-unit" in prop:
         return f" -- Units: {prop['x-unit']}"
@@ -255,7 +259,7 @@ def emit_table(table, components, table_cfg, resolver):
             parts.append(f"CHECK ({check})")
         if column in fks:
             parts.append(fks[column])
-        col_lines.append(" ".join(parts) + units_comment(pnode))
+        col_lines.append(" ".join(parts) + units_comment(pnode, renames))
 
     body = []
     for i, col in enumerate(col_lines):

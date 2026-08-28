@@ -27,15 +27,9 @@ dependencies = ["pydantic>=2,<3", "sqlalchemy>=2,<3"]
 dev = ["pytest>=7.2.1", "pytest-cov", "ruff", "pre-commit"]
 docs = ["sphinx>=7", "myst-parser", "sphinx_math_dollar", "nbsphinx"]
 
-[project.scripts]
-sienna_sqlite = "sienna_database_gen.gen_database:print_sqlite"
-
 # Setuptools configuration
 [tool.setuptools]
 include-package-data = true
-
-[tool.setuptools.packages.find]
-include = ["sienna_database_gen"]
 
 # Setuptools configuration
 [tool.setuptools.dynamic]
@@ -45,36 +39,43 @@ readme = { file = ["README.md"], content-type = "text/markdown" }
 "*" = ["*.json", "*.csv", "*.sql"]
 
 # Linter + formatter configuration
-[tool.black]
-line-length = 90
-
 [tool.ruff]
 line-length = 92
+# target-version belongs here, NOT under [tool.ruff.lint]: ruff rejects it as an
+# unknown field there and then refuses to load the config at all, silently
+# disabling every rule. Keep it above the lint table so that stays obvious.
+target-version = "py39"
 
-[tool.lint]
+# Staged adoption. These tables were previously named [tool.lint] /
+# [tool.lint.pydocstyle], which ruff does not read, so the whole selection below
+# was inert and only ruff's defaults (E4/E7/E9/F) ever ran.
+# Deliberately NOT yet enabled, with measured cost at the time of writing:
+#   E501  44 findings, none auto-fixable (ruff never wraps lines)
+#   UP    42 findings, 26 of them unsafe fixes (%-format -> f-string)
+#   D    185 findings, 144 needing hand-written prose (86 undocumented functions)
+# Enable them one family per PR; test/test_unit_registry.py alone owns 81 of the D.
+[tool.ruff.lint]
 select = [
-  "E",   # pycodestyle
-  "TD",  # flake-8 todos
+  "E4",  # pycodestyle: imports
+  "E7",  # pycodestyle: statements
+  "E9",  # pycodestyle: runtime/syntax errors
+  "F",   # pyflakes
+  "TD",  # flake8-todos
   "PD",  # pandas vet
   "RUF", # Ruff rules
-  "N",   # pep8
-  "F",   # pyflakes
-  "UP",  # pyupgrade
-  "D",   # pydocstyle
+  "N",   # pep8-naming
 ]
 
 # Allow unused variables when underscore-prefixed.
 #dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 #exclude = ["tests"]
 
-# Assume Python 3.10.
-target-version = "py39"
-
-[tool.lint.pydocstyle]
+# Applies once D is enabled; harmless until then.
+[tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
 [tool.sqlfluff.core]
-dialect = "postgres"
+dialect = "sqlite"
 
 [dependency-groups]
 dev = [
