@@ -362,6 +362,19 @@ def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_p
                 "among registered discriminated units %s"
                 % (table, column, comp, schema_unit, sorted(reg_units)),
             )
+            return 0
+        extra_units = sorted(reg_units - {schema_unit})
+        if extra_units:
+            # A registry superset is a representability gap, not a contradiction:
+            # DB rows stored in the extra units have no wire form until the schema
+            # grows a discriminator (how the Line r/x/b/g gap stayed invisible).
+            report.warn(
+                "L1",
+                "registry offers units the schema cannot express for %s.%s on %s: schema "
+                "x-unit=%s but registry also has %s"
+                % (table, column, comp, schema_unit, extra_units),
+            )
+            return 1
         return 0
 
     schema_map = _expand_schema_units_map(units_map)

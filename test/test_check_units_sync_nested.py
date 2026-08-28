@@ -169,3 +169,41 @@ def test_l1_discriminated_nested_missing_registry_key_is_fail():
     layer, message = report.fails[0]
     assert layer == "L1"
     assert "discriminator key mismatch" in message
+
+
+def test_l1_flat_x_unit_with_registry_superset_warns():
+    """A flat schema x-unit matching one registry arm passes, but the arms the
+    schema cannot express are surfaced as a WARN -- the representability gap
+    that hid the Line r/x/b/g natural-units arm."""
+    ann = schema_property_annotation({"type": "number", "x-unit": "pu"})
+    rows = [
+        {"discriminator_value": "COMPONENT_BASE", "quantity_type": "Resistance", "unit": "pu"},
+        {"discriminator_value": "NATURAL_UNITS", "quantity_type": "Resistance", "unit": "ohm"},
+    ]
+    report = Report()
+    warns = _l1_discriminated(
+        report, "transmission_lines", "r", "Line", ann, rows,
+        {("Resistance", "pu"), ("Resistance", "ohm")},
+    )
+    assert warns == 1
+    assert report.fails == []
+    layer, message = report.warns[0]
+    assert layer == "L1"
+    assert "cannot express" in message
+    assert "ohm" in message
+
+
+def test_l1_flat_x_unit_exact_registry_match_is_silent():
+    """A flat schema x-unit whose unit is the registry's only arm is fully clean."""
+    ann = schema_property_annotation({"type": "number", "x-unit": "pu"})
+    rows = [
+        {"discriminator_value": "COMPONENT_BASE", "quantity_type": "Resistance", "unit": "pu"},
+    ]
+    report = Report()
+    warns = _l1_discriminated(
+        report, "discrete_controlled_ac_branches", "r", "DiscreteControlledACBranch",
+        ann, rows, {("Resistance", "pu")},
+    )
+    assert warns == 0
+    assert report.fails == []
+    assert report.warns == []
