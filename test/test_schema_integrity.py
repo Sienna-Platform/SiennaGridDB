@@ -287,21 +287,26 @@ def test_transformer_enum_checks_match_schema(db, table, column, definition):
 
 
 def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
-    """One value per (uuid, idx): a loader double-insert must fail loudly
+    """One value per (uri, idx): a loader double-insert must fail loudly
     instead of silently duplicating timepoints."""
+    make_entity(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('ts-1', 'MW', 'ActivePower')"
+        "INSERT INTO time_series_associations("
+        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "initial_timestamp, resolution, length, uri, features_hash) "
+        "VALUES (1, 1, 'thing', 0, 0, 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
+        "'static:load', ?)",
+        (b"\x0b" * 32,),
     )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 0, 1.5)"
+        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 0, 1.5)"
     )
     with pytest.raises(sqlite3.IntegrityError, match="idx"):
         fresh_db.execute(
-            "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 0, 2.5)"
+            "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 0, 2.5)"
         )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 1, 2.5)"
+        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 1, 2.5)"
     )
 
 
@@ -464,26 +469,3 @@ def test_dc_flag_requires_topology_type(fresh_db):
         )
 
 
-def test_time_series_metadata_carries_time_reference_and_shape(fresh_db):
-    fresh_db.execute(
-        "INSERT INTO time_series_metadata"
-        "(uuid, unit, quantity_type, time_reference, array_shape) "
-        "VALUES ('ts-2', 'MW', 'ActivePower', 'America/Denver', '[8760]')"
-    )
-    (tr, shape) = fresh_db.execute(
-        "SELECT time_reference, array_shape FROM time_series_metadata "
-        "WHERE uuid = 'ts-2'"
-    ).fetchone()
-    assert tr == "America/Denver"
-    assert shape == "[8760]"
-
-
-def test_time_series_metadata_rejects_non_array_shape(fresh_db):
-    """array_shape must be a JSON array; a bare number or object is malformed
-    data, not a shape."""
-    with pytest.raises(sqlite3.IntegrityError):
-        fresh_db.execute(
-            "INSERT INTO time_series_metadata"
-            "(uuid, unit, quantity_type, array_shape) "
-            "VALUES ('ts-3', 'MW', 'ActivePower', '8760')"
-        )

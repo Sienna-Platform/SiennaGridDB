@@ -137,11 +137,12 @@ carry. Today, resolution is exactly the two same-row lookups above (`unit_basis`
 
 ### Time-series units
 
-`time_series_metadata` — one row per series, keyed by `uuid` — carries `unit` and
-`quantity_type`, so units are recorded **per series** rather than assumed schema-wide.
-`time_series_associations` also carries a `units` column, but it is **deprecated** in favor
-of `time_series_metadata.unit`. A trigger only checks the two agree when `units` is set —
-read `time_series_metadata` directly.
+`time_series_associations` carries `units`/`quantity_kind`/`unit_system` per association row,
+mirroring infrastore's catalog so rows deserialize straight into a store, and `association_id` —
+the store-minted id a time-series-backed cost payload uses to name its series. `quantity_kind` is
+free-form (composite economic quantities must not require a vocabulary change), but a row using
+a registered quantity-type name is trigger-checked against `allowed_units` — see
+`docs/units-architecture.md` §4–6 for the full contract.
 
 ### Regenerate
 

@@ -43,7 +43,13 @@ DROP TABLE IF EXISTS transmission_interchanges;
 
 DROP TABLE IF EXISTS entities;
 
+DROP VIEW IF EXISTS time_series_readable;
+
 DROP TABLE IF EXISTS time_series_associations;
+
+DROP TABLE IF EXISTS feature_sets;
+
+DROP TABLE IF EXISTS timestamp_sets;
 
 DROP TABLE IF EXISTS attribute_identifiers;
 
@@ -70,8 +76,6 @@ DROP TABLE IF EXISTS facts_control_devices;
 DROP TABLE IF EXISTS interconnecting_converters;
 
 DROP TABLE IF EXISTS static_time_series;
-
-DROP TABLE IF EXISTS time_series_metadata;
 
 DROP TABLE IF EXISTS allowed_units;
 
@@ -781,35 +785,142 @@ CREATE TABLE combined_cycle_associations (
     PRIMARY KEY (plant_id, entity_id, hrsg_index)
 ) strict;
 
-CREATE TABLE time_series_associations(
+-- Mirrors infrastore's catalog table column-for-column so a row deserializes
+-- straight into a store, and projects onto the SiennaSchemas wire form.
+-- owner_category / time_series_type are small INTEGER codes, not names (decode
+-- in time_series_readable): the codes are infrastore's on-disk contract, kept
+-- 1-byte to hold its type-bearing indexes ~35% smaller than name strings would.
+-- unit_system is lowercase 'natural_units' |
+-- 'component_base' -- NOT the component tables' unit_basis vocabulary -- and
+-- carries no CHECK so a third basis can land without a format bump.
+-- quantity_kind is free-form: a CHECK would turn composite economic quantities
+-- ($/MWh) into schema migrations. resolution / interval / horizon are ISO-8601
+-- durations so calendar periods stay distinguishable from fixed ones.
+-- time_reference NULL means unspecified, not UTC.
+CREATE TABLE time_series_associations (
     id INTEGER PRIMARY KEY,
-    time_series_uuid TEXT NOT NULL,
-    time_series_type TEXT NOT NULL,
-    initial_timestamp TEXT NOT NULL,
-    resolution TEXT NOT NULL,
-    horizon TEXT,
-    "interval" TEXT,
-    window_count INTEGER,
-    length INTEGER,
-    name TEXT NOT NULL,
-    owner_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    -- The store-minted surrogate id, carried verbatim; what cost payloads and the
+    -- wire schemas reference. Distinct from `id` on purpose: `id` is a rowid SQLite
+    -- may reuse after a delete. Store-local -- resolve against the source store.
+    association_id INTEGER NOT NULL,
+    owner_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     owner_type TEXT NOT NULL,
-    owner_category TEXT NOT NULL,
-    features TEXT NOT NULL,
-    scaling_factor_multiplier TEXT NULL,
-    metadata_uuid TEXT NOT NULL,
-    units TEXT NULL
-);
+    owner_category INTEGER NOT NULL CHECK (owner_category IN (0, 1)),
+    time_series_type INTEGER NOT NULL CHECK (time_series_type BETWEEN 0 AND 5),
+    name TEXT NOT NULL,
+    initial_timestamp TEXT,
+    resolution TEXT,
+    length INTEGER,
+    horizon TEXT,
+    interval TEXT,
+    count INTEGER,
+    -- Scenarios only (time_series_type = 5), which requires it alongside count.
+    scenario_count INTEGER,
+    timestamps_hash BLOB,
+    units TEXT,
+    quantity_kind TEXT,
+    unit_system TEXT,
+    time_reference TEXT,
+    component_field TEXT,
+    percentiles_json TEXT,
+    element_type TEXT NOT NULL DEFAULT 'f64',
+    element_shape TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(element_shape)),
+    application_data TEXT,
+    uri TEXT NOT NULL,
+    data_hash BLOB,
+    features_hash BLOB NOT NULL
+) strict;
 
-CREATE UNIQUE INDEX uq_time_series_assoc_owner_type_name_res_feat ON time_series_associations (
-    owner_id,
-    time_series_type,
-    name,
-    resolution,
-    features
-);
+-- Feature sets are content-addressed by the SHA-256 of the feature map and
+-- stored once, shared by every association whose features_hash matches.
+-- Deliberately NO foreign key and NO cascade (mirroring infrastore): rows are
+-- shared, so deleting one association must not delete a set another still uses.
+CREATE TABLE feature_sets (
+    key TEXT NOT NULL,
+    value_kind TEXT NOT NULL CHECK (value_kind IN ('int', 'float', 'bool', 'str')),
+    value_int INTEGER,
+    value_float REAL,
+    value_bool INTEGER,
+    value_str TEXT,
+    features_hash BLOB NOT NULL,
+    PRIMARY KEY (features_hash, key)
+) strict;
 
-CREATE INDEX idx_time_series_assoc_uuid ON time_series_associations (time_series_uuid);
+-- The explicit timestamp vector of a NonSequentialTimeSeries, content-addressed
+-- and stored once per distinct time axis. data is infrastore's varint delta
+-- encoding, carried verbatim so the vector round-trips bit-exact; it is not
+-- human-readable by design. No FK/cascade, same sharing rationale as
+-- feature_sets.
+CREATE TABLE timestamp_sets (
+    timestamps_hash BLOB NOT NULL PRIMARY KEY,
+    data BLOB NOT NULL
+) strict;
+
+CREATE UNIQUE INDEX uq_ts_assoc_id ON time_series_associations (association_id);
+
+-- Both are needed: uq_ts_assoc cannot enforce uniqueness when resolution or
+-- interval IS NULL (SQLite treats NULLs as distinct); the coalesced twin closes
+-- that gap with the empty string, never a valid ISO-8601 period.
+CREATE UNIQUE INDEX uq_ts_assoc ON time_series_associations
+    (owner_id, owner_category, time_series_type, name, resolution, interval, features_hash);
+
+CREATE UNIQUE INDEX uq_ts_assoc_coalesced ON time_series_associations
+    (owner_id, owner_category, time_series_type, name,
+     COALESCE(resolution, ''), COALESCE(interval, ''), features_hash);
+
+CREATE INDEX idx_uri ON time_series_associations (uri);
+
+-- Partial: data_hash is the optional integrity hash (SiennaSchemas wire form);
+-- rows without one cost zero index entries.
+CREATE INDEX idx_hash ON time_series_associations (data_hash)
+    WHERE data_hash IS NOT NULL;
+
+CREATE INDEX idx_owner ON time_series_associations (owner_id, owner_category);
+
+CREATE INDEX idx_resolution ON time_series_associations (resolution);
+
+CREATE INDEX idx_ts_type ON time_series_associations (time_series_type);
+
+CREATE INDEX idx_name ON time_series_associations (name);
+
+CREATE INDEX idx_owner_type ON time_series_associations (owner_type);
+
+CREATE INDEX idx_category_owner ON time_series_associations (owner_category, owner_id);
+
+CREATE INDEX idx_interval ON time_series_associations (interval);
+
+-- Partial: component_field is optional, so unset rows cost zero index entries;
+-- `component_field = ?` can still use it (never true of NULL).
+CREATE INDEX idx_component_field ON time_series_associations (component_field)
+    WHERE component_field IS NOT NULL;
+
+-- Hand-inspection projection (mirrors infrastore's view of the same name):
+-- decodes the integer discriminants and hex-encodes the content hashes
+-- (lowercase, matching infrastore's hash_hex spelling). Nothing reads it.
+CREATE VIEW time_series_readable AS
+SELECT id, association_id, owner_id, owner_type,
+       CASE owner_category WHEN 0 THEN 'Component'
+                           WHEN 1 THEN 'SupplementalAttribute'
+                           ELSE 'unknown(' || owner_category || ')' END AS owner_category,
+       CASE time_series_type WHEN 0 THEN 'SingleTimeSeries'
+                             WHEN 1 THEN 'NonSequentialTimeSeries'
+                             WHEN 2 THEN 'Deterministic'
+                             WHEN 3 THEN 'DeterministicSingleTimeSeries'
+                             WHEN 4 THEN 'Probabilistic'
+                             WHEN 5 THEN 'Scenarios'
+                             ELSE 'unknown(' || time_series_type || ')' END AS time_series_type,
+       name,
+       initial_timestamp, resolution, length, horizon, interval, count,
+       scenario_count,
+       units, quantity_kind, unit_system, time_reference, component_field,
+       element_type, element_shape, application_data, uri,
+       CASE WHEN data_hash IS NULL THEN NULL
+            ELSE lower(hex(data_hash)) END AS data_hash,
+       lower(hex(features_hash)) AS features_hash,
+       -- hex() renders NULL as '', invisible to IS NULL; keep absent hashes NULL.
+       CASE WHEN timestamps_hash IS NULL THEN NULL
+            ELSE lower(hex(timestamps_hash)) END AS timestamps_hash
+FROM time_series_associations;
 
 CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -1098,37 +1209,23 @@ CREATE TABLE interconnecting_converters (
     CHECK (bus <> dc_bus)
 ) strict;
 
+-- Dense values, located by the association rows' uri (the role infrastore's
+-- HDF5 half plays; here the uri IS the key into this table). One copy per
+-- distinct array: associations sharing a uri share these rows, and the
+-- association's optional data_hash lets a consumer verify the array's content.
+-- Units/basis live on the association (units, quantity_kind, unit_system); a
+-- COMPONENT_BASE series is interpreted against the owning component's own base
+-- columns, so no per-series base snapshot is stored.
 CREATE TABLE static_time_series (
     id INTEGER PRIMARY KEY,
-    uuid TEXT NOT NULL,
+    uri TEXT NOT NULL,
     idx INTEGER NOT NULL,
     value REAL NOT NULL
 ) strict;
 
--- Series-level metadata: one row per time series uuid, so a series cannot
--- carry mixed units. Units validated against allowed_units and enforced on
--- static_time_series inserts by triggers.
-CREATE TABLE time_series_metadata (
-    uuid TEXT PRIMARY KEY,
-    unit TEXT NOT NULL,
-    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
-    -- How the series' timestamps were spelled, per the wire schemas'
-    -- TimeReference: 'utc' | 'zoneless' | a fixed offset | an IANA zone name.
-    -- Shape is not checked here (tz-database question). NULL means
-    -- unspecified, which is deliberately not the same as utc.
-    time_reference TEXT NULL,
-    -- Full native shape of the stored array as a JSON array of non-negative
-    -- integers ([length, *element_shape] for static series). NULL means
-    -- unspecified and consumers fall back to the series' field metadata.
-    array_shape TEXT NULL CHECK (
-        array_shape IS NULL
-        OR (json_valid(array_shape) AND json_type(array_shape) = 'array')
-    )
-) strict;
-
--- UNIQUE: one value per (series, timepoint); loader double-inserts must fail
+-- UNIQUE: one value per (array, timepoint); loader double-inserts must fail
 -- loudly rather than silently duplicate timepoints.
-CREATE UNIQUE INDEX idx_static_time_series_uuid_idx ON static_time_series (uuid, idx);
+CREATE UNIQUE INDEX idx_static_time_series_uri_idx ON static_time_series (uri, idx);
 
 CREATE INDEX idx_arcs_from ON arcs (from_id);
 

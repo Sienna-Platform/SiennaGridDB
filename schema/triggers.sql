@@ -1508,48 +1508,124 @@ SELECT
 END;
 
 -- =============================================================================
--- Time Series Metadata Unit Validation Triggers (registry-linked)
--- The (quantity_type, unit) pair on each series must be a registered vocabulary
--- entry in allowed_units.
+-- Time Series Association Unit Validation Triggers (registry-linked)
+-- quantity_kind is deliberately free-form (mirroring infrastore's catalog):
+-- composite economic quantities ($/MWh, MMBtu/MWh) must not require a schema
+-- migration. But a row that uses a REGISTERED quantity-type name must pair it
+-- with a registered unit -- a typo'd or contradictory unit on a known quantity
+-- is a defect, not a new vocabulary.
 -- =============================================================================
-CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_insert BEFORE
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
 INSERT
-    ON time_series_metadata
-    WHEN NOT EXISTS (
+    ON time_series_associations
+    WHEN NEW.quantity_kind IS NOT NULL
+    AND EXISTS (
         SELECT
             1
         FROM
-            allowed_units au
+            quantity_types
         WHERE
-            au.quantity_type = NEW.quantity_type
-            AND au.unit = NEW.unit
+            name = NEW.quantity_kind
+    )
+    AND (
+        NEW.units IS NULL
+        OR NOT EXISTS (
+            SELECT
+                1
+            FROM
+                allowed_units au
+            WHERE
+                au.quantity_type = NEW.quantity_kind
+                AND au.unit = NEW.units
+        )
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
+        'time_series_associations rows using a registered quantity_kind must carry a registered (quantity_kind, units) pair from allowed_units.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_update BEFORE
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_update BEFORE
 UPDATE
-    ON time_series_metadata
-    WHEN NOT EXISTS (
+    ON time_series_associations
+    WHEN NEW.quantity_kind IS NOT NULL
+    AND EXISTS (
         SELECT
             1
         FROM
-            allowed_units au
+            quantity_types
         WHERE
-            au.quantity_type = NEW.quantity_type
-            AND au.unit = NEW.unit
+            name = NEW.quantity_kind
+    )
+    AND (
+        NEW.units IS NULL
+        OR NOT EXISTS (
+            SELECT
+                1
+            FROM
+                allowed_units au
+            WHERE
+                au.quantity_type = NEW.quantity_kind
+                AND au.unit = NEW.units
+        )
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
+        'time_series_associations rows using a registered quantity_kind must carry a registered (quantity_kind, units) pair from allowed_units.'
+    );
+
+END;
+
+-- =============================================================================
+-- Time Series Association Owner-Domain Triggers
+-- owner_id references entities (both categories share the entities id-space
+-- here, unlike infrastore's independent streams), but a category-1 owner must
+-- actually be a supplemental attribute.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NEW.owner_category = 1
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.owner_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = 1.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain_update BEFORE
+UPDATE
+    OF owner_id,
+    owner_category ON time_series_associations
+    WHEN NEW.owner_category = 1
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.owner_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = 1.'
     );
 
 END;
@@ -1719,111 +1795,47 @@ END;
 
 -- =============================================================================
 -- Time Series Data Validation Triggers
--- Units live on time_series_metadata (one row per uuid), so a series cannot
--- carry mixed units. Each static_time_series row must reference an existing
--- metadata row.
+-- Dense values are located by uri: each static_time_series row must belong to
+-- an array some association row declares via uri. Ingest order is therefore
+-- association first, values second -- an orphan array is a loader bug surfaced
+-- loudly, not data to keep.
 -- =============================================================================
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists BEFORE
 INSERT
     ON static_time_series
     WHEN NOT EXISTS (
         SELECT
             1
         FROM
-            time_series_metadata
+            time_series_associations
         WHERE
-            uuid = NEW.uuid
+            uri = NEW.uri
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata before insertion.'
+        'static_time_series.uri must exist in time_series_associations before insertion.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists_update BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists_update BEFORE
 UPDATE
-    OF uuid ON static_time_series
+    OF uri ON static_time_series
     WHEN NOT EXISTS (
         SELECT
             1
         FROM
-            time_series_metadata
+            time_series_associations
         WHERE
-            uuid = NEW.uuid
+            uri = NEW.uri
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata before insertion.'
-    );
-
-END;
-
--- =============================================================================
--- Deprecated time_series_associations.units guard
--- The column is deprecated in favor of time_series_metadata.unit. When set, it
--- must agree with the series metadata unit.
--- =============================================================================
-CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
-INSERT
-    ON time_series_associations
-    WHEN NEW.units IS NOT NULL
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-    )
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-            AND m.unit = NEW.units
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_update BEFORE
-UPDATE
-    ON time_series_associations
-    WHEN NEW.units IS NOT NULL
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-    )
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-            AND m.unit = NEW.units
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
+        'static_time_series.uri must exist in time_series_associations before insertion.'
     );
 
 END;

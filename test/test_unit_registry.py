@@ -43,12 +43,14 @@ SEALED_TABLES = [
 COMPLETENESS_ALLOWLIST = {
     ("storage_technologies", "region"),
     ("supply_technologies", "region"),
-    # structural value columns; units live in time_series_metadata for series data
+    # structural value columns; units live on time_series_associations for series data
     ("static_time_series", "value"),
     # structural value column; units live in attribute conventions for supplemental attrs
     ("supplemental_attributes", "value"),
     # structural TYPE+value JSON store (like supplemental_attributes); no fixed unit
     ("plants", "value"),
+    # typed feature-map value column (infrastore mirror); features carry no unit
+    ("feature_sets", "value_float"),
     # non-binding sentinel ceiling, not unit-converted on the PSY side (no x-unit
     # in the schema; see schema.sql's facts_control_devices comment)
     ("facts_control_devices", "max_reactive_power"),
@@ -365,137 +367,230 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
         insert_attribute(fresh_db, 3, "poly_attr", "3.0", "s", "Duration")
 
 
-# --------------------------------------------------------------------------- #
-# Time series
-# --------------------------------------------------------------------------- #
-def test_static_time_series_without_metadata_rejected(fresh_db):
+# Time series (infrastore-mirror catalog)
+def _insert_association(
+    conn,
+    owner_id,
+    units=None,
+    quantity_kind=None,
+    uri="static:load-1",
+    owner_category=0,
+    name="load",
+    association_id=None,
+):
+    # association_id is store-minted and NOT NULL; default it off owner_id so the
+    # common single-row case needs no argument and stays unique.
+    if association_id is None:
+        association_id = owner_id
+    conn.execute(
+        "INSERT INTO time_series_associations("
+        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "initial_timestamp, resolution, length, units, quantity_kind, "
+        "uri, data_hash, features_hash) "
+        "VALUES (?, ?, 'thing', ?, 0, ?, '2020-01-01T00:00:00', 'PT1H', 24, ?, ?, "
+        "?, ?, ?)",
+        (association_id, owner_id, owner_category, name, units, quantity_kind, uri,
+         b"\x01" * 32, b"\x02" * 32),
+    )
+
+
+def test_static_time_series_without_association_rejected(fresh_db):
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="static_time_series.uuid must exist in time_series_metadata",
+        match=r"static_time_series\.uri must exist in time_series_associations",
     ):
         fresh_db.execute(
-            "INSERT INTO static_time_series(uuid, idx, value) VALUES ('u1', 0, 1.0)"
+            "INSERT INTO static_time_series(uri, idx, value) "
+            "VALUES ('static:load-1', 0, 1.0)"
         )
 
 
-def test_static_time_series_with_metadata_accepted(fresh_db):
+def test_static_time_series_with_association_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('u1', 0, 1.0)"
+        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load-1', 0, 1.0)"
     )
     (count,) = fresh_db.execute(
-        "SELECT COUNT(*) FROM static_time_series WHERE uuid = 'u1'"
+        "SELECT COUNT(*) FROM static_time_series WHERE uri = 'static:load-1'"
     ).fetchone()
     assert count == 1
 
 
-def test_static_time_series_update_uuid_to_orphan_rejected(fresh_db):
+def test_static_time_series_update_uri_to_orphan_rejected(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('u1', 0, 1.0)"
+        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load-1', 0, 1.0)"
     )
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="static_time_series.uuid must exist in time_series_metadata",
+        match=r"static_time_series\.uri must exist in time_series_associations",
     ):
-        fresh_db.execute("UPDATE static_time_series SET uuid = 'orphan' WHERE uuid = 'u1'")
+        fresh_db.execute("UPDATE static_time_series SET uri = 'static:orphan'")
 
 
-def test_time_series_metadata_bad_pair_rejected(fresh_db):
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match="must be a registered pair in allowed_units",
-    ):
-        fresh_db.execute(
-            "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-            "VALUES ('u2', 'bananas', 'ActivePower')"
-        )
-
-
-def test_time_series_metadata_mixed_units_impossible(fresh_db):
-    """One metadata row per uuid (PRIMARY KEY): a second row for the same uuid
-    with a different unit cannot exist, so a series cannot carry mixed units."""
+def test_association_data_hash_optional(fresh_db):
+    """data_hash is the OPTIONAL integrity hash per the SiennaSchemas wire
+    form; uri is what locates the dense values."""
+    make_entity(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE|PRIMARY KEY"):
-        fresh_db.execute(
-            "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-            "VALUES ('u1', 'MVAr', 'ReactivePower')"
-        )
-
-
-def _insert_association(conn, uuid, units):
-    conn.execute(
         "INSERT INTO time_series_associations("
-        "time_series_uuid, time_series_type, initial_timestamp, resolution, "
-        "name, owner_id, owner_type, owner_category, features, metadata_uuid, units) "
-        "VALUES (?, 'Deterministic', '2020-01-01', 'PT1H', 'load', ?, 'thing', "
-        "'gen', '{}', 'm-uuid', ?)",
-        (uuid, 1, units),
+        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "initial_timestamp, resolution, length, uri, features_hash) "
+        "VALUES (1, 1, 'thing', 0, 0, 'nohash', '2020-01-01T00:00:00', 'PT1H', 24, "
+        "'static:nohash', ?)",
+        (b"\x02" * 32,),
     )
+    (stored,) = fresh_db.execute(
+        "SELECT data_hash FROM time_series_associations WHERE name = 'nohash'"
+    ).fetchone()
+    assert stored is None
 
 
-def test_association_units_contradiction_rejected(fresh_db):
+def test_association_registered_quantity_kind_bad_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="time_series_associations.units must equal time_series_metadata.unit",
+        match="registered .quantity_kind, units. pair",
     ):
-        _insert_association(fresh_db, "u1", "MVAr")
+        _insert_association(fresh_db, 1, units="bananas", quantity_kind="ActivePower")
 
 
-def test_association_units_matching_accepted(fresh_db):
+def test_association_registered_quantity_kind_missing_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    _insert_association(fresh_db, "u1", "MW")
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="registered .quantity_kind, units. pair",
+    ):
+        _insert_association(fresh_db, 1, units=None, quantity_kind="ActivePower")
+
+
+def test_association_registered_pair_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1, units="MW", quantity_kind="ActivePower")
     (count,) = fresh_db.execute(
         "SELECT COUNT(*) FROM time_series_associations WHERE units = 'MW'"
     ).fetchone()
     assert count == 1
 
 
-def test_association_units_null_accepted(fresh_db):
-    """NULL units skip the equality guard (column is deprecated/optional)."""
+def test_association_freeform_quantity_kind_accepted(fresh_db):
+    """quantity_kind is deliberately unconstrained (mirroring infrastore):
+    composite economic quantities pass with any unit spelling. Only a
+    REGISTERED quantity-type name pulls in the allowed_units guard."""
     make_entity(fresh_db, 1)
-    _insert_association(fresh_db, "u1", None)
+    _insert_association(fresh_db, 1, units="USD/MWh", quantity_kind="EnergyPrice2050")
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM time_series_associations WHERE quantity_kind = 'EnergyPrice2050'"
+    ).fetchone()
+    assert count == 1
+
+
+def test_association_null_units_and_kind_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
     (count,) = fresh_db.execute(
         "SELECT COUNT(*) FROM time_series_associations WHERE units IS NULL"
     ).fetchone()
     assert count == 1
 
 
-def test_association_units_non_null_no_metadata_accepted(fresh_db):
-    """Non-NULL units with NO metadata row for the uuid must be ACCEPTED.
-
-    Bulk loads insert the association before its time_series_metadata row, so a
-    missing metadata row is a valid transient state (the trigger's own message
-    says "or no time_series_metadata row exists" is acceptable). The guard only
-    fires when a metadata row EXISTS with a DIFFERENT unit.
-    """
+def test_association_uniqueness_null_resolution_enforced(fresh_db):
+    """The COALESCE index must reject a duplicate identity even when resolution
+    and interval are NULL (plain UNIQUE treats NULLs as distinct)."""
     make_entity(fresh_db, 1)
-    _insert_association(fresh_db, "no-such-uuid", "MW")
-    (count,) = fresh_db.execute(
-        "SELECT COUNT(*) FROM time_series_associations WHERE units = 'MW'"
+    fresh_db.execute(
+        "INSERT INTO time_series_associations("
+        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "uri, features_hash) VALUES (1, 1, 'thing', 0, 1, 'irregular', 'static:a', ?)",
+        (b"\x04" * 32,),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        fresh_db.execute(
+            "INSERT INTO time_series_associations("
+            "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+            "uri, features_hash) VALUES (2, 1, 'thing', 0, 1, 'irregular', 'static:b', ?)",
+            (b"\x04" * 32,),
+        )
+
+
+def test_association_owner_category_attribute_domain_enforced(fresh_db):
+    make_entity(fresh_db, 1)
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match=r"owner_id must exist in supplemental_attributes",
+    ):
+        _insert_association(fresh_db, 1, owner_category=1)
+    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    fresh_db.execute(
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
+    )
+    _insert_association(fresh_db, 2, owner_category=1)
+
+
+def test_time_series_readable_decodes_codes_and_hashes(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
+    row = fresh_db.execute(
+        "SELECT owner_category, time_series_type, data_hash, timestamps_hash "
+        "FROM time_series_readable"
     ).fetchone()
-    assert count == 1
+    assert row == ("Component", "SingleTimeSeries", "01" * 32, None)
 
 
-# --------------------------------------------------------------------------- #
+def test_association_id_is_projected_by_readable_view(fresh_db):
+    """The store-minted id is what a cost payload references, so it must be
+    visible in the decode projection alongside the rowid."""
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1, association_id=4242)
+    row = fresh_db.execute(
+        "SELECT id, association_id FROM time_series_readable"
+    ).fetchone()
+    assert row[1] == 4242
+
+
+def test_association_id_uniqueness_enforced(fresh_db):
+    """Two associations cannot share a minted id: a cost payload referencing it
+    must resolve to exactly one series."""
+    make_entity(fresh_db, 1)
+    make_entity(fresh_db, 2)
+    _insert_association(fresh_db, 1, association_id=7, uri="static:a", name="a")
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        _insert_association(fresh_db, 2, association_id=7, uri="static:b", name="b")
+
+
+def test_association_id_is_required(fresh_db):
+    """NOT NULL: an association with no minted id is unreferenceable."""
+    make_entity(fresh_db, 1)
+    with pytest.raises(sqlite3.IntegrityError, match="NOT NULL"):
+        fresh_db.execute(
+            "INSERT INTO time_series_associations("
+            "owner_id, owner_type, owner_category, time_series_type, name, "
+            "uri, features_hash) VALUES (1, 'thing', 0, 0, 'x', 'static:x', ?)",
+            (b"\x05" * 32,),
+        )
+
+
+def test_scenarios_association_carries_scenario_count(fresh_db):
+    """Scenarios (time_series_type = 5) requires scenario_count alongside count
+    per TimeSeries/Scenarios.json."""
+    make_entity(fresh_db, 1)
+    fresh_db.execute(
+        "INSERT INTO time_series_associations("
+        "association_id, owner_id, owner_type, owner_category, time_series_type, "
+        "name, initial_timestamp, resolution, horizon, interval, count, "
+        "scenario_count, uri, features_hash) "
+        "VALUES (1, 1, 'thing', 0, 5, 'scen', '2020-01-01T00:00:00', 'PT1H', "
+        "'PT24H', 'PT1H', 24, 10, 'static:scen', ?)",
+        (b"\x06" * 32,),
+    )
+    row = fresh_db.execute(
+        "SELECT time_series_type, count, scenario_count FROM time_series_readable"
+    ).fetchone()
+    assert row == ("Scenarios", 24, 10)
+
+
 # Hydro level_data_type CHECK
 HYDRO_ENUM_VALUES = ["USABLE_VOLUME", "TOTAL_VOLUME", "HEAD", "ENERGY"]
 
@@ -1642,6 +1737,23 @@ def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(
         sqlite3.IntegrityError, match="Known attribute must use the registered unit"
     ):
         insert_attribute(fresh_db, 3, "shunt_susceptance_arm", "0.01", "MW", "ActivePower")
+
+
+# time_series_associations unit_system (infrastore mirror: lowercase spellings,
+# deliberately no CHECK -- a third basis must not require a format bump)
+def test_association_unit_system_round_trips_lowercase(fresh_db):
+    make_entity(fresh_db, 1)
+    fresh_db.execute(
+        "INSERT INTO time_series_associations("
+        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "unit_system, uri, features_hash) "
+        "VALUES (1, 1, 'thing', 0, 0, 'v', 'component_base', 'static:v', ?)",
+        (b"\x07" * 32,),
+    )
+    (system,) = fresh_db.execute(
+        "SELECT unit_system FROM time_series_associations WHERE name = 'v'"
+    ).fetchone()
+    assert system == "component_base"
 
 
 # unit_basis_rules seal protection
