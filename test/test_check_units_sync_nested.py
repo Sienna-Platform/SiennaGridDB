@@ -54,14 +54,8 @@ ALLOWED_PAIRS = {
 def _matching_registry_rows():
     """Registry rows matching NESTED_PROP exactly (the sync-clean case).
 
-    The schema side (NESTED_PROP) keeps SYSTEM_BASE/NATURAL_UNITS -- upstream
-    SiennaSchemas vocabulary is untouched. But _l1_discriminated compares the
-    (collapsed) schema map against these registry rows AS STORED, and GridDB's
-    unit_conventions narrowed SYSTEM_BASE onto one discriminator
-    value, COMPONENT_BASE (see check_units_sync.py's module docstring and
-    BASIS_ALIAS). So the registry-side fixture below must use COMPONENT_BASE,
-    the value a real row would carry post-migration, not the pre-migration
-    SYSTEM_BASE the schema still uses.
+    Both sides speak the same two-value basis vocabulary (COMPONENT_BASE |
+    NATURAL_UNITS), so the registry fixture mirrors the schema map key-for-key.
     """
     return [
         {"discriminator_value": "DC_POWER", "quantity_type": "ActivePower", "unit": "MW"},
