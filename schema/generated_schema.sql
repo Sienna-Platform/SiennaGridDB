@@ -175,15 +175,16 @@ CREATE TABLE transmission_lines (
     active_power_flow REAL NOT NULL, -- Units: MW
     reactive_power_flow REAL NOT NULL, -- Units: MVAr
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
-    r REAL NOT NULL, -- Units: pu
-    x REAL NOT NULL, -- Units: pu
+    r REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    x REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     base_power REAL NOT NULL, -- Units: MVA
-    b JSON NULL, -- Units: pu
+    unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    b JSON NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: S)
     continuous_rating REAL NOT NULL, -- Units: MVA
     rating_b REAL NULL, -- Units: MVA
     rating_c REAL NULL, -- Units: MVA
     angle_limits JSON NOT NULL, -- Units: rad
-    g JSON NULL DEFAULT '{"from":0.0,"to":0.0}', -- Units: pu
+    g JSON NULL DEFAULT '{"from":0.0,"to":0.0}', -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: S)
     flow_limits JSON NULL -- Units: MW
 );
 
