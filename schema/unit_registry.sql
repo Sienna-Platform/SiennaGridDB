@@ -182,6 +182,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, disc
     ('discrete_controlled_ac_branches', 'rating', 'ApparentPower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'Thermal rating, per-unit on the component base when the row''s power_units discriminator is COMPONENT_BASE'),
     ('discrete_controlled_ac_branches', 'rating', 'ApparentPower', 'MVA', 'power_units', 'NATURAL_UNITS', NULL, NULL, 'Thermal rating in MVA when the row''s power_units discriminator is NATURAL_UNITS'),
     ('discrete_controlled_ac_branches', 'x', 'Reactance', 'pu', NULL, NULL, NULL, NULL, 'Reactance, per-unit on system base'),
+    ('facts_control_devices', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, 'Per-unit base for this device (apparent power)'),
     ('facts_control_devices', 'max_reactive_power', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'Independent max reactive power ceiling, per-unit on the component base when the row''s power_units discriminator is COMPONENT_BASE'),
     ('facts_control_devices', 'max_reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, 'Independent max reactive power ceiling in MVAr when the row''s power_units discriminator is NATURAL_UNITS'),
     ('facts_control_devices', 'regulated_bus_number', 'Fraction', '1', NULL, NULL, NULL, NULL, 'Bus whose voltage this device regulates; 0 = local bus'),
@@ -250,6 +251,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, disc
     ('interconnecting_converters', 'ac_setpoint', 'PowerFactor', '1', 'ac_control', 'AC_REACTIVE_POWER', NULL, NULL, 'AC power factor setpoint'),
     ('interconnecting_converters', 'ac_setpoint', 'Voltage', 'pu', 'ac_control', 'AC_VOLTAGE', 'unit_basis', 'COMPONENT_BASE', 'AC voltage setpoint, pu'),
     ('interconnecting_converters', 'ac_setpoint', 'Voltage', 'kV', 'ac_control', 'AC_VOLTAGE', 'unit_basis', 'NATURAL_UNITS', 'AC voltage setpoint in kV'),
+    ('interconnecting_converters', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, 'Base power of the converter for per unitization'),
     ('interconnecting_converters', 'dc_setpoint', 'ActivePower', 'MW', 'dc_control', 'DC_POWER', NULL, NULL, 'DC power demand (MW)'),
     ('interconnecting_converters', 'dc_setpoint', 'Voltage', 'pu', 'dc_control', 'DC_VOLTAGE', 'unit_basis', 'COMPONENT_BASE', 'DC voltage setpoint, pu'),
     ('interconnecting_converters', 'dc_setpoint', 'Voltage', 'kV', 'dc_control', 'DC_VOLTAGE', 'unit_basis', 'NATURAL_UNITS', 'DC voltage setpoint in kV'),
@@ -483,6 +485,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, disc
     ('transformer_circuits', 'tap', 'Dimensionless', '1', NULL, NULL, NULL, NULL, 'Normalized tap changer position (1 = nominal voltage)'),
     ('transformer_circuits', 'x', 'Reactance', 'pu', 'unit_basis', 'COMPONENT_BASE', NULL, NULL, 'Circuit reactance, per-unit on the component base (base_power referenced to base_voltage_primary) when the row''s unit_basis discriminator is COMPONENT_BASE'),
     ('transformer_circuits', 'x', 'Reactance', 'ohm', 'unit_basis', 'NATURAL_UNITS', NULL, NULL, 'Circuit reactance, in ohm when the row''s unit_basis discriminator is NATURAL_UNITS'),
+    ('transmission_interchanges', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, 'Per-unit base for this device (apparent power)'),
     ('transmission_interchanges', 'max_flow_from', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, 'Maximum flow from'),
     ('transmission_interchanges', 'max_flow_to', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, 'Maximum flow to'),
     ('transmission_lines', 'b', 'Susceptance', 'pu', 'unit_basis', 'COMPONENT_BASE', NULL, NULL, 'Shunt susceptance halves, JSON {from, to}, per-unit on system base when the row''s unit_basis discriminator is COMPONENT_BASE'),
@@ -508,6 +511,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, disc
     ('two_terminal_hvdc_lines', 'active_power_limits_from', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, 'From-terminal active power limits in MW when the row''s power_units discriminator is NATURAL_UNITS'),
     ('two_terminal_hvdc_lines', 'active_power_limits_to', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'To-terminal active power limits, per-unit on the component base when the row''s power_units discriminator is COMPONENT_BASE'),
     ('two_terminal_hvdc_lines', 'active_power_limits_to', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, 'To-terminal active power limits in MW when the row''s power_units discriminator is NATURAL_UNITS'),
+    ('two_terminal_hvdc_lines', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, 'Per-unit base for this device (apparent power)'),
     ('two_terminal_hvdc_lines', 'reactive_power_limits_from', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'From-terminal reactive power limits, per-unit on the component base when the row''s power_units discriminator is COMPONENT_BASE'),
     ('two_terminal_hvdc_lines', 'reactive_power_limits_from', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, 'From-terminal reactive power limits in MVAr when the row''s power_units discriminator is NATURAL_UNITS'),
     ('two_terminal_hvdc_lines', 'reactive_power_limits_to', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'To-terminal reactive power limits, per-unit on the component base when the row''s power_units discriminator is COMPONENT_BASE'),
@@ -532,4 +536,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'a673ac681b08059a131855a517d4f171c450c280779c12f19b48a36381405a17', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '89c36de17c1b20289470763ac75bc27023f40790c2146280bf672ca80e8b5239', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

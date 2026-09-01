@@ -70,7 +70,7 @@ attribute too, not a column. Those rows carry their own `attributes.unit` and
 `attributes.quantity_type` instead, validated against `allowed_units` on write. This is
 how the point-to-point HVDC fields (LCC impedances, VSC setpoints) are handled.
 
-Current registry: **41 quantity types, 66 allowed units, 402 conventions.**
+Current registry: **41 quantity types, 66 allowed units, 406 conventions.**
 
 The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`

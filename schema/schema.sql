@@ -360,6 +360,7 @@ CREATE TABLE transmission_interchanges (
     arc_id INTEGER REFERENCES arcs(id) ON DELETE CASCADE,
     max_flow_from REAL NOT NULL,
     max_flow_to REAL NOT NULL,
+    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 ) strict;
 
@@ -1012,6 +1013,7 @@ CREATE TABLE two_terminal_hvdc_lines (
     converter_type TEXT NOT NULL DEFAULT 'GENERIC'
         CHECK (converter_type IN ('GENERIC', 'LCC', 'VSC')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     active_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     -- Terminal power limits (JSON: {"min": ..., "max": ...}):
@@ -1053,6 +1055,7 @@ CREATE TABLE facts_control_devices (
     voltage_setpoint REAL NOT NULL,
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
         CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Independent max reactive power ceiling (non-binding sentinel default):
     max_reactive_power REAL NOT NULL DEFAULT 9999.0 CHECK (max_reactive_power >= 0), -- Units: per power_units
@@ -1081,6 +1084,7 @@ CREATE TABLE interconnecting_converters (
     ac_setpoint REAL NOT NULL DEFAULT 1.0,
     ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Remote-bus voltage control, droop, and power-factor weighting:
     remote_bus_control INTEGER NULL CHECK (remote_bus_control IS NULL OR remote_bus_control >= 1),

@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 402
+EXPECTED_UNIT_CONVENTIONS = 406
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1207,6 +1207,7 @@ def test_merged_hvdc_columns_registered(db):
         "active_power_flow": "ActivePower/MW",
         "active_power_limits_from": "ActivePower/MW",
         "active_power_limits_to": "ActivePower/MW",
+        "base_power": "ApparentPower/MVA",
         "reactive_power_limits_from": "ReactivePower/MVAr",
         "reactive_power_limits_to": "ReactivePower/MVAr",
     }
