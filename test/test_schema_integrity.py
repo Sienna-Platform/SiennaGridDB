@@ -292,9 +292,9 @@ def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
     make_entity(fresh_db, 1)
     fresh_db.execute(
         "INSERT INTO time_series_associations("
-        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "owner_id, owner_type, owner_category, time_series_type, name, "
         "initial_timestamp, resolution, length, uri, features_hash) "
-        "VALUES (1, 1, 'thing', 0, 0, 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
+        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
         "'static:load', ?)",
         (b"\x0b" * 32,),
     )

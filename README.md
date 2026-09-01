@@ -138,11 +138,12 @@ carry. Today, resolution is exactly the two same-row lookups above (`unit_basis`
 ### Time-series units
 
 `time_series_associations` carries `units`/`quantity_kind`/`unit_system` per association row,
-mirroring infrastore's catalog so rows deserialize straight into a store, and `association_id` —
-the store-minted id a time-series-backed cost payload uses to name its series. `quantity_kind` is
-free-form (composite economic quantities must not require a vocabulary change), but a row using
-a registered quantity-type name is trigger-checked against `allowed_units` — see
-`docs/units-architecture.md` §4–6 for the full contract.
+mirroring infrastore's catalog so rows deserialize straight into a store, and `id` — the
+store-minted id, carried verbatim, that a time-series-backed cost payload names its series by
+under its wire spelling, `association_id`. `quantity_kind` is free-form (composite economic
+quantities must not require a vocabulary change), but a row using a registered quantity-type
+name is trigger-checked against `allowed_units` — see `docs/units-architecture.md` §4–6 for
+the full contract.
 
 ### Regenerate
 
@@ -242,18 +243,26 @@ where the row's identity actually comes from.
 external store: each row corresponds to an association the store already knows about and
 already gave an id to. Carrying that id, rather than minting a competing one, is the whole
 point — a caller working from the store's own reference needs to land on the same row here.
-The table carries `association_id INTEGER NOT NULL`, the store's id verbatim, enforced unique
-by its own index (`uq_ts_assoc_id` — confirmed present on this branch). `id` is still the
-table's `PRIMARY KEY`, but it's an ordinary SQLite rowid that SQLite is free to reuse after a
-delete; nothing here needs it to be stable, because `association_id` already is. **Store
-`association_id`, not `id`, and resolve it against the source store — it is store-local, not
-a GridDB-native identifier.**
+The table's `id INTEGER PRIMARY KEY AUTOINCREMENT` **is** that store-minted id, carried
+verbatim, mirroring infrastore's own declaration column-for-column (confirmed against
+infrastore's `schema.rs`); `AUTOINCREMENT` is legal on this STRICT table (confirmed on this
+branch — see below) and stops SQLite from ever reissuing an id a delete freed, matching the
+guarantee infrastore relies on for the same column. `association_id` is only this column's
+*spelling on the wire* — the name SiennaSchemas payloads reference it by
+(`TimeSeriesLinearFunctionData.association_id` and its siblings) — never a second stored
+column. **The id is meaningful only against its origin store: resolve it against the source
+store, and re-mint on import when aggregating rows from more than one — exactly what
+infrastore's own `merge` does when copying series between stores (verified in
+`infrastore-cli/src/commands/manage.rs`: "a merge re-adds the source's rows, so the
+destination assigns them fresh ids from its own stream").**
 
 **Mirror table with no store id** — `supplemental_attribute_associations` — mirrors the same
 kind of external association, but infrastore's own wire row for it (`SaWireRow`) carries no
 id: nothing references an attachment, so there is nothing to preserve, and an import mints a
 fresh `id` every time. Identity here is the natural key, `(component_id, attribute_id)`
-(`uq_sa_assoc`); `id` is an ordinary rowid, exactly like the native tables below.
+(`uq_sa_assoc`); `id` is an ordinary rowid, unlike `time_series_associations`' AUTOINCREMENT
+column, because nothing outside GridDB ever holds a reference to it that a rowid reuse could
+break.
 
 **Native tables** — `plant_associations` and `combined_cycle_associations` — model a
 relationship that exists only inside GridDB; no external store has an opinion about it, so
@@ -267,14 +276,18 @@ entity_id, hrsg_index)` on `combined_cycle_associations` — is kept alongside t
 so minting the id changes nothing about what identifies the relationship; it only adds a
 stable handle for a row that already had an identity.
 
-The split comes down to who is responsible for the id: mirroring a store's association
-preserves the identifier it already assigned, if it assigned one; owning a relationship
-natively, or mirroring an association the store never gave an id, means minting one only
-GridDB can guarantee, because only GridDB is the source of truth for it.
+The split comes down to who is responsible for the id: `time_series_associations` preserves
+the identifier its origin store already assigned; the other three mint their own, because
+either the store gave no id (`supplemental_attribute_associations`) or the relationship
+exists only inside GridDB with no external store to have an opinion (`plant_associations`,
+`combined_cycle_associations`) — GridDB is the only source of truth for those ids, which is
+exactly why it uses `AUTOINCREMENT` to guarantee them, the same guarantee infrastore's own
+declaration relies on for `time_series_associations.id`.
 
-Confirmed on this branch: deleting the row holding the current maximum `id` in
-`plant_associations` and inserting a new row does not reuse the freed value — the new row's
-`id` lands one past the highest ever issued, not one past what happens to be present.
+Confirmed on this branch: `AUTOINCREMENT` is legal on a SQLite `STRICT` table, and deleting
+the row holding the current maximum `id` in `plant_associations` (and, separately,
+`time_series_associations`) and inserting a new row does not reuse the freed value — the new
+row's `id` lands one past the highest ever issued, not one past what happens to be present.
 
 ### Payload columns
 
@@ -288,7 +301,7 @@ order":
 | `hrsg_index` | `combined_cycle_associations` | which HRSG the linked unit feeds or receives from; part of the table's `UNIQUE (plant_id, entity_id, hrsg_index)` key, which is why the same unit can appear more than once — once per HRSG it participates in |
 | `component_type`, `attribute_type` | `supplemental_attribute_associations` | denormalized labels for the component's and attribute's concrete tables, carried so a query can filter by kind without joining back to `entities`/`supplemental_attributes` |
 | `owner_type` | `time_series_associations` | the owning component's concrete table name, denormalized for the same reason as above |
-| `owner_category`, `time_series_type` | `time_series_associations` | small `INTEGER` codes, not text — `owner_category` is CHECKed to `0`/`1`, `time_series_type` to `0`–`5`. Decode them by name through the `time_series_readable` view rather than comparing against a string |
+| `owner_category`, `time_series_type` | `time_series_associations` | `TEXT`, holding the wire spelling directly (`'Component'`/`'SupplementalAttribute'`; `'SingleTimeSeries'` through `'Scenarios'`) — compare against the string, no decoding needed |
 | `name`, `resolution`, `interval`, `features_hash` | `time_series_associations` | together with `owner_id` and `owner_category`, form the tuple that actually identifies "which series" (`uq_ts_assoc`) |
 
 ### Querying them

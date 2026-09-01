@@ -792,12 +792,13 @@ CREATE TABLE combined_cycle_associations (
 
 -- Mirrors infrastore's catalog table column-for-column so a row deserializes
 -- straight into a store, and projects onto the SiennaSchemas wire form.
--- owner_category / time_series_type hold infrastore's INTEGER ::code values,
--- not names; the wire form is the string spelling (SiennaSchemas'
--- OwnerCategory is a string enum whose description notes the store holds 0/1
--- internally). Decode via GridDB's own time_series_readable view, below --
--- it mirrors infrastore's view of the same name but is this database's own
--- copy, not a way to query infrastore itself.
+-- owner_category / time_series_type hold the wire string spelling directly
+-- (SiennaSchemas' OwnerCategory and the TimeSeriesAssociation discriminator
+-- are both string enums). infrastore packs these as INTEGER codes for a
+-- measured index-size win at its own scale; this schema states its priority
+-- as user-friendly over performance (see the file header), so it stores the
+-- spelling a reader or a wire payload actually uses, not infrastore's
+-- internal encoding.
 -- unit_system is lowercase 'natural_units' |
 -- 'component_base' -- NOT the component tables' unit_basis vocabulary -- and
 -- carries no CHECK so a third basis can land without a format bump.
@@ -806,15 +807,27 @@ CREATE TABLE combined_cycle_associations (
 -- durations so calendar periods stay distinguishable from fixed ones.
 -- time_reference NULL means unspecified, not UTC.
 CREATE TABLE time_series_associations (
-    id INTEGER PRIMARY KEY,
-    -- The store-minted surrogate id, carried verbatim; what cost payloads and the
-    -- wire schemas reference. Distinct from `id` on purpose: `id` is a rowid SQLite
-    -- may reuse after a delete. Store-local -- resolve against the source store.
-    association_id INTEGER NOT NULL,
+    -- The store-minted id, carried verbatim from the origin infrastore catalog;
+    -- `association_id` is its spelling on the wire (SiennaSchemas cost-payload
+    -- fields such as TimeSeriesLinearFunctionData.association_id and its
+    -- siblings), not a second stored column. AUTOINCREMENT mirrors infrastore's
+    -- own declaration and guarantees SQLite never reissues an id a delete freed,
+    -- so a payload's reference either still resolves to the same row or fails
+    -- outright, never silently landing on a different series that later reused
+    -- the same number.
+    --
+    -- Meaningful only against its origin store: two rows from different stores
+    -- can carry the same id by coincidence, so aggregating rows from more than
+    -- one store means re-minting ids on import, exactly as infrastore's own
+    -- `merge` does when copying series between stores.
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     owner_type TEXT NOT NULL,
-    owner_category INTEGER NOT NULL CHECK (owner_category IN (0, 1)),
-    time_series_type INTEGER NOT NULL CHECK (time_series_type BETWEEN 0 AND 5),
+    owner_category TEXT NOT NULL CHECK (owner_category IN ('Component', 'SupplementalAttribute')),
+    time_series_type TEXT NOT NULL CHECK (time_series_type IN (
+        'SingleTimeSeries', 'NonSequentialTimeSeries', 'Deterministic',
+        'DeterministicSingleTimeSeries', 'Probabilistic', 'Scenarios'
+    )),
     name TEXT NOT NULL,
     initial_timestamp TEXT,
     resolution TEXT,
@@ -822,7 +835,7 @@ CREATE TABLE time_series_associations (
     horizon TEXT,
     interval TEXT,
     count INTEGER,
-    -- Scenarios only (time_series_type = 5), which requires it alongside count.
+    -- Scenarios only (time_series_type = 'Scenarios'), which requires it alongside count.
     scenario_count INTEGER,
     timestamps_hash BLOB,
     units TEXT,
@@ -883,8 +896,6 @@ CREATE TABLE feature_sets (
     PRIMARY KEY (features_hash, key)
 ) strict;
 
-CREATE UNIQUE INDEX uq_ts_assoc_id ON time_series_associations (association_id);
-
 -- Both are needed: uq_ts_assoc cannot enforce uniqueness when resolution or
 -- interval IS NULL (SQLite treats NULLs as distinct); the coalesced twin closes
 -- that gap with the empty string, never a valid ISO-8601 period.
@@ -922,20 +933,17 @@ CREATE INDEX idx_component_field ON time_series_associations (component_field)
     WHERE component_field IS NOT NULL;
 
 -- Hand-inspection projection (mirrors infrastore's view of the same name):
--- decodes the integer discriminants and hex-encodes the content hashes
--- (lowercase, matching infrastore's hash_hex spelling). Nothing reads it.
+-- hex-encodes the content hashes (lowercase, matching infrastore's hash_hex
+-- spelling) so data_hash / features_hash / timestamps_hash are readable in a
+-- plain sqlite3 shell instead of raw BLOBs, and projects `id` under its wire
+-- spelling, `association_id` -- there is only the one stored column now, and
+-- the wire name is what a cost payload or a human reading this view actually
+-- looks for. owner_category and time_series_type need no decoding here: they
+-- are already stored as their wire-spelled TEXT values.
 CREATE VIEW time_series_readable AS
-SELECT id, association_id, owner_id, owner_type,
-       CASE owner_category WHEN 0 THEN 'Component'
-                           WHEN 1 THEN 'SupplementalAttribute'
-                           ELSE 'unknown(' || owner_category || ')' END AS owner_category,
-       CASE time_series_type WHEN 0 THEN 'SingleTimeSeries'
-                             WHEN 1 THEN 'NonSequentialTimeSeries'
-                             WHEN 2 THEN 'Deterministic'
-                             WHEN 3 THEN 'DeterministicSingleTimeSeries'
-                             WHEN 4 THEN 'Probabilistic'
-                             WHEN 5 THEN 'Scenarios'
-                             ELSE 'unknown(' || time_series_type || ')' END AS time_series_type,
+SELECT id AS association_id, owner_id, owner_type,
+       owner_category,
+       time_series_type,
        name,
        initial_timestamp, resolution, length, horizon, interval, count,
        scenario_count,

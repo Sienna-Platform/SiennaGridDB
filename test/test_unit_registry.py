@@ -374,23 +374,30 @@ def _insert_association(
     units=None,
     quantity_kind=None,
     uri="static:load-1",
-    owner_category=0,
+    owner_category="Component",
     name="load",
-    association_id=None,
+    assoc_id=None,
 ):
-    # association_id is store-minted and NOT NULL; default it off owner_id so the
-    # common single-row case needs no argument and stays unique.
-    if association_id is None:
-        association_id = owner_id
+    # id is the store-minted id (AUTOINCREMENT); left to auto-assign unless a
+    # test needs a specific value (e.g. to force a collision).
+    columns = [
+        "owner_id", "owner_type", "owner_category", "time_series_type", "name",
+        "initial_timestamp", "resolution", "length", "units", "quantity_kind",
+        "uri", "data_hash", "features_hash",
+    ]
+    values = [
+        owner_id, "thing", owner_category, "SingleTimeSeries", name,
+        "2020-01-01T00:00:00", "PT1H", 24, units, quantity_kind,
+        uri, b"\x01" * 32, b"\x02" * 32,
+    ]
+    if assoc_id is not None:
+        columns.insert(0, "id")
+        values.insert(0, assoc_id)
+    placeholders = ", ".join(["?"] * len(values))
     conn.execute(
-        "INSERT INTO time_series_associations("
-        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
-        "initial_timestamp, resolution, length, units, quantity_kind, "
-        "uri, data_hash, features_hash) "
-        "VALUES (?, ?, 'thing', ?, 0, ?, '2020-01-01T00:00:00', 'PT1H', 24, ?, ?, "
-        "?, ?, ?)",
-        (association_id, owner_id, owner_category, name, units, quantity_kind, uri,
-         b"\x01" * 32, b"\x02" * 32),
+        f"INSERT INTO time_series_associations({', '.join(columns)}) "
+        f"VALUES ({placeholders})",
+        values,
     )
 
 
@@ -436,9 +443,9 @@ def test_association_data_hash_optional(fresh_db):
     make_entity(fresh_db, 1)
     fresh_db.execute(
         "INSERT INTO time_series_associations("
-        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "owner_id, owner_type, owner_category, time_series_type, name, "
         "initial_timestamp, resolution, length, uri, features_hash) "
-        "VALUES (1, 1, 'thing', 0, 0, 'nohash', '2020-01-01T00:00:00', 'PT1H', 24, "
+        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'nohash', '2020-01-01T00:00:00', 'PT1H', 24, "
         "'static:nohash', ?)",
         (b"\x02" * 32,),
     )
@@ -502,15 +509,15 @@ def test_association_uniqueness_null_resolution_enforced(fresh_db):
     make_entity(fresh_db, 1)
     fresh_db.execute(
         "INSERT INTO time_series_associations("
-        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
-        "uri, features_hash) VALUES (1, 1, 'thing', 0, 1, 'irregular', 'static:a', ?)",
+        "owner_id, owner_type, owner_category, time_series_type, name, "
+        "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:a', ?)",
         (b"\x04" * 32,),
     )
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         fresh_db.execute(
             "INSERT INTO time_series_associations("
-            "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
-            "uri, features_hash) VALUES (2, 1, 'thing', 0, 1, 'irregular', 'static:b', ?)",
+            "owner_id, owner_type, owner_category, time_series_type, name, "
+            "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:b', ?)",
             (b"\x04" * 32,),
         )
 
@@ -521,15 +528,15 @@ def test_association_owner_category_attribute_domain_enforced(fresh_db):
         sqlite3.IntegrityError,
         match=r"owner_id must exist in supplemental_attributes",
     ):
-        _insert_association(fresh_db, 1, owner_category=1)
+        _insert_association(fresh_db, 1, owner_category="SupplementalAttribute")
     make_entity(fresh_db, 2, entity_table="supplemental_attributes")
     fresh_db.execute(
         "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
     )
-    _insert_association(fresh_db, 2, owner_category=1)
+    _insert_association(fresh_db, 2, owner_category="SupplementalAttribute")
 
 
-def test_time_series_readable_decodes_codes_and_hashes(fresh_db):
+def test_time_series_readable_projects_categories_and_decodes_hashes(fresh_db):
     make_entity(fresh_db, 1)
     _insert_association(fresh_db, 1)
     row = fresh_db.execute(
@@ -540,48 +547,42 @@ def test_time_series_readable_decodes_codes_and_hashes(fresh_db):
 
 
 def test_association_id_is_projected_by_readable_view(fresh_db):
-    """The store-minted id is what a cost payload references, so it must be
-    visible in the decode projection alongside the rowid."""
+    """The store-minted id is what a cost payload references, so the decode
+    view must expose it under its wire spelling."""
     make_entity(fresh_db, 1)
-    _insert_association(fresh_db, 1, association_id=4242)
-    row = fresh_db.execute(
-        "SELECT id, association_id FROM time_series_readable"
+    _insert_association(fresh_db, 1, assoc_id=4242)
+    (association_id,) = fresh_db.execute(
+        "SELECT association_id FROM time_series_readable"
     ).fetchone()
-    assert row[1] == 4242
+    assert association_id == 4242
 
 
 def test_association_id_uniqueness_enforced(fresh_db):
-    """Two associations cannot share a minted id: a cost payload referencing it
-    must resolve to exactly one series."""
+    """Two associations cannot share an id: a cost payload referencing it must
+    resolve to exactly one series. `id` is the table's own PRIMARY KEY now, so
+    this is enforced there directly rather than by a separate index."""
     make_entity(fresh_db, 1)
     make_entity(fresh_db, 2)
-    _insert_association(fresh_db, 1, association_id=7, uri="static:a", name="a")
+    _insert_association(fresh_db, 1, assoc_id=7, uri="static:a", name="a")
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
-        _insert_association(fresh_db, 2, association_id=7, uri="static:b", name="b")
+        _insert_association(fresh_db, 2, assoc_id=7, uri="static:b", name="b")
 
 
-def test_association_id_is_required(fresh_db):
-    """NOT NULL: an association with no minted id is unreferenceable."""
-    make_entity(fresh_db, 1)
-    with pytest.raises(sqlite3.IntegrityError, match="NOT NULL"):
-        fresh_db.execute(
-            "INSERT INTO time_series_associations("
-            "owner_id, owner_type, owner_category, time_series_type, name, "
-            "uri, features_hash) VALUES (1, 'thing', 0, 0, 'x', 'static:x', ?)",
-            (b"\x05" * 32,),
-        )
+# test_association_id_is_required removed: the id is now the table's own
+# INTEGER PRIMARY KEY AUTOINCREMENT, so there is no longer an insert that
+# omits it -- SQLite always mints one. Nothing is left to reject.
 
 
 def test_scenarios_association_carries_scenario_count(fresh_db):
-    """Scenarios (time_series_type = 5) requires scenario_count alongside count
+    """Scenarios (time_series_type = 'Scenarios') requires scenario_count alongside count
     per TimeSeries/Scenarios.json."""
     make_entity(fresh_db, 1)
     fresh_db.execute(
         "INSERT INTO time_series_associations("
-        "association_id, owner_id, owner_type, owner_category, time_series_type, "
+        "owner_id, owner_type, owner_category, time_series_type, "
         "name, initial_timestamp, resolution, horizon, interval, count, "
         "scenario_count, uri, features_hash) "
-        "VALUES (1, 1, 'thing', 0, 5, 'scen', '2020-01-01T00:00:00', 'PT1H', "
+        "VALUES (1, 'thing', 'Component', 'Scenarios', 'scen', '2020-01-01T00:00:00', 'PT1H', "
         "'PT24H', 'PT1H', 24, 10, 'static:scen', ?)",
         (b"\x06" * 32,),
     )
@@ -1745,9 +1746,9 @@ def test_association_unit_system_round_trips_lowercase(fresh_db):
     make_entity(fresh_db, 1)
     fresh_db.execute(
         "INSERT INTO time_series_associations("
-        "association_id, owner_id, owner_type, owner_category, time_series_type, name, "
+        "owner_id, owner_type, owner_category, time_series_type, name, "
         "unit_system, uri, features_hash) "
-        "VALUES (1, 1, 'thing', 0, 0, 'v', 'component_base', 'static:v', ?)",
+        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'v', 'component_base', 'static:v', ?)",
         (b"\x07" * 32,),
     )
     (system,) = fresh_db.execute(
@@ -1852,7 +1853,7 @@ def test_association_array_shape_round_trips(fresh_db):
     _insert_association(fresh_db, 1)
     fresh_db.execute(
         "UPDATE time_series_associations SET array_shape = '[24, 3]' "
-        "WHERE association_id = 1"
+        "WHERE id = 1"
     )
     (shape,) = fresh_db.execute(
         "SELECT array_shape FROM time_series_readable WHERE association_id = 1"
@@ -1868,7 +1869,7 @@ def test_association_array_shape_rejects_non_array(fresh_db):
     with pytest.raises(sqlite3.IntegrityError):
         fresh_db.execute(
             "UPDATE time_series_associations SET array_shape = '24' "
-            "WHERE association_id = 1"
+            "WHERE id = 1"
         )
 
 

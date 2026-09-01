@@ -1584,13 +1584,13 @@ END;
 -- =============================================================================
 -- Time Series Association Owner-Domain Triggers
 -- owner_id references entities (both categories share the entities id-space
--- here, unlike infrastore's independent streams), but a category-1 owner must
--- actually be a supplemental attribute.
+-- here, unlike infrastore's independent streams), but a 'SupplementalAttribute'
+-- owner must actually be a supplemental attribute.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain BEFORE
 INSERT
     ON time_series_associations
-    WHEN NEW.owner_category = 1
+    WHEN NEW.owner_category = 'SupplementalAttribute'
     AND NOT EXISTS (
         SELECT
             1
@@ -1603,7 +1603,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = 1.'
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = ''SupplementalAttribute''.'
     );
 
 END;
@@ -1612,7 +1612,7 @@ CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain_updat
 UPDATE
     OF owner_id,
     owner_category ON time_series_associations
-    WHEN NEW.owner_category = 1
+    WHEN NEW.owner_category = 'SupplementalAttribute'
     AND NOT EXISTS (
         SELECT
             1
@@ -1625,7 +1625,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = 1.'
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = ''SupplementalAttribute''.'
     );
 
 END;

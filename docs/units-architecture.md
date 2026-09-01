@@ -82,10 +82,10 @@ erDiagram
         text quantity_type FK
     }
     time_series_associations {
-        int association_id UK
+        int id PK
         int owner_id FK
-        int owner_category
-        int time_series_type
+        text owner_category
+        text time_series_type
         text name
         int scenario_count
         text units
@@ -160,12 +160,17 @@ sequenceDiagram
     Assoc-->>Data: OK or ABORT
 ```
 
-Alongside those, `association_id` carries the store-minted surrogate id. It is not decoration: a
-time-series-backed cost payload names its series by this number — a `TIME_SERIES_*` function data's
-`association_id`, `FuelCurve.fuel_cost_time_series`, `MarketBidTimeSeriesCost.start_up_association_id`,
-and the two `*_association_id` fields on the incremental and average-rate curves. The rowid `id` is
-not a substitute: SQLite may reuse it after a delete, and a reused reference resolving to a
-different series is the failure the minted id exists to prevent.
+Alongside those, `id` — the table's `INTEGER PRIMARY KEY AUTOINCREMENT` — carries the store-minted
+id, mirroring infrastore's own declaration verbatim. It is not decoration: a time-series-backed
+cost payload names its series by this number, spelled `association_id` on the wire — a
+`TIME_SERIES_*` function data's `association_id`, `FuelCurve.fuel_cost_time_series`,
+`MarketBidTimeSeriesCost.start_up_association_id`, and the two `*_association_id` fields on the
+incremental and average-rate curves. `association_id` is not a second column, only this one's wire
+spelling. `AUTOINCREMENT` is what makes it safe to carry: SQLite never reissues an id a delete
+freed, so a stored reference either still resolves to the same row or fails outright — never
+silently landing on a different series that later reused the same number. The id is meaningful
+only against its origin store; aggregating rows from more than one store means re-minting ids on
+import, exactly as infrastore's own `merge` does.
 
 `quantity_kind` is deliberately free-form, mirroring infrastore: composite economic quantities
 ($/MWh, MMBtu/MWh) must not require a vocabulary migration. The guard fires only when a row uses a
@@ -316,14 +321,16 @@ GridDB's `time_series_associations` (with its `feature_sets` companion) and
 straight into a store at the modeling stage. The mirror is the contract; consequences worth
 knowing:
 
-**Integer codes and BLOB hashes are on-disk contracts.** `owner_category` (0 = Component,
-1 = SupplementalAttribute) and `time_series_type` (0–5, `SingleTimeSeries` through `Scenarios`)
-are infrastore's `::code` values, not names — GridDB's own `time_series_readable` view (a
-column-for-column copy of infrastore's view of the same name, not a way to query infrastore
-itself) decodes them for hand inspection. `data_hash` / `features_hash` / `timestamps_hash` are
-SHA-256 content addresses. A `NonSequentialTimeSeries`'s explicit timestamp vector is not stored
-in this schema; `timestamps_hash` is only a locator into the producing store, which holds the
-vector itself.
+**`owner_category` and `time_series_type` hold the wire spelling, not infrastore's on-disk
+codes.** Infrastore packs both as `INTEGER` (`::code`) for a measured index-size win at its own
+scale; GridDB states its priority as user-friendly over performance (see the schema file header),
+so both columns are `TEXT` holding the string spelling every reader and wire payload already uses
+(`'Component'`/`'SupplementalAttribute'`; `'SingleTimeSeries'` through `'Scenarios'`) — no
+decoding needed. `data_hash` / `features_hash` / `timestamps_hash` remain BLOB SHA-256 content
+addresses; GridDB's own `time_series_readable` view still hex-renders those for hand inspection
+(they stay unreadable in a plain `sqlite3` shell otherwise). A `NonSequentialTimeSeries`'s
+explicit timestamp vector is not stored in this schema; `timestamps_hash` is only a locator into
+the producing store, which holds the vector itself.
 
 **Where the catalog and the SiennaSchemas wire form diverge, the wire form wins.** The schemas
 (`TimeSeries/*.json`) require `uri` (the dense-data locator) and `element_shape`, and declare
@@ -363,4 +370,5 @@ the bases. Resolvability at the data level is the writer's responsibility, same 
 **GridDB keeps referential integrity infrastore deliberately omits.** Infrastore's endpoints live
 in the consumer's object graph, so it has no FKs; here both endpoints live in this database, so
 `owner_id`/`component_id`/`attribute_id` are FK-enforced (plus an owner-domain trigger for
-`owner_category = 1`). FKs are GridDB-side only and vanish harmlessly on deserialization.
+`owner_category = 'SupplementalAttribute'`). FKs are GridDB-side only and vanish harmlessly on
+deserialization.
