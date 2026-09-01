@@ -91,6 +91,15 @@
     ],
     "demand_technologies": [
       {"component": "DemandRequirement", "file": "Investments/Technologies/DemandRequirement.json", "is_psy": false}
+    ],
+    "trading_hubs": [
+      {"component": "TradingHub", "file": "Operations/Market/TradingHub.json", "is_psy": true}
+    ],
+    "virtual_participants": [
+      {"component": "VirtualParticipant", "file": "Operations/Market/VirtualParticipant.json", "is_psy": true}
+    ],
+    "point_to_point_bids": [
+      {"component": "PointToPointBid", "file": "Operations/Market/PointToPointBid.json", "is_psy": true}
     ]
   }
 }

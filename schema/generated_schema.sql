@@ -14,21 +14,22 @@ CREATE TABLE thermal_generators (
     available BOOLEAN NOT NULL,
     status BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    active_power REAL NOT NULL, -- Units: MW
-    reactive_power REAL NOT NULL, -- Units: MVAr
-    rating REAL NOT NULL, -- Units: MVA
-    active_power_limits JSON NOT NULL, -- Units: MW
-    reactive_power_limits JSON NULL, -- Units: MVAr
-    ramp_limits JSON NULL, -- Units: MW/min
+    active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    active_power_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    ramp_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu/min, NATURAL_UNITS: MW/min)
     operation_cost JSON NOT NULL,
     base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     time_limits JSON NULL, -- Units: min
     must_run BOOLEAN NULL DEFAULT FALSE,
     prime_mover_type TEXT NULL DEFAULT 'OT' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
     fuel TEXT NULL DEFAULT 'OTHER' CHECK (fuel IN ('ANTHRACITE_COAL', 'BITUMINOUS_COAL', 'LIGNITE_COAL', 'SUBBITUMINOUS_COAL', 'WASTE_COAL', 'REFINED_COAL', 'SYNTHESIS_GAS_COAL', 'DISTILLATE_FUEL_OIL', 'JET_FUEL', 'KEROSENE', 'PETROLEUM_COKE', 'RESIDUAL_FUEL_OIL', 'PROPANE', 'SYNTHESIS_GAS_PETROLEUM_COKE', 'WASTE_OIL', 'BLAST_FURNACE_GAS', 'NATURAL_GAS', 'OTHER_GAS', 'AG_BYPRODUCT', 'MUNICIPAL_WASTE', 'OTHER_BIOMASS_SOLIDS', 'WOOD_WASTE_SOLIDS', 'OTHER_BIOMASS_LIQUIDS', 'SLUDGE_WASTE', 'BLACK_LIQUOR', 'WOOD_WASTE_LIQUIDS', 'LANDFILL_GAS', 'OTHER_BIOMASS_GAS', 'NUCLEAR', 'WASTE_HEAT', 'TIRE_DERIVED_FUEL', 'COAL', 'GEOTHERMAL', 'OTHER')) REFERENCES fuels (name),
     time_at_status REAL NULL DEFAULT 600000.0, -- Units: min
     dynamic_injector INTEGER NULL,
-    power_trajectory JSON NULL, -- Units: MW
+    power_trajectory JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     start_time_limits JSON NULL, -- Units: min
     start_types INTEGER NULL
 );
@@ -39,14 +40,15 @@ CREATE TABLE renewable_generators (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    active_power REAL NOT NULL, -- Units: MW
-    reactive_power REAL NOT NULL, -- Units: MVAr
-    rating REAL NOT NULL, -- Units: MVA
+    active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     prime_mover_type TEXT NOT NULL CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
-    reactive_power_limits JSON NULL, -- Units: MVAr
+    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     power_factor REAL NOT NULL, -- Units: 1
     operation_cost JSON NULL,
     base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     dynamic_injector INTEGER NULL
 );
 
@@ -58,15 +60,16 @@ CREATE TABLE hydro_generators (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    active_power REAL NOT NULL, -- Units: MW
-    reactive_power REAL NOT NULL, -- Units: MVAr
-    rating REAL NOT NULL, -- Units: MVA
+    active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     prime_mover_type TEXT NULL CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
-    active_power_limits JSON NOT NULL, -- Units: MW
-    reactive_power_limits JSON NULL, -- Units: MVAr
-    ramp_limits JSON NULL, -- Units: MW/min
+    active_power_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    ramp_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu/min, NATURAL_UNITS: MW/min)
     time_limits JSON NULL, -- Units: min
     base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     status BOOLEAN NULL DEFAULT FALSE,
     time_at_status REAL NULL DEFAULT 600000.0, -- Units: min
     operation_cost JSON NOT NULL,
@@ -75,7 +78,7 @@ CREATE TABLE hydro_generators (
     outflow_limits JSON NULL, -- Units: m3/s
     conversion_factor REAL NULL DEFAULT 1.0, -- Units: 1
     travel_time REAL NULL, -- Units: min
-    active_power_pump REAL NULL DEFAULT 0.0, -- Units: MW
+    active_power_pump REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     transition_time JSON NULL DEFAULT '{"pump":0.0,"turbine":0.0}', -- Units: min
     minimum_time JSON NULL DEFAULT '{"pump":0.0,"turbine":0.0}', -- Units: min
     must_run BOOLEAN NULL DEFAULT FALSE
@@ -93,21 +96,22 @@ CREATE TABLE storage_units (
     energy_units TEXT NULL DEFAULT 'MWH' CHECK (energy_units IN ('MWH', 'MWMIN')),
     storage_level_limits JSON NOT NULL,
     initial_storage_capacity_level REAL NOT NULL, -- Units: 1
-    rating REAL NOT NULL, -- Units: MVA
-    active_power REAL NOT NULL, -- Units: MW
-    input_active_power_limits JSON NOT NULL, -- Units: MW
-    output_active_power_limits JSON NOT NULL, -- Units: MW
+    rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    input_active_power_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    output_active_power_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     efficiency JSON NOT NULL,
-    reactive_power REAL NOT NULL, -- Units: MVAr
-    reactive_power_limits JSON NULL, -- Units: MVAr
+    reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     operation_cost JSON NOT NULL,
     conversion_factor REAL NULL DEFAULT 1.0, -- Units: 1
     storage_target REAL NULL DEFAULT 0.0, -- Units: 1
     cycle_limits INTEGER NULL DEFAULT 10000, -- Units: 1
-    ramp_limits JSON NULL, -- Units: MW/min
+    ramp_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu/min, NATURAL_UNITS: MW/min)
     self_discharge REAL NULL DEFAULT 0.0, -- Units: 1/min
-    standing_loss REAL NULL DEFAULT 0.0, -- Units: MW
+    standing_loss REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     dynamic_injector INTEGER NULL
 );
 
@@ -138,32 +142,33 @@ CREATE TABLE loads (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    active_power REAL NULL, -- Units: MW
-    reactive_power REAL NULL, -- Units: MVAr
+    active_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     base_power REAL NOT NULL, -- Units: MVA
-    max_active_power REAL NULL, -- Units: MW
-    max_reactive_power REAL NULL, -- Units: MVAr
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    max_active_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    max_reactive_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     conformity TEXT NULL DEFAULT 'UNDEFINED' CHECK (conformity IN ('NON_CONFORMING', 'CONFORMING', 'UNDEFINED')),
     dynamic_injector INTEGER NULL,
-    constant_active_power REAL NULL DEFAULT 0.0, -- Units: MW
-    constant_reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
-    impedance_active_power REAL NULL DEFAULT 0.0, -- Units: MW
-    impedance_reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
-    current_active_power REAL NULL DEFAULT 0.0, -- Units: MW
-    current_reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
-    max_constant_active_power REAL NULL DEFAULT 0.0, -- Units: MW
-    max_constant_reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
-    max_impedance_active_power REAL NULL DEFAULT 0.0, -- Units: MW
-    max_impedance_reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
-    max_current_active_power REAL NULL DEFAULT 0.0, -- Units: MW
-    max_current_reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
+    constant_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    constant_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    impedance_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    impedance_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    current_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    current_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    max_constant_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    max_constant_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    max_impedance_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    max_impedance_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    max_current_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    max_current_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     operation_cost JSON NULL,
-    rating REAL NULL, -- Units: MVA
-    reactive_power_limits JSON NULL, -- Units: MVAr
+    rating REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     motor_technology TEXT NULL DEFAULT 'UNDETERMINED' CHECK (motor_technology IN ('INDUCTION', 'SYNCHRONOUS', 'UNDETERMINED')),
     alpha REAL NULL,
     beta REAL NULL,
-    active_power_limits JSON NULL, -- Units: MW
+    active_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     load_balance_time_horizon INTEGER NULL
 );
 
@@ -172,20 +177,21 @@ CREATE TABLE transmission_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
-    active_power_flow REAL NOT NULL, -- Units: MW
-    reactive_power_flow REAL NOT NULL, -- Units: MVAr
+    active_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     r REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     x REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     b JSON NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: S)
-    continuous_rating REAL NOT NULL, -- Units: MVA
-    rating_b REAL NULL, -- Units: MVA
-    rating_c REAL NULL, -- Units: MVA
+    continuous_rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    rating_b REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    rating_c REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     angle_limits JSON NOT NULL, -- Units: rad
     g JSON NULL DEFAULT '{"from":0.0,"to":0.0}', -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: S)
-    flow_limits JSON NULL -- Units: MW
+    flow_limits JSON NULL -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
 );
 
 -- transmission_interchanges: generated from AreaInterchange
@@ -193,11 +199,12 @@ CREATE TABLE transmission_interchanges (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
-    active_power_flow REAL NOT NULL, -- Units: MW
+    active_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     from_area INTEGER NOT NULL,
     to_area INTEGER NOT NULL,
-    flow_limits JSON NOT NULL, -- Units: MW
-    base_power REAL NOT NULL -- Units: MVA
+    flow_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 );
 
 -- discrete_controlled_ac_branches: generated from DiscreteControlledACBranch
@@ -206,9 +213,10 @@ CREATE TABLE discrete_controlled_ac_branches (
     name TEXT NOT NULL UNIQUE,
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     r REAL NOT NULL, -- Units: pu
     x REAL NOT NULL, -- Units: pu
-    rating REAL NOT NULL, -- Units: MVA
+    rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     discrete_branch_type TEXT NULL DEFAULT 'OTHER' CHECK (discrete_branch_type IN ('SWITCH', 'BREAKER', 'OTHER')),
     branch_status TEXT NULL DEFAULT 'CLOSED' CHECK (branch_status IN ('OPEN', 'CLOSED')),
     normal_branch_status TEXT NULL DEFAULT 'CLOSED' CHECK (normal_branch_status IN ('OPEN', 'CLOSED'))
@@ -229,12 +237,13 @@ CREATE TABLE transformer_circuits (
     control_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: rad, ACTIVE_POWER_FLOW_DISABLED: rad, ASYMMETRIC_ACTIVE_POWER_FLOW: rad, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: rad, CONTROL_OF_DC_LINE: 1, CONTROL_OF_DC_LINE_DISABLED: 1, FIXED: 1, REACTIVE_POWER_FLOW: 1, REACTIVE_POWER_FLOW_DISABLED: 1, UNDEFINED: 1, VOLTAGE: 1, VOLTAGE_DISABLED: 1)
     controlled_quantity_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: MW, ACTIVE_POWER_FLOW_DISABLED: MW, ASYMMETRIC_ACTIVE_POWER_FLOW: MW, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: MW, CONTROL_OF_DC_LINE: MW, CONTROL_OF_DC_LINE_DISABLED: MW, FIXED: pu, REACTIVE_POWER_FLOW: MVAr, REACTIVE_POWER_FLOW_DISABLED: MVAr, UNDEFINED: pu, VOLTAGE: pu, VOLTAGE_DISABLED: pu)
     number_of_tap_positions INTEGER NULL DEFAULT 33,
-    rating REAL NULL, -- Units: MVA
-    rating_b REAL NULL, -- Units: MVA
-    rating_c REAL NULL, -- Units: MVA
-    active_power_flow REAL NULL DEFAULT 0.0, -- Units: MW
-    reactive_power_flow REAL NULL DEFAULT 0.0, -- Units: MVAr
+    rating REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    rating_b REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    rating_c REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    active_power_flow REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power_flow REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     base_power REAL NULL DEFAULT 100.0, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_voltage_primary REAL NULL, -- Units: kV
     base_voltage_secondary REAL NULL -- Units: kV
 );
@@ -277,13 +286,14 @@ CREATE TABLE two_terminal_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
-    active_power_flow REAL NOT NULL, -- Units: MW
+    active_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
-    active_power_limits_from JSON NULL, -- Units: MW
-    active_power_limits_to JSON NULL, -- Units: MW
-    reactive_power_limits_from JSON NULL, -- Units: MVAr
-    reactive_power_limits_to JSON NULL, -- Units: MVAr
-    base_power REAL NOT NULL -- Units: MVA
+    active_power_limits_from JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    active_power_limits_to JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power_limits_from JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    reactive_power_limits_to JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 );
 
 -- tmodel_hvdc_lines: generated from TModelHVDCLine
@@ -308,11 +318,12 @@ CREATE TABLE synchronous_condensers (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    reactive_power REAL NOT NULL, -- Units: MVAr
-    rating REAL NOT NULL, -- Units: MVA
-    reactive_power_limits JSON NULL, -- Units: MVAr
+    reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     base_power REAL NOT NULL, -- Units: MVA
-    active_power_losses REAL NULL DEFAULT 0.0 -- Units: MW
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    active_power_losses REAL NULL DEFAULT 0.0 -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
 );
 
 -- fixed_admittance: generated from FixedAdmittance
@@ -346,10 +357,10 @@ CREATE TABLE sources (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    active_power REAL NULL DEFAULT 0.0, -- Units: MW
-    reactive_power REAL NULL DEFAULT 0.0, -- Units: MVAr
-    active_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MW
-    reactive_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: MVAr
+    active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    active_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    reactive_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     r_th REAL NULL DEFAULT 0.0, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     x_th REAL NULL DEFAULT 0.0, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
@@ -357,6 +368,7 @@ CREATE TABLE sources (
     internal_angle REAL NULL DEFAULT 0.0, -- Units: rad
     base_voltage REAL NULL, -- Units: kV
     base_power REAL NULL DEFAULT 100.0, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     operation_cost JSON NOT NULL DEFAULT '{"cost_type":"IMPORTEXPORT","energy_export_weekly_limit":1000000.0,"energy_import_weekly_limit":1000000.0,"export_offer_curves":{"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}},"import_offer_curves":{"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}'
 );
 
@@ -367,11 +379,12 @@ CREATE TABLE interconnecting_converters (
     available BOOLEAN NOT NULL,
     bus INTEGER NOT NULL,
     dc_bus INTEGER NOT NULL,
-    active_power REAL NOT NULL, -- Units: MW
-    rating REAL NOT NULL, -- Units: MVA
-    active_power_limits JSON NOT NULL, -- Units: MW
+    active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
+    active_power_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     base_power REAL NOT NULL, -- Units: MVA
-    reactive_power_limits JSON NULL, -- Units: MVAr
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     dc_current REAL NULL DEFAULT 0.0, -- Units: A
     max_dc_current REAL NULL DEFAULT 100000000.0, -- Units: A
     loss_function JSON NULL,
@@ -397,12 +410,13 @@ CREATE TABLE facts_control_devices (
     control_mode TEXT NULL CHECK (control_mode IN ('OOS', 'NML', 'BYP')),
     unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     voltage_setpoint REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
-    max_shunt_current REAL NOT NULL, -- Units: MVA
+    max_shunt_current REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     reactive_power_required REAL NOT NULL, -- Units: 1
-    max_reactive_power REAL NULL DEFAULT 9999.0,
+    max_reactive_power REAL NULL DEFAULT 9999.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     shunt_control_type TEXT NULL DEFAULT 'STATCOM' CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
     regulated_bus_number INTEGER NULL DEFAULT 0, -- Units: 1
     base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     dynamic_injector INTEGER NULL
 );
 
@@ -510,4 +524,34 @@ CREATE TABLE demand_technologies (
     new_construction_year INTEGER NULL DEFAULT 2020,
     region JSON NULL,
     requirements JSON NULL DEFAULT '[]'
+);
+
+-- trading_hubs: generated from TradingHub
+CREATE TABLE trading_hubs (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- virtual_participants: generated from VirtualParticipant
+CREATE TABLE virtual_participants (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    settlement_point_id INTEGER NULL REFERENCES entities (id) ON DELETE SET NULL,
+    max_supply REAL NOT NULL, -- Units: MW
+    max_demand REAL NOT NULL, -- Units: MW
+    operation_cost JSON NOT NULL
+);
+
+-- point_to_point_bids: generated from PointToPointBid
+CREATE TABLE point_to_point_bids (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    from_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
+    to_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
+    max_active_power REAL NOT NULL, -- Units: MW
+    spread_bid JSON NOT NULL,
+    price_limits JSON NOT NULL, -- Units: USD/MWh
+    linked_crr TEXT NULL
 );

@@ -120,7 +120,7 @@ def test_branch_parameter_pu_pairs_in_vocabulary(fresh_db):
     """The pu pairs seeded from units.json exist in allowed_units."""
     pairs = set(
         fresh_db.execute(
-            "SELECT quantity_type, unit FROM allowed_units WHERE unit = 'pu'"
+            "SELECT quantity_type, unit FROM allowed_units WHERE unit IN ('pu', 'pu/min')"
         ).fetchall()
     )
     assert pairs == {
@@ -129,6 +129,10 @@ def test_branch_parameter_pu_pairs_in_vocabulary(fresh_db):
         ("Susceptance", "pu"),
         ("Conductance", "pu"),
         ("Voltage", "pu"),
+        ("ActivePower", "pu"),
+        ("ReactivePower", "pu"),
+        ("ApparentPower", "pu"),
+        ("ActivePowerChangeRate", "pu/min"),
     }
 
 
@@ -178,9 +182,10 @@ def test_branch_parameter_columns_store_values(fresh_db):
 
 
 def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
-    """r/x/rating are first-class discrete_controlled_ac_branches columns (pu, pu,
-    MVA -- this component has no natural-units option in PSY, unlike transmission_lines),
-    and are registered in unit_conventions with no discriminator. base_power is the
+    """r/x are first-class discrete_controlled_ac_branches columns (pu -- this
+    component has no natural-units option in PSY, unlike transmission_lines),
+    registered in unit_conventions with no discriminator. rating is stored
+    flexibly per power_units, asserted separately below. base_power is the
     per-row system-base snapshot r/x normalize against, mirroring transmission_lines."""
     cols = {
         row[1]: row[2]
@@ -190,6 +195,7 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     assert cols["x"] == "REAL"
     assert cols["rating"] == "REAL"
     assert cols["base_power"] == "REAL"
+    assert cols["power_units"] == "TEXT"
     assert cols["discrete_branch_type"] == "TEXT"
     assert cols["branch_status"] == "TEXT"
     assert cols["normal_branch_status"] == "TEXT"
@@ -197,14 +203,26 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     registered = set(
         fresh_db.execute(
             "SELECT column_name, quantity_type, unit FROM unit_conventions "
-            "WHERE table_name = 'discrete_controlled_ac_branches'"
+            "WHERE table_name = 'discrete_controlled_ac_branches' "
+            "AND discriminator_column IS NULL"
         ).fetchall()
     )
     assert registered == {
         ("r", "Resistance", "pu"),
         ("x", "Reactance", "pu"),
-        ("rating", "ApparentPower", "MVA"),
         ("base_power", "ApparentPower", "MVA"),
+    }
+
+    assert {
+        (col, disc): (qt, unit)
+        for col, disc, qt, unit in fresh_db.execute(
+            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "FROM unit_conventions WHERE table_name = 'discrete_controlled_ac_branches' "
+            "AND discriminator_column = 'power_units'"
+        )
+    } == {
+        ("rating", "COMPONENT_BASE"): ("ApparentPower", "pu"),
+        ("rating", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
     }
 
 
@@ -272,15 +290,12 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ).fetchall()
     )
     # r/x are absent here on purpose: they carry a unit_basis discriminator,
-    # asserted separately below.
+    # asserted separately below. rating/rating_b/rating_c/active_power_flow/
+    # reactive_power_flow are likewise absent: they carry a power_units
+    # discriminator, also asserted separately below.
     assert registered == {
         ("tap", "Dimensionless", "1"),
         ("alpha", "Angle", "rad"),
-        ("rating", "ApparentPower", "MVA"),
-        ("rating_b", "ApparentPower", "MVA"),
-        ("rating_c", "ApparentPower", "MVA"),
-        ("active_power_flow", "ActivePower", "MW"),
-        ("reactive_power_flow", "ReactivePower", "MVAr"),
         ("base_power", "ApparentPower", "MVA"),
         ("base_voltage_primary", "Voltage", "kV"),
         ("base_voltage_secondary", "Voltage", "kV"),
@@ -300,6 +315,26 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("x", "NATURAL_UNITS"): ("Reactance", "ohm"),
     }
 
+    assert {
+        (col, disc): (qt, unit)
+        for col, disc, qt, unit in fresh_db.execute(
+            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
+            "AND discriminator_column = 'power_units'"
+        )
+    } == {
+        ("rating", "COMPONENT_BASE"): ("ApparentPower", "pu"),
+        ("rating", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
+        ("rating_b", "COMPONENT_BASE"): ("ApparentPower", "pu"),
+        ("rating_b", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
+        ("rating_c", "COMPONENT_BASE"): ("ApparentPower", "pu"),
+        ("rating_c", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
+        ("active_power_flow", "COMPONENT_BASE"): ("ActivePower", "pu"),
+        ("active_power_flow", "NATURAL_UNITS"): ("ActivePower", "MW"),
+        ("reactive_power_flow", "COMPONENT_BASE"): ("ReactivePower", "pu"),
+        ("reactive_power_flow", "NATURAL_UNITS"): ("ReactivePower", "MVAr"),
+    }
+
     control_bands = {
         (col, disc): (qt, unit)
         for col, disc, qt, unit in fresh_db.execute(
@@ -313,7 +348,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         "ASYMMETRIC_ACTIVE_POWER_FLOW", "ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED",
     }
     schema_objectives = set(
-        load_schemas_json("Operations/common.json")["definitions"][
+        load_schemas_json("Operations/common.json")["$defs"][
             "TransformerControlObjective"
         ]["enum"]
     )

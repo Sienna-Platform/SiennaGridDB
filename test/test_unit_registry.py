@@ -22,8 +22,8 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
-EXPECTED_ALLOWED_UNITS = 62
-EXPECTED_UNIT_CONVENTIONS = 340
+EXPECTED_ALLOWED_UNITS = 66
+EXPECTED_UNIT_CONVENTIONS = 402
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -611,12 +611,20 @@ def test_transmission_line_discriminated_registry_rows(db):
 
 # Cost payloads
 def _thermal_production_cost(power_units):
-    """The production curve is its own column; operation_cost keeps the rest and
-    may not carry a `variable` copy (CHECK on thermal_generators.operation_cost)."""
+    """The production curve payload written through
+    operation_cost.variable_operation_cost; production_cost is a GENERATED
+    column derived from it, so this is never written directly."""
     return (
         '{"variable_cost_type":"COST","power_units":"' + power_units + '",'
         '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
         '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}'
+    )
+
+
+def _thermal_operation_cost(variable_operation_cost):
+    return (
+        '{"cost_type":"THERMAL","fixed":0,"start_up":0,"shut_down":0,'
+        '"variable_operation_cost":' + variable_operation_cost + '}'
     )
 
 
@@ -634,9 +642,9 @@ def _insert_thermal(conn, gen_id, topo_id, production_cost):
     conn.execute(
         "INSERT INTO thermal_generators("
         "id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, "
-        "active_power_limits, production_cost) "
+        "active_power_limits, operation_cost) "
         "VALUES (?, 'tg', 'CT', 'OTHER', ?, 1.0, 1.0, '{\"min\":0,\"max\":1}', ?)",
-        (gen_id, topo_id, production_cost),
+        (gen_id, topo_id, _thermal_operation_cost(production_cost)),
     )
 
 
@@ -657,15 +665,28 @@ def test_cost_natural_units_variable_accepted(fresh_db):
 
 
 def test_cost_update_relative_base_rejected(fresh_db):
-    """UPDATE that changes production_cost to a relative-base payload is rejected."""
+    """UPDATE that changes operation_cost's variable_operation_cost to a
+    relative-base payload is rejected; production_cost derives from it."""
     topo = _setup_topology(fresh_db)
     _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
     with pytest.raises(
         sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
     ):
         fresh_db.execute(
+            "UPDATE thermal_generators SET operation_cost = ? WHERE id = 2",
+            (_thermal_operation_cost(_thermal_production_cost("COMPONENT_BASE")),),
+        )
+
+
+def test_production_cost_generated_column_rejects_direct_update(fresh_db):
+    """production_cost is GENERATED ALWAYS AS; SQLite itself refuses a direct
+    UPDATE, independent of any CHECK."""
+    topo = _setup_topology(fresh_db)
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
+    with pytest.raises(sqlite3.OperationalError, match="generated column"):
+        fresh_db.execute(
             "UPDATE thermal_generators SET production_cost = ? WHERE id = 2",
-            (_thermal_production_cost("COMPONENT_BASE"),),
+            (_thermal_production_cost("NATURAL_UNITS"),),
         )
 
 
@@ -818,7 +839,10 @@ def test_every_cost_bearing_table_has_both_cost_unit_triggers(db):
 
 # Completeness
 def _table_columns(conn, table):
-    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    """table_xinfo, not table_info: table_info hides GENERATED columns (e.g.
+    thermal_generators.production_cost), which are still real, registered
+    columns here."""
+    return {row[1] for row in conn.execute(f"PRAGMA table_xinfo({table})").fetchall()}
 
 
 def test_completeness_registered_columns_exist(db):

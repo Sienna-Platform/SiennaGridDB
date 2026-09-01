@@ -46,7 +46,7 @@ def test_acbus():
 
 def test_thermal_standard():
     cost = ThermalGenerationCost(
-        variable=CostCurve(
+        variable_operation_cost=CostCurve(
             value_curve=InputOutputCurve(
                 curve_type="INPUT_OUTPUT",
                 function_data=LinearFunctionData(
@@ -79,5 +79,8 @@ def test_thermal_standard():
         active_power_limits={"min": 0.0, "max": 1.0},
         operation_cost=cost,
         base_power=100.0,
+        # rating/active_power_limits are ~1.0-scale, i.e. per unit on
+        # base_power=100.0 (a 100 MVA unit), not 1 MW/MVA in natural units.
+        power_units="COMPONENT_BASE",
     )
     assert cost == thermal_standard.operation_cost

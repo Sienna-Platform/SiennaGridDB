@@ -310,6 +310,18 @@
       "db_only": [
         "power_systems_type"
       ]
+    },
+    "trading_hubs": {},
+    "virtual_participants": {
+      "foreign_keys": {
+        "settlement_point_id": "REFERENCES entities (id) ON DELETE SET NULL"
+      }
+    },
+    "point_to_point_bids": {
+      "foreign_keys": {
+        "from_id": "REFERENCES entities (id) ON DELETE CASCADE",
+        "to_id": "REFERENCES entities (id) ON DELETE CASCADE"
+      }
     }
   }
 }

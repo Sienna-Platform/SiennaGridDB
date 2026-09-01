@@ -51,17 +51,26 @@ def make_bus(conn, bus_id, name):
 
 
 def insert_thermal(conn, gen_id, bus_id, production_cost):
+    """production_cost is a generated column; the curve is written through
+    operation_cost.variable_operation_cost and read back via production_cost."""
     make_entity(conn, gen_id, "thermal_generators", "ThermalStandard")
     # A fresh build seeds no vocabularies; thermal_generators FKs both of these.
     conn.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES ('ST')")
     conn.execute("INSERT OR IGNORE INTO fuels(name) VALUES ('NATURAL_GAS')")
+    operation_cost = {
+        "cost_type": "THERMAL",
+        "fixed": 0,
+        "shut_down": 0,
+        "start_up": 0,
+        "variable_operation_cost": production_cost,
+    }
     conn.execute(
         """INSERT INTO thermal_generators
                (id, name, prime_mover_type, fuel, balancing_topology, rating,
-                base_power, active_power_limits, production_cost)
+                base_power, active_power_limits, operation_cost)
            VALUES (?, ?, 'ST', 'NATURAL_GAS', ?, 203.2, 100.0,
                    '{"min": 0.0, "max": 203.2}', ?)""",
-        (gen_id, f"gen-{gen_id}", bus_id, json.dumps(production_cost)),
+        (gen_id, f"gen-{gen_id}", bus_id, json.dumps(operation_cost)),
     )
 
 
@@ -456,37 +465,45 @@ def test_unknown_curve_type_is_rejected(fresh_db):
         insert_thermal(fresh_db, 2, bus, cost)
 
 
-def test_operation_cost_may_not_keep_a_copy_of_the_curve(fresh_db):
-    """One source of truth: the curve lives in production_cost, nowhere else."""
+def test_production_cost_cannot_be_written_directly(fresh_db):
+    """One source of truth: production_cost is GENERATED from
+    operation_cost.variable_operation_cost, so SQLite itself refuses a direct
+    write to it -- not a CHECK, a generated-column error."""
     bus = make_bus(fresh_db, 1, "bus-1")
     fresh_db.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES ('ST')")
     fresh_db.execute("INSERT OR IGNORE INTO fuels(name) VALUES ('NATURAL_GAS')")
     make_entity(fresh_db, 2, "thermal_generators", "ThermalStandard")
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(sqlite3.OperationalError, match="generated column"):
         fresh_db.execute(
             """INSERT INTO thermal_generators
                    (id, name, prime_mover_type, fuel, balancing_topology, rating,
                     base_power, active_power_limits, production_cost, operation_cost)
                VALUES (2, 'gen-2', 'ST', 'NATURAL_GAS', ?, 203.2, 100.0,
                        '{"min": 0.0, "max": 203.2}', ?,
-                       '{"cost_type": "THERMAL", "fixed": 0, "variable": {}}')""",
+                       '{"cost_type": "THERMAL", "fixed": 0, "start_up": 0, "shut_down": 0,
+                         "variable_operation_cost": {}}')""",
             (bus, json.dumps(PIECEWISE_IO_COST)),
         )
 
 
 def test_renewable_production_cost_rejects_fuel(fresh_db):
-    """The schemas make RenewableGenerationCost.variable a CostCurve; FUEL has no
-    registered unit here."""
+    """The schemas make RenewableGenerationCost.variable_operation_cost a
+    CostCurve; FUEL has no registered unit here."""
     bus = make_bus(fresh_db, 1, "bus-1")
     fresh_db.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES ('PV')")
     make_entity(fresh_db, 2, "renewable_generators", "RenewableDispatch")
+    operation_cost = {
+        "cost_type": "RENEWABLE",
+        "fixed": 0,
+        "variable_operation_cost": fuel_curve(),
+    }
     with pytest.raises(sqlite3.IntegrityError):
         fresh_db.execute(
             """INSERT INTO renewable_generators
                    (id, name, prime_mover_type, balancing_topology, rating,
-                    base_power, production_cost)
+                    base_power, operation_cost)
                VALUES (2, 'rg', 'PV', ?, 1.0, 1.0, ?)""",
-            (bus, json.dumps(fuel_curve())),
+            (bus, json.dumps(operation_cost)),
         )
 
 
@@ -506,8 +523,10 @@ def test_generators_are_queryable_by_curve_kind(fresh_db):
 
 
 def test_every_generator_table_has_production_cost(db):
+    """production_cost is a GENERATED column, so table_info (which hides
+    generated columns) would miss it -- table_xinfo sees every column."""
     for table in ("thermal_generators", "renewable_generators", "hydro_generators"):
-        columns = {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
+        columns = {r[1] for r in db.execute(f"PRAGMA table_xinfo({table})")}
         assert "production_cost" in columns, table
 
 

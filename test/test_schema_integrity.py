@@ -273,7 +273,7 @@ _TRANSFORMER_ENUM_COLUMNS = [
 @pytest.mark.parametrize("table, column, definition", _TRANSFORMER_ENUM_COLUMNS)
 def test_transformer_enum_checks_match_schema(db, table, column, definition):
     common = load_schemas_json("Operations/common.json")
-    schema_members = common["definitions"][definition]["enum"]
+    schema_members = common["$defs"][definition]["enum"]
     (table_sql,) = db.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
     ).fetchone()

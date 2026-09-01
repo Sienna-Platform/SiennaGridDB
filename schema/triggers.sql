@@ -601,6 +601,69 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_trading_hubs_entity_exists BEFORE
+INSERT
+    ON trading_hubs
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'trading_hubs'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table trading_hubs before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_virtual_participants_entity_exists BEFORE
+INSERT
+    ON virtual_participants
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'virtual_participants'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table virtual_participants before insertion'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_point_to_point_bids_entity_exists BEFORE
+INSERT
+    ON point_to_point_bids
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'point_to_point_bids'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'Entity ID must exist in entities table with entity_table point_to_point_bids before insertion'
+    );
+
+END;
+
 -- Business Logic Validation Triggers
 CREATE TRIGGER enforce_arc_entity_types_insert
 AFTER
@@ -1181,6 +1244,39 @@ END;
 CREATE TRIGGER IF NOT EXISTS delete_interconnecting_converters_entity
 AFTER
     DELETE ON interconnecting_converters FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_trading_hubs_entity
+AFTER
+    DELETE ON trading_hubs FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_virtual_participants_entity
+AFTER
+    DELETE ON virtual_participants FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_point_to_point_bids_entity
+AFTER
+    DELETE ON point_to_point_bids FOR EACH ROW
 BEGIN
 DELETE FROM
     entities
@@ -1910,6 +2006,69 @@ UPDATE
     ON sources
     WHEN json_extract(NEW.operation_cost, '$.import_offer_curves.power_units') <> 'NATURAL_UNITS'
     OR json_extract(NEW.operation_cost, '$.export_offer_curves.power_units') <> 'NATURAL_UNITS'
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+-- virtual_participants carries the schemas' discriminated MarketBidCost /
+-- MarketBidTimeSeriesCost payload; both variants nest their supply and demand
+-- curves in a CostCurve-shaped incremental_offer_curves / decremental_offer_curves
+-- member, each carrying its own power_units, mirroring sources' ImportExportCost
+-- guard above.
+CREATE TRIGGER IF NOT EXISTS validate_virtual_participants_cost_units_insert BEFORE
+INSERT
+    ON virtual_participants
+    WHEN json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') <> 'NATURAL_UNITS'
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_virtual_participants_cost_units_update BEFORE
+UPDATE
+    ON virtual_participants
+    WHEN json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') <> 'NATURAL_UNITS'
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+-- point_to_point_bids.spread_bid mirrors virtual_participants.operation_cost's
+-- shape (incremental side only, per the schema); guarded the same way.
+CREATE TRIGGER IF NOT EXISTS validate_point_to_point_bids_cost_units_insert BEFORE
+INSERT
+    ON point_to_point_bids
+    WHEN json_extract(NEW.spread_bid, '$.incremental_offer_curves.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.spread_bid, '$.decremental_offer_curves.power_units') <> 'NATURAL_UNITS'
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_point_to_point_bids_cost_units_update BEFORE
+UPDATE
+    ON point_to_point_bids
+    WHEN json_extract(NEW.spread_bid, '$.incremental_offer_curves.power_units') <> 'NATURAL_UNITS'
+    OR json_extract(NEW.spread_bid, '$.decremental_offer_curves.power_units') <> 'NATURAL_UNITS'
 BEGIN
 SELECT
     RAISE(
