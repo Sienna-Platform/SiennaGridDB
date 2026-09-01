@@ -92,8 +92,8 @@ erDiagram
         text quantity_kind
         text unit_system
         text uri
-        blob data_hash
-        blob features_hash
+        text data_hash
+        text features_hash
     }
     static_time_series {
         text uri
@@ -326,9 +326,9 @@ codes.** Infrastore packs both as `INTEGER` (`::code`) for a measured index-size
 scale; GridDB states its priority as user-friendly over performance (see the schema file header),
 so both columns are `TEXT` holding the string spelling every reader and wire payload already uses
 (`'Component'`/`'SupplementalAttribute'`; `'SingleTimeSeries'` through `'Scenarios'`) — no
-decoding needed. `data_hash` / `features_hash` / `timestamps_hash` remain BLOB SHA-256 content
-addresses; GridDB's own `time_series_readable` view still hex-renders those for hand inspection
-(they stay unreadable in a plain `sqlite3` shell otherwise). A `NonSequentialTimeSeries`'s
+decoding needed. `data_hash` / `features_hash` / `timestamps_hash` are lowercase hex TEXT (64
+chars), matching infrastore's `hash_hex` spelling, not the raw 32-byte SHA-256 digest — directly
+readable in a plain `sqlite3` shell, no decode view needed. A `NonSequentialTimeSeries`'s
 explicit timestamp vector is not stored in this schema; `timestamps_hash` is only a locator into
 the producing store, which holds the vector itself.
 

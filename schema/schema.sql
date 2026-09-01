@@ -43,8 +43,6 @@ DROP TABLE IF EXISTS transmission_interchanges;
 
 DROP TABLE IF EXISTS entities;
 
-DROP VIEW IF EXISTS time_series_readable;
-
 DROP TABLE IF EXISTS time_series_associations;
 
 DROP TABLE IF EXISTS feature_sets;
@@ -837,7 +835,17 @@ CREATE TABLE time_series_associations (
     count INTEGER,
     -- Scenarios only (time_series_type = 'Scenarios'), which requires it alongside count.
     scenario_count INTEGER,
-    timestamps_hash BLOB,
+    -- Lowercase hex SHA-256 (64 chars), matching infrastore's hash_hex spelling
+    -- (crates/infrastore-core/src/hash.rs), not the raw 32-byte digest. TEXT
+    -- over BLOB costs the ~32% catalog-space increase measured against the
+    -- BLOB encoding -- accepted deliberately, because this schema states its
+    -- priority as user-friendly over performance (see the file header), not
+    -- something to "optimize" back to BLOB later. NULL means unspecified (a
+    -- static series has no timestamp vector to hash).
+    timestamps_hash TEXT CHECK (
+        timestamps_hash IS NULL
+        OR (length(timestamps_hash) = 64 AND timestamps_hash NOT GLOB '*[^0-9a-f]*')
+    ),
     units TEXT,
     quantity_kind TEXT,
     unit_system TEXT,
@@ -866,8 +874,19 @@ CREATE TABLE time_series_associations (
     ),
     application_data TEXT,
     uri TEXT NOT NULL,
-    data_hash BLOB,
-    features_hash BLOB NOT NULL
+    -- Lowercase hex SHA-256 (64 chars) per hash_hex, same rationale as
+    -- timestamps_hash above. Optional (SiennaSchemas wire form): NULL means
+    -- unspecified, not "hash of nothing".
+    data_hash TEXT CHECK (
+        data_hash IS NULL
+        OR (length(data_hash) = 64 AND data_hash NOT GLOB '*[^0-9a-f]*')
+    ),
+    -- Lowercase hex SHA-256 (64 chars) per hash_hex, same rationale as
+    -- timestamps_hash above. NOT NULL: every association carries a feature
+    -- set, even an empty one.
+    features_hash TEXT NOT NULL CHECK (
+        length(features_hash) = 64 AND features_hash NOT GLOB '*[^0-9a-f]*'
+    )
 ) strict;
 
 -- Feature sets are content-addressed by the SHA-256 of the feature map and
@@ -892,7 +911,13 @@ CREATE TABLE feature_sets (
     value_float REAL,
     value_bool INTEGER,
     value_str TEXT,
-    features_hash BLOB NOT NULL,
+    -- Same lowercase hex SHA-256 encoding as time_series_associations.features_hash
+    -- (the join key between the two tables) -- it must match that column's
+    -- storage class byte-for-byte, or the "shared by every association whose
+    -- features_hash matches" contract above silently stops matching anything.
+    features_hash TEXT NOT NULL CHECK (
+        length(features_hash) = 64 AND features_hash NOT GLOB '*[^0-9a-f]*'
+    ),
     PRIMARY KEY (features_hash, key)
 ) strict;
 
@@ -931,31 +956,6 @@ CREATE INDEX idx_interval ON time_series_associations (interval);
 -- `component_field = ?` can still use it (never true of NULL).
 CREATE INDEX idx_component_field ON time_series_associations (component_field)
     WHERE component_field IS NOT NULL;
-
--- Hand-inspection projection (mirrors infrastore's view of the same name):
--- hex-encodes the content hashes (lowercase, matching infrastore's hash_hex
--- spelling) so data_hash / features_hash / timestamps_hash are readable in a
--- plain sqlite3 shell instead of raw BLOBs, and projects `id` under its wire
--- spelling, `association_id` -- there is only the one stored column now, and
--- the wire name is what a cost payload or a human reading this view actually
--- looks for. owner_category and time_series_type need no decoding here: they
--- are already stored as their wire-spelled TEXT values.
-CREATE VIEW time_series_readable AS
-SELECT id AS association_id, owner_id, owner_type,
-       owner_category,
-       time_series_type,
-       name,
-       initial_timestamp, resolution, length, horizon, interval, count,
-       scenario_count,
-       units, quantity_kind, unit_system, time_reference, component_field,
-       element_type, element_shape, array_shape, application_data, uri,
-       CASE WHEN data_hash IS NULL THEN NULL
-            ELSE lower(hex(data_hash)) END AS data_hash,
-       lower(hex(features_hash)) AS features_hash,
-       -- hex() renders NULL as '', invisible to IS NULL; keep absent hashes NULL.
-       CASE WHEN timestamps_hash IS NULL THEN NULL
-            ELSE lower(hex(timestamps_hash)) END AS timestamps_hash
-FROM time_series_associations;
 
 CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,

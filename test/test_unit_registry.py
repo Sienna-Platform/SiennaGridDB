@@ -388,7 +388,7 @@ def _insert_association(
     values = [
         owner_id, "thing", owner_category, "SingleTimeSeries", name,
         "2020-01-01T00:00:00", "PT1H", 24, units, quantity_kind,
-        uri, b"\x01" * 32, b"\x02" * 32,
+        uri, "01" * 32, "02" * 32,
     ]
     if assoc_id is not None:
         columns.insert(0, "id")
@@ -447,7 +447,7 @@ def test_association_data_hash_optional(fresh_db):
         "initial_timestamp, resolution, length, uri, features_hash) "
         "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'nohash', '2020-01-01T00:00:00', 'PT1H', 24, "
         "'static:nohash', ?)",
-        (b"\x02" * 32,),
+        ("02" * 32,),
     )
     (stored,) = fresh_db.execute(
         "SELECT data_hash FROM time_series_associations WHERE name = 'nohash'"
@@ -511,14 +511,14 @@ def test_association_uniqueness_null_resolution_enforced(fresh_db):
         "INSERT INTO time_series_associations("
         "owner_id, owner_type, owner_category, time_series_type, name, "
         "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:a', ?)",
-        (b"\x04" * 32,),
+        ("04" * 32,),
     )
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         fresh_db.execute(
             "INSERT INTO time_series_associations("
             "owner_id, owner_type, owner_category, time_series_type, name, "
             "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:b', ?)",
-            (b"\x04" * 32,),
+            ("04" * 32,),
         )
 
 
@@ -536,25 +536,29 @@ def test_association_owner_category_attribute_domain_enforced(fresh_db):
     _insert_association(fresh_db, 2, owner_category="SupplementalAttribute")
 
 
-def test_time_series_readable_projects_categories_and_decodes_hashes(fresh_db):
+def test_association_categories_and_hashes_readable_directly(fresh_db):
+    """No decode view needed anymore: owner_category/time_series_type are
+    already wire-spelled TEXT, and the hash columns are already lowercase hex
+    TEXT, so a plain SELECT on the base table reads them as-is."""
     make_entity(fresh_db, 1)
     _insert_association(fresh_db, 1)
     row = fresh_db.execute(
         "SELECT owner_category, time_series_type, data_hash, timestamps_hash "
-        "FROM time_series_readable"
+        "FROM time_series_associations"
     ).fetchone()
     assert row == ("Component", "SingleTimeSeries", "01" * 32, None)
 
 
-def test_association_id_is_projected_by_readable_view(fresh_db):
-    """The store-minted id is what a cost payload references, so the decode
-    view must expose it under its wire spelling."""
+def test_association_id_round_trips(fresh_db):
+    """The store-minted id is what a cost payload references, spelled
+    `association_id` on the wire -- there is no second stored column or view
+    alias for it, just this one `id`."""
     make_entity(fresh_db, 1)
     _insert_association(fresh_db, 1, assoc_id=4242)
-    (association_id,) = fresh_db.execute(
-        "SELECT association_id FROM time_series_readable"
+    (assoc_id,) = fresh_db.execute(
+        "SELECT id FROM time_series_associations"
     ).fetchone()
-    assert association_id == 4242
+    assert assoc_id == 4242
 
 
 def test_association_id_uniqueness_enforced(fresh_db):
@@ -584,10 +588,10 @@ def test_scenarios_association_carries_scenario_count(fresh_db):
         "scenario_count, uri, features_hash) "
         "VALUES (1, 'thing', 'Component', 'Scenarios', 'scen', '2020-01-01T00:00:00', 'PT1H', "
         "'PT24H', 'PT1H', 24, 10, 'static:scen', ?)",
-        (b"\x06" * 32,),
+        ("06" * 32,),
     )
     row = fresh_db.execute(
-        "SELECT time_series_type, count, scenario_count FROM time_series_readable"
+        "SELECT time_series_type, count, scenario_count FROM time_series_associations"
     ).fetchone()
     assert row == ("Scenarios", 24, 10)
 
@@ -1749,7 +1753,7 @@ def test_association_unit_system_round_trips_lowercase(fresh_db):
         "owner_id, owner_type, owner_category, time_series_type, name, "
         "unit_system, uri, features_hash) "
         "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'v', 'component_base', 'static:v', ?)",
-        (b"\x07" * 32,),
+        ("07" * 32,),
     )
     (system,) = fresh_db.execute(
         "SELECT unit_system FROM time_series_associations WHERE name = 'v'"
@@ -1856,7 +1860,7 @@ def test_association_array_shape_round_trips(fresh_db):
         "WHERE id = 1"
     )
     (shape,) = fresh_db.execute(
-        "SELECT array_shape FROM time_series_readable WHERE association_id = 1"
+        "SELECT array_shape FROM time_series_associations WHERE id = 1"
     ).fetchone()
     assert shape == "[24, 3]"
 
@@ -1880,10 +1884,10 @@ def test_feature_set_rejects_reserved_key(fresh_db):
         fresh_db.execute(
             "INSERT INTO feature_sets(key, value_kind, value_str, features_hash) "
             "VALUES ('association_id', 'str', 'x', ?)",
-            (b"\x03" * 32,),
+            ("03" * 32,),
         )
     fresh_db.execute(
         "INSERT INTO feature_sets(key, value_kind, value_str, features_hash) "
         "VALUES ('scenario', 'str', 'high-load', ?)",
-        (b"\x03" * 32,),
+        ("03" * 32,),
     )
