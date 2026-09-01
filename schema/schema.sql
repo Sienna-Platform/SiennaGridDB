@@ -726,10 +726,6 @@ CREATE TABLE supplemental_attributes (
     json_type TEXT generated always AS (json_type (value)) virtual
 );
 
--- Association tables carry a surrogate `id` rather than keying on the pair alone:
--- a consumer stores that id in its own model, and AUTOINCREMENT never reissues one a
--- delete freed, so a stored reference cannot later resolve to a different, valid row.
--- The natural key stays as UNIQUE, so identity is unchanged by the surrogate.
 -- Mirrors infrastore's supplemental_attribute_associations column-for-column so
 -- rows deserialize straight into a store at the modeling stage. Identity is the
 -- (component_id, attribute_id) pair; the type columns are denormalized labels
@@ -737,7 +733,7 @@ CREATE TABLE supplemental_attributes (
 -- integrity infrastore deliberately omits (its endpoints live in the consumer's
 -- object graph; here they live in this database).
 CREATE TABLE supplemental_attribute_associations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     component_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     component_type TEXT NOT NULL,
     attribute_id INTEGER NOT NULL REFERENCES supplemental_attributes (id) ON DELETE CASCADE,
@@ -760,34 +756,30 @@ CREATE TABLE plants (
     json_type TEXT generated always AS (json_type (value)) virtual
 );
 
--- Surrogate id + UNIQUE natural key; see the note above supplemental_attribute_associations.
 CREATE TABLE plant_associations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     plant_id INTEGER NOT NULL,
     entity_id INTEGER NOT NULL,
     group_index INTEGER NOT NULL,
     FOREIGN KEY (plant_id) REFERENCES plants (id) ON DELETE CASCADE,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
-    UNIQUE (plant_id, entity_id)
+    PRIMARY KEY (plant_id, entity_id)
 ) strict;
 
 -- CombinedCycleBlock CT/CA <-> HRSG associations are n-to-m: a CT or CA can
 -- feed multiple HRSGs and an HRSG can have multiple CTs/CAs. Kept in its own
 -- table so (plant, entity) is not unique.
 CREATE TABLE combined_cycle_associations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     plant_id INTEGER NOT NULL,
     entity_id INTEGER NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('CT', 'CA')),
     hrsg_index INTEGER NOT NULL,
     FOREIGN KEY (plant_id) REFERENCES plants (id) ON DELETE CASCADE,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
-    UNIQUE (plant_id, entity_id, hrsg_index)
+    PRIMARY KEY (plant_id, entity_id, hrsg_index)
 ) strict;
 
--- Surrogate id + UNIQUE natural key; see the note above supplemental_attribute_associations.
 CREATE TABLE time_series_associations(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     time_series_uuid TEXT NOT NULL,
     time_series_type TEXT NOT NULL,
     initial_timestamp TEXT NOT NULL,
@@ -938,7 +930,10 @@ CREATE TABLE trading_hubs (
 -- a bus (hub membership) or a market transaction settling at the hub, resolved
 -- through the entities supertype, mirroring plant_associations/
 -- combined_cycle_associations.
--- Surrogate id + UNIQUE natural key; see the note above supplemental_attribute_associations.
+-- Hub membership carries a surrogate `id` rather than keying on the pair alone: a
+-- consumer stores that id in its own model, and AUTOINCREMENT never reissues one a
+-- delete freed, so a stored reference cannot later resolve to a different row. The
+-- (trading_hub_id, entity_id) pair stays UNIQUE, so identity is unchanged.
 CREATE TABLE trading_hub_associations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     trading_hub_id INTEGER NOT NULL,
