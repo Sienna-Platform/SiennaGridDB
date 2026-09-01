@@ -741,6 +741,10 @@ CREATE TABLE supplemental_attributes (
 -- object graph; here they live in this database).
 CREATE TABLE supplemental_attribute_associations (
     id INTEGER PRIMARY KEY,
+    -- The store-minted surrogate id, carried verbatim, exactly as
+    -- time_series_associations carries its own. Distinct from `id` on purpose: `id` is a
+    -- rowid SQLite may reuse after a delete. Store-local -- resolve against the source store.
+    association_id INTEGER NOT NULL,
     component_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     component_type TEXT NOT NULL,
     attribute_id INTEGER NOT NULL REFERENCES supplemental_attributes (id) ON DELETE CASCADE,
@@ -763,26 +767,33 @@ CREATE TABLE plants (
     json_type TEXT generated always AS (json_type (value)) virtual
 );
 
+-- plant and combined-cycle membership are GridDB's own relationships, not a mirror of a
+-- store catalog, so there is no store-minted association_id to carry. They get a local
+-- surrogate instead: AUTOINCREMENT never reissues an id a delete freed, so a consumer
+-- storing one cannot have it later resolve to a different row. The natural key stays
+-- UNIQUE, so identity is unchanged by the surrogate.
 CREATE TABLE plant_associations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     plant_id INTEGER NOT NULL,
     entity_id INTEGER NOT NULL,
     group_index INTEGER NOT NULL,
     FOREIGN KEY (plant_id) REFERENCES plants (id) ON DELETE CASCADE,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
-    PRIMARY KEY (plant_id, entity_id)
+    UNIQUE (plant_id, entity_id)
 ) strict;
 
 -- CombinedCycleBlock CT/CA <-> HRSG associations are n-to-m: a CT or CA can
 -- feed multiple HRSGs and an HRSG can have multiple CTs/CAs. Kept in its own
 -- table so (plant, entity) is not unique.
 CREATE TABLE combined_cycle_associations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     plant_id INTEGER NOT NULL,
     entity_id INTEGER NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('CT', 'CA')),
     hrsg_index INTEGER NOT NULL,
     FOREIGN KEY (plant_id) REFERENCES plants (id) ON DELETE CASCADE,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
-    PRIMARY KEY (plant_id, entity_id, hrsg_index)
+    UNIQUE (plant_id, entity_id, hrsg_index)
 ) strict;
 
 -- Mirrors infrastore's catalog table column-for-column so a row deserializes
@@ -886,6 +897,7 @@ CREATE TABLE timestamp_sets (
 ) strict;
 
 CREATE UNIQUE INDEX uq_ts_assoc_id ON time_series_associations (association_id);
+CREATE UNIQUE INDEX uq_sa_assoc_id ON supplemental_attribute_associations (association_id);
 
 -- Both are needed: uq_ts_assoc cannot enforce uniqueness when resolution or
 -- interval IS NULL (SQLite treats NULLs as distinct); the coalesced twin closes
