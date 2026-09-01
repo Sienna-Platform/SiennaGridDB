@@ -16,7 +16,9 @@ Three layers:
       component with a same-named PSY struct:
         (a) schema property with x-unit in {MW, MVAr, MVA} must map to a PSY field whose
             conversion_unit is ':mva', OR a documented natural-unit field (base_power, whose
-            PSY comment says MVA). Contradiction => FAIL.
+            PSY comment says MVA; a device quantity "at unity voltage"; or any field on a
+            component whose schema carries no power_units property at all, so it has no
+            per-component power base by design). Contradiction => FAIL.
         (b) schema property whose $ref names a common.json definition that mirrors a PSY type
             (FunctionData / ValueCurve / MinMax classes) must match the PSY field's data_type
             string. Mismatch => FAIL.  (HydroReservoir.head_to_volume_factor is the regression
@@ -350,7 +352,10 @@ def layer2(report, conventions, con):
         if table == ATTRIBUTES_WHITELIST_TABLE:
             continue  # whitelisted attribute-name conventions
         if table not in table_columns:
-            cols = {r[1] for r in con.execute("PRAGMA table_info(%s)" % table)}
+            # table_xinfo, not table_info: table_info hides GENERATED columns
+            # (e.g. thermal_generators.production_cost), which would otherwise
+            # false-fail as "registry column not in DB".
+            cols = {r[1] for r in con.execute("PRAGMA table_xinfo(%s)" % table)}
             table_columns[table] = cols
         cols = table_columns[table]
         if not cols:
@@ -385,10 +390,10 @@ def psy_field_is_mva_convertible(field):
     return field.get("needs_conversion") and field.get("conversion_unit") == ":mva"
 
 
-def psy_field_is_documented_natural(name, field):
-    """A power-valued PSY field stored in natural units with no needs_conversion.
+def psy_field_is_documented_natural(name, field, component_props):
+    """A power-valued PSY field the schema legitimately rides as fixed natural units.
 
-    Two documented cases:
+    Three documented cases:
     - base_power (and the pairwise base_power_12/23/31 on ThreeWindingTransformer):
       a device MVA base itself. Exact names, not a prefix — a new base_power_*
       field must be reviewed and added here, not silently exempted.
@@ -396,11 +401,18 @@ def psy_field_is_documented_natural(name, field):
       current expressed as MVA at unity voltage): a device basis, not a system-base
       power, so PSY deliberately stores it unconverted. The idiom is specific — only
       max_shunt_current uses it today — so it exempts exactly that pattern.
+    - a component whose schema carries no `power_units` property at all: by design it
+      has no per-component power base, so every power-family field on it rides the
+      wire in fixed natural units regardless of what PSY's descriptor says internally
+      (TModelHVDCLine is the instance — see its schema description). Mechanically
+      derived from the schema data already loaded, not a hardcoded type-name list.
     """
     comment = field.get("comment") or ""
     if name in ("base_power", "base_power_12", "base_power_23", "base_power_31"):
         return "MVA" in comment
-    return "at unity voltage" in comment.lower() and not field.get("needs_conversion")
+    if "at unity voltage" in comment.lower() and not field.get("needs_conversion"):
+        return True
+    return "power_units" not in component_props
 
 
 def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):
@@ -444,14 +456,14 @@ def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):
                     )
                     continue
                 if not (psy_field_is_mva_convertible(field)
-                        or psy_field_is_documented_natural(prop_name, field)):
+                        or psy_field_is_documented_natural(prop_name, field, props)):
                     report.fail(
                         "L3",
                         "(a) power-unit contradiction %s.%s: schema x-unit=%s but PSY field "
                         "conversion_unit=%s needs_conversion=%s comment-natural=%s"
                         % (comp, prop_name, ann["unit"], field.get("conversion_unit"),
                            field.get("needs_conversion"),
-                           psy_field_is_documented_natural(prop_name, field)),
+                           psy_field_is_documented_natural(prop_name, field, props)),
                     )
                     fail_count += 1
                 else:

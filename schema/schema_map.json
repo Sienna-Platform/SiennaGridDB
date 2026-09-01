@@ -48,14 +48,16 @@
     "three_winding_transformers": [
       {"component": "ThreeWindingTransformer", "file": "Operations/Branch/ThreeWindingTransformer.json", "is_psy": true}
     ],
-    "two_terminal_lcc_lines": [
-      {"component": "TwoTerminalLCCLine", "file": "Operations/Branch/TwoTerminalLCCLine.json", "is_psy": true}
-    ],
-    "two_terminal_vsc_lines": [
+    "two_terminal_hvdc_lines": [
+      {"component": "TwoTerminalGenericHVDCLine", "file": "Operations/Branch/TwoTerminalGenericHVDCLine.json", "is_psy": true},
+      {"component": "TwoTerminalLCCLine", "file": "Operations/Branch/TwoTerminalLCCLine.json", "is_psy": true},
       {"component": "TwoTerminalVSCLine", "file": "Operations/Branch/TwoTerminalVSCLine.json", "is_psy": true}
     ],
     "tmodel_hvdc_lines": [
       {"component": "TModelHVDCLine", "file": "Operations/Branch/TModelHVDCLine.json", "is_psy": true}
+    ],
+    "synchronous_condensers": [
+      {"component": "SynchronousCondenser", "file": "Operations/StaticInjection/SynchronousCondenser.json", "is_psy": true}
     ],
     "fixed_admittance": [
       {"component": "FixedAdmittance", "file": "Operations/StaticInjection/FixedAdmittance.json", "is_psy": true}
@@ -73,7 +75,8 @@
       {"component": "FACTSControlDevice", "file": "Operations/StaticInjection/FACTSControlDevice.json", "is_psy": true}
     ],
     "balancing_topologies": [
-      {"component": "ACBus", "file": "Operations/Topology/ACBus.json", "is_psy": true}
+      {"component": "ACBus", "file": "Operations/Topology/ACBus.json", "is_psy": true},
+      {"component": "DCBus", "file": "Operations/Topology/DCBus.json", "is_psy": true}
     ],
     "supply_technologies": [
       {"component": "SupplyTechnology", "file": "Investments/Technologies/SupplyTechnology.json", "is_psy": false}
@@ -85,6 +88,18 @@
       {"component": "NodalACTransportTechnology", "file": "Investments/Technologies/NodalACTransportTechnology.json", "is_psy": false},
       {"component": "NodalHVDCTransportTechnology", "file": "Investments/Technologies/NodalHVDCTransportTechnology.json", "is_psy": false},
       {"component": "AggregateTransportTechnology", "file": "Investments/Technologies/AggregateTransportTechnology.json", "is_psy": false}
+    ],
+    "demand_technologies": [
+      {"component": "DemandRequirement", "file": "Investments/Technologies/DemandRequirement.json", "is_psy": false}
+    ],
+    "trading_hubs": [
+      {"component": "TradingHub", "file": "Operations/Market/TradingHub.json", "is_psy": true}
+    ],
+    "virtual_participants": [
+      {"component": "VirtualParticipant", "file": "Operations/Market/VirtualParticipant.json", "is_psy": true}
+    ],
+    "point_to_point_bids": [
+      {"component": "PointToPointBid", "file": "Operations/Market/PointToPointBid.json", "is_psy": true}
     ]
   }
 }
