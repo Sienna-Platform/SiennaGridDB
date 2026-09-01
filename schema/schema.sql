@@ -49,8 +49,6 @@ DROP TABLE IF EXISTS time_series_associations;
 
 DROP TABLE IF EXISTS feature_sets;
 
-DROP TABLE IF EXISTS timestamp_sets;
-
 DROP TABLE IF EXISTS attribute_identifiers;
 
 DROP TABLE IF EXISTS attributes;
@@ -741,10 +739,6 @@ CREATE TABLE supplemental_attributes (
 -- object graph; here they live in this database).
 CREATE TABLE supplemental_attribute_associations (
     id INTEGER PRIMARY KEY,
-    -- The store-minted surrogate id, carried verbatim, exactly as
-    -- time_series_associations carries its own. Distinct from `id` on purpose: `id` is a
-    -- rowid SQLite may reuse after a delete. Store-local -- resolve against the source store.
-    association_id INTEGER NOT NULL,
     component_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     component_type TEXT NOT NULL,
     attribute_id INTEGER NOT NULL REFERENCES supplemental_attributes (id) ON DELETE CASCADE,
@@ -798,9 +792,12 @@ CREATE TABLE combined_cycle_associations (
 
 -- Mirrors infrastore's catalog table column-for-column so a row deserializes
 -- straight into a store, and projects onto the SiennaSchemas wire form.
--- owner_category / time_series_type are small INTEGER codes, not names (decode
--- in time_series_readable): the codes are infrastore's on-disk contract, kept
--- 1-byte to hold its type-bearing indexes ~35% smaller than name strings would.
+-- owner_category / time_series_type hold infrastore's INTEGER ::code values,
+-- not names; the wire form is the string spelling (SiennaSchemas'
+-- OwnerCategory is a string enum whose description notes the store holds 0/1
+-- internally). Decode via GridDB's own time_series_readable view, below --
+-- it mirrors infrastore's view of the same name but is this database's own
+-- copy, not a way to query infrastore itself.
 -- unit_system is lowercase 'natural_units' |
 -- 'component_base' -- NOT the component tables' unit_basis vocabulary -- and
 -- carries no CHECK so a third basis can land without a format bump.
@@ -886,18 +883,7 @@ CREATE TABLE feature_sets (
     PRIMARY KEY (features_hash, key)
 ) strict;
 
--- The explicit timestamp vector of a NonSequentialTimeSeries, content-addressed
--- and stored once per distinct time axis. data is infrastore's varint delta
--- encoding, carried verbatim so the vector round-trips bit-exact; it is not
--- human-readable by design. No FK/cascade, same sharing rationale as
--- feature_sets.
-CREATE TABLE timestamp_sets (
-    timestamps_hash BLOB NOT NULL PRIMARY KEY,
-    data BLOB NOT NULL
-) strict;
-
 CREATE UNIQUE INDEX uq_ts_assoc_id ON time_series_associations (association_id);
-CREATE UNIQUE INDEX uq_sa_assoc_id ON supplemental_attribute_associations (association_id);
 
 -- Both are needed: uq_ts_assoc cannot enforce uniqueness when resolution or
 -- interval IS NULL (SQLite treats NULLs as distinct); the coalesced twin closes
@@ -1260,6 +1246,10 @@ CREATE TABLE interconnecting_converters (
 CREATE TABLE static_time_series (
     id INTEGER PRIMARY KEY,
     uri TEXT NOT NULL,
+    -- The timestep's ordinal position within the array named by `uri`, 0-based
+    -- (confirmed by test_static_time_series_rejects_duplicate_timepoint, whose
+    -- first inserted timestep uses idx = 0). Enforced unique per array by the
+    -- (uri, idx) index below.
     idx INTEGER NOT NULL,
     value REAL NOT NULL
 ) strict;

@@ -238,16 +238,22 @@ An association table needs something to name one specific row by — for a calle
 onto, or for another table to reference. Which kind of identifier a table uses depends on
 where the row's identity actually comes from.
 
-**Mirror tables** — `time_series_associations` and `supplemental_attribute_associations` —
-mirror the catalog of an external store: each row corresponds to an association the store
-already knows about and already gave an id to. Carrying that id, rather than minting a
-competing one, is the whole point — a caller working from the store's own reference needs
-to land on the same row here. Both tables carry `association_id INTEGER NOT NULL`, the
-store's id verbatim, enforced unique by its own index (`uq_ts_assoc_id`, `uq_sa_assoc_id`
-— confirmed present on this branch). `id` is still each table's `PRIMARY KEY`, but it's an
-ordinary SQLite rowid that SQLite is free to reuse after a delete; nothing here needs it to
-be stable, because `association_id` already is. **Store `association_id`, not `id`, and
-resolve it against the source store — it is store-local, not a GridDB-native identifier.**
+**Mirror table with a store id** — `time_series_associations` — mirrors the catalog of an
+external store: each row corresponds to an association the store already knows about and
+already gave an id to. Carrying that id, rather than minting a competing one, is the whole
+point — a caller working from the store's own reference needs to land on the same row here.
+The table carries `association_id INTEGER NOT NULL`, the store's id verbatim, enforced unique
+by its own index (`uq_ts_assoc_id` — confirmed present on this branch). `id` is still the
+table's `PRIMARY KEY`, but it's an ordinary SQLite rowid that SQLite is free to reuse after a
+delete; nothing here needs it to be stable, because `association_id` already is. **Store
+`association_id`, not `id`, and resolve it against the source store — it is store-local, not
+a GridDB-native identifier.**
+
+**Mirror table with no store id** — `supplemental_attribute_associations` — mirrors the same
+kind of external association, but infrastore's own wire row for it (`SaWireRow`) carries no
+id: nothing references an attachment, so there is nothing to preserve, and an import mints a
+fresh `id` every time. Identity here is the natural key, `(component_id, attribute_id)`
+(`uq_sa_assoc`); `id` is an ordinary rowid, exactly like the native tables below.
 
 **Native tables** — `plant_associations` and `combined_cycle_associations` — model a
 relationship that exists only inside GridDB; no external store has an opinion about it, so
@@ -262,8 +268,9 @@ so minting the id changes nothing about what identifies the relationship; it onl
 stable handle for a row that already had an identity.
 
 The split comes down to who is responsible for the id: mirroring a store's association
-means preserving the identifier it already assigned; owning a relationship natively means
-minting one only GridDB can guarantee, because only GridDB is the source of truth for it.
+preserves the identifier it already assigned, if it assigned one; owning a relationship
+natively, or mirroring an association the store never gave an id, means minting one only
+GridDB can guarantee, because only GridDB is the source of truth for it.
 
 Confirmed on this branch: deleting the row holding the current maximum `id` in
 `plant_associations` and inserting a new row does not reuse the freed value — the new row's

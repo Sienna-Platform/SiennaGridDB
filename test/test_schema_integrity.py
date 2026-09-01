@@ -321,14 +321,14 @@ def test_supplemental_attribute_association_identity_unique(fresh_db):
     )
     fresh_db.execute(
         "INSERT INTO supplemental_attribute_associations("
-        "association_id, component_id, component_type, attribute_id, attribute_type) "
-        "VALUES (1, 1, 'ThermalStandard', 2, 'GeographicInfo')"
+        "component_id, component_type, attribute_id, attribute_type) "
+        "VALUES (1, 'ThermalStandard', 2, 'GeographicInfo')"
     )
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         fresh_db.execute(
             "INSERT INTO supplemental_attribute_associations("
-            "association_id, component_id, component_type, attribute_id, attribute_type) "
-            "VALUES (2, 1, 'OtherSpelling', 2, 'OtherType')"
+            "component_id, component_type, attribute_id, attribute_type) "
+            "VALUES (1, 'OtherSpelling', 2, 'OtherType')"
         )
 
 

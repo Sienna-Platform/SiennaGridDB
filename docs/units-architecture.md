@@ -310,7 +310,7 @@ keep their inline `unit`/`quantity_type` instead; the exemption is recorded in
 
 ## 6. The infrastore mirror: association tables are a wire contract
 
-GridDB's `time_series_associations` (with its `feature_sets` / `timestamp_sets` companions) and
+GridDB's `time_series_associations` (with its `feature_sets` companion) and
 `supplemental_attribute_associations` mirror infrastore's catalog tables column-for-column
 (`crates/infrastore-core/src/metadata/schema.rs`), so association rows written here deserialize
 straight into a store at the modeling stage. The mirror is the contract; consequences worth
@@ -318,10 +318,12 @@ knowing:
 
 **Integer codes and BLOB hashes are on-disk contracts.** `owner_category` (0 = Component,
 1 = SupplementalAttribute) and `time_series_type` (0–5, `SingleTimeSeries` through `Scenarios`)
-are infrastore's `::code` values, not names — the `time_series_readable` view decodes them for
-hand inspection. `data_hash` / `features_hash` / `timestamps_hash` are SHA-256 content addresses;
-`timestamp_sets.data` carries infrastore's varint delta encoding verbatim so an irregular time
-axis round-trips bit-exact.
+are infrastore's `::code` values, not names — GridDB's own `time_series_readable` view (a
+column-for-column copy of infrastore's view of the same name, not a way to query infrastore
+itself) decodes them for hand inspection. `data_hash` / `features_hash` / `timestamps_hash` are
+SHA-256 content addresses. A `NonSequentialTimeSeries`'s explicit timestamp vector is not stored
+in this schema; `timestamps_hash` is only a locator into the producing store, which holds the
+vector itself.
 
 **Where the catalog and the SiennaSchemas wire form diverge, the wire form wins.** The schemas
 (`TimeSeries/*.json`) require `uri` (the dense-data locator) and `element_shape`, and declare
@@ -342,7 +344,9 @@ that cannot be reconstructed from `horizon`/`count`/`percentiles`/`scenario_coun
 **`unit_system` uses infrastore's spelling, not the component tables'.** Lowercase
 `'natural_units'` / `'component_base'`, NULL meaning unspecified, and deliberately no CHECK — a
 third basis must land without a format bump. Same two-valued concept as §5's `unit_basis`, a
-different vocabulary on purpose: this column is infrastore's, carried through unchanged.
+different vocabulary on purpose: infrastore validates only these two spellings and passes the
+value through untouched — it is the producing application that decides which basis a series
+uses, and both infrastore and GridDB just relay its choice.
 
 **`quantity_kind` is free-form; the registry guards only registered names.** Infrastore leaves the
 column unconstrained so composite economic quantities never force a migration. GridDB adds one
