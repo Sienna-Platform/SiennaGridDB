@@ -20,8 +20,8 @@
     "9. Everything else -> attribute. Sparse or peripheral device detail (converter tap settings, extinction angles, per-terminal parameters)."
   ],
   "counts": {
-    "total": 221,
-    "attribute": 111,
+    "total": 220,
+    "attribute": 110,
     "column": 77,
     "decomposed": 2,
     "rename": 10,
@@ -30,7 +30,7 @@
   },
   "review_notes": [
     "Rules 7 and 8 were originally a single rule justifying columns as 'queried, filtered, aggregated'. That conflated join keys with dense payload and justified 48 of the 78 columns on a query argument that does not hold -- joins here run on ids, names, fuels and administrative fields, essentially never on physical parameter values. The dispositions are largely unchanged; the justification is not, and rule 7 now carries an indexing obligation that rule 8 does not.",
-    "Sparse categoricals are deliberately NOT promoted to columns. loads.motor_technology (1 of 7 components) reads like an administrative filter field, but entities.entity_type = 'MotorLoad' already supplies that key, so rule 6 wins. Same for start_types, must_run, power_mode.",
+    "Sparse categoricals are deliberately NOT promoted to columns. loads.motor_technology (1 of 7 components) reads like an administrative filter field, but entities.entity_type = 'MotorLoad' already supplies that key, so rule 6 wins. Same for start_types, power_mode.",
     "Rule 9 applied to the consolidated two_terminal_hvdc_lines: the three PSY point-to-point variants (Generic, LCC, VSC) share one table, so only the fields common to all three are columns and the 60 variant-specific ones (converter control blocks -- tap settings, transformer ratios, delay and extinction angles, per-terminal limits and setpoints) are attributes. Confirm nobody queries them. reactive_power_limits_from/to were attributes under the old two-table split and are columns now because all three variants carry them; rating, transfer_setpoint and remote_bus_control_from/to went the other way, being variant-specific. The four *_units discriminators are skipped: with their sibling numerics in the attributes channel there is nothing in the row for them to discriminate, and attributes.unit records the basis per row instead.",
     "hydro_reservoirs.upstream_turbines / downstream_turbines / upstream_reservoirs are arrays of entity ids marked attribute here. By rule 4's own logic they should not be -- references inside JSON get no referential integrity. These likely want an association table like supplemental_attribute_associations. Flagged for a separate decision.",
     "loads carries 20 attribute dispositions, nearly all the ZIP-model breakdown (constant_/impedance_/current_ x active/reactive x max_), each present on only 2 of the 7 merged load components.",
@@ -62,7 +62,6 @@
       "active_power_pump": "attribute",
       "dynamic_injector": "skip",
       "minimum_time": "attribute",
-      "must_run": "attribute",
       "status": "column",
       "time_at_status": "column",
       "transition_time": "attribute"

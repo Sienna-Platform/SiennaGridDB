@@ -25,7 +25,6 @@ SELECT
     e.entity_table,
     e.entity_type,
     json_extract(apl.value, '$.min') AS active_power_limit_min,
-    json_extract(mr.value, '$') AS must_run,
     json_extract(tl.value, '$.up') AS uptime,
     json_extract(tl.value, '$.down') AS downtime,
     json_extract(rl.value, '$.up') AS ramp_up,
@@ -36,8 +35,6 @@ FROM
     entities e
     LEFT JOIN attributes apl ON e.id = apl.entity_id
     AND apl.name = 'active_power_limits'
-    LEFT JOIN attributes mr ON e.id = mr.entity_id
-    AND mr.name = 'must_run'
     LEFT JOIN attributes tl ON e.id = tl.entity_id
     AND tl.name = 'time_limits'
     LEFT JOIN attributes rl ON e.id = rl.entity_id
@@ -48,7 +45,6 @@ WHERE
     -- Only include entities that have at least one operational attribute
     (
         apl.entity_id IS NOT NULL
-        OR mr.entity_id IS NOT NULL
         OR tl.entity_id IS NOT NULL
         OR rl.entity_id IS NOT NULL
         OR oc.entity_id IS NOT NULL

@@ -12,7 +12,8 @@ CREATE TABLE thermal_generators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
-    status BOOLEAN NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('OFFLINE', 'STARTUP', 'ONLINE', 'SHUTDOWN')),
+    commitment_mode TEXT NULL DEFAULT 'COMMITTED' CHECK (commitment_mode IN ('UNCOMMITTED', 'COMMITTED', 'SELF_SCHEDULED', 'RELIABILITY', 'MUST_RUN')),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
@@ -24,7 +25,6 @@ CREATE TABLE thermal_generators (
     base_power REAL NOT NULL, -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     time_limits JSON NULL, -- Units: min
-    must_run BOOLEAN NULL DEFAULT FALSE,
     prime_mover_type TEXT NULL DEFAULT 'OT' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
     fuel TEXT NULL DEFAULT 'OTHER' CHECK (fuel IN ('ANTHRACITE_COAL', 'BITUMINOUS_COAL', 'LIGNITE_COAL', 'SUBBITUMINOUS_COAL', 'WASTE_COAL', 'REFINED_COAL', 'SYNTHESIS_GAS_COAL', 'DISTILLATE_FUEL_OIL', 'JET_FUEL', 'KEROSENE', 'PETROLEUM_COKE', 'RESIDUAL_FUEL_OIL', 'PROPANE', 'SYNTHESIS_GAS_PETROLEUM_COKE', 'WASTE_OIL', 'BLAST_FURNACE_GAS', 'NATURAL_GAS', 'OTHER_GAS', 'AG_BYPRODUCT', 'MUNICIPAL_WASTE', 'OTHER_BIOMASS_SOLIDS', 'WOOD_WASTE_SOLIDS', 'OTHER_BIOMASS_LIQUIDS', 'SLUDGE_WASTE', 'BLACK_LIQUOR', 'WOOD_WASTE_LIQUIDS', 'LANDFILL_GAS', 'OTHER_BIOMASS_GAS', 'NUCLEAR', 'WASTE_HEAT', 'TIRE_DERIVED_FUEL', 'COAL', 'GEOTHERMAL', 'OTHER')) REFERENCES fuels (name),
     time_at_status REAL NULL DEFAULT 600000.0, -- Units: min
@@ -81,7 +81,7 @@ CREATE TABLE hydro_generators (
     active_power_pump REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     transition_time JSON NULL DEFAULT '{"pump":0.0,"turbine":0.0}', -- Units: min
     minimum_time JSON NULL DEFAULT '{"pump":0.0,"turbine":0.0}', -- Units: min
-    must_run BOOLEAN NULL DEFAULT FALSE
+    commitment_mode TEXT NULL DEFAULT 'COMMITTED' CHECK (commitment_mode IN ('UNCOMMITTED', 'COMMITTED', 'SELF_SCHEDULED', 'RELIABILITY', 'MUST_RUN'))
 );
 
 -- storage_units: generated from EnergyReservoirStorage

@@ -36,7 +36,11 @@ from power_openapi_models.core.models import (  # noqa: E402
     StartUpStages,
     ThermalGenerationCost,
 )
-from power_openapi_models.operations.models import ACBus, ThermalStandard  # noqa: E402
+from power_openapi_models.operations.models import (  # noqa: E402
+    ACBus,
+    CommitmentModes,
+    ThermalStandard,
+)
 
 
 def test_acbus():
@@ -71,7 +75,7 @@ def test_thermal_standard():
         id=3,
         name="test_thermal",
         available=True,
-        status=True,
+        status="ONLINE",
         bus=3,
         active_power=0.0,
         reactive_power=0.0,
@@ -84,3 +88,4 @@ def test_thermal_standard():
         power_units="COMPONENT_BASE",
     )
     assert cost == thermal_standard.operation_cost
+    assert thermal_standard.commitment_mode == CommitmentModes.COMMITTED.value

@@ -7,7 +7,7 @@
 -- WARNING: This script should only be used while testing the schema and should not
 -- be applied to existing dataset since it drops all the information it has.
 -- Schema/registry revision; bump on every future registry or schema change.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -384,9 +384,9 @@ CREATE TABLE thermal_generators (
     ramp_limits JSON NULL, -- Units: per power_units
     -- Time limits (JSON: {"up": ..., "down": ...}, minutes):
     time_limits JSON NULL,
-    must_run BOOLEAN NOT NULL DEFAULT FALSE,
     available BOOLEAN NOT NULL DEFAULT TRUE,
-    "status" BOOLEAN NOT NULL DEFAULT FALSE,
+    status TEXT NOT NULL DEFAULT 'OFFLINE' CHECK (status IN ('OFFLINE', 'STARTUP', 'ONLINE', 'SHUTDOWN')),
+    commitment_mode TEXT NOT NULL DEFAULT 'COMMITTED' CHECK (commitment_mode IN ('UNCOMMITTED', 'COMMITTED', 'SELF_SCHEDULED', 'RELIABILITY', 'MUST_RUN')),
     active_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     reactive_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     -- NOMENCLATURE: the schemas define ONE OperationalCost object per device,
@@ -497,6 +497,8 @@ CREATE TABLE hydro_generators (
     outflow_limits JSON NULL,
     conversion_factor REAL NULL DEFAULT 1.0 CHECK (conversion_factor > 0),
     travel_time REAL NULL CHECK (travel_time >= 0),
+    -- HydroPumpTurbine-only:
+    commitment_mode TEXT NULL DEFAULT 'COMMITTED' CHECK (commitment_mode IN ('UNCOMMITTED', 'COMMITTED', 'SELF_SCHEDULED', 'RELIABILITY', 'MUST_RUN')),
     -- operation_cost is the schemas' HydroGenerationCost object verbatim
     -- (fixed, variable_operation_cost); see the NOMENCLATURE note on
     -- thermal_generators.operation_cost. HydroGenerationCost.variable_operation_cost
