@@ -97,7 +97,7 @@ erDiagram
     }
     static_time_series {
         text uri
-        int idx
+        int timestep
         real value
     }
 ```
@@ -155,7 +155,7 @@ sequenceDiagram
     App->>Assoc: INSERT (owner, name, units, quantity_kind, uri, ...)
     Assoc->>Reg: trigger checks (quantity_kind, units) when quantity_kind is registered
     Reg-->>Assoc: OK or ABORT
-    App->>Data: INSERT (uri, idx, value)
+    App->>Data: INSERT (uri, timestep, value)
     Data->>Assoc: trigger checks uri exists on some association
     Assoc-->>Data: OK or ABORT
 ```

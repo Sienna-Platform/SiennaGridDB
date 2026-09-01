@@ -1256,15 +1256,15 @@ CREATE TABLE static_time_series (
     uri TEXT NOT NULL,
     -- The timestep's ordinal position within the array named by `uri`, 0-based
     -- (confirmed by test_static_time_series_rejects_duplicate_timepoint, whose
-    -- first inserted timestep uses idx = 0). Enforced unique per array by the
-    -- (uri, idx) index below.
-    idx INTEGER NOT NULL,
+    -- first inserted timestep uses timestep = 0). Enforced unique per array by
+    -- the (uri, timestep) index below.
+    timestep INTEGER NOT NULL,
     value REAL NOT NULL
 ) strict;
 
 -- UNIQUE: one value per (array, timepoint); loader double-inserts must fail
 -- loudly rather than silently duplicate timepoints.
-CREATE UNIQUE INDEX idx_static_time_series_uri_idx ON static_time_series (uri, idx);
+CREATE UNIQUE INDEX uq_static_time_series_uri_timestep ON static_time_series (uri, timestep);
 
 CREATE INDEX idx_arcs_from ON arcs (from_id);
 

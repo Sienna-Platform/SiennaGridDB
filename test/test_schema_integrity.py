@@ -1,7 +1,7 @@
 """Schema-integrity guards outside the unit registry: the entity supertype
 triggers on discrete_controlled_ac_branches and the transformer tables, the
 transformer enum/pairwise CHECK constraints, and the static_time_series
-(uuid, idx) uniqueness contract."""
+(uuid, timestep) uniqueness contract."""
 
 import re
 import sqlite3
@@ -314,7 +314,7 @@ def test_feature_set_key_check_matches_wire_reservation(db):
 
 
 def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
-    """One value per (uri, idx): a loader double-insert must fail loudly
+    """One value per (uri, timestep): a loader double-insert must fail loudly
     instead of silently duplicating timepoints."""
     make_entity(fresh_db, 1)
     fresh_db.execute(
@@ -326,14 +326,14 @@ def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
         ("0b" * 32,),
     )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 0, 1.5)"
+        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 0, 1.5)"
     )
-    with pytest.raises(sqlite3.IntegrityError, match="idx"):
+    with pytest.raises(sqlite3.IntegrityError, match="timestep"):
         fresh_db.execute(
-            "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 0, 2.5)"
+            "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 0, 2.5)"
         )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uri, idx, value) VALUES ('static:load', 1, 2.5)"
+        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 1, 2.5)"
     )
 
 
