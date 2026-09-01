@@ -107,6 +107,8 @@ DROP TABLE IF EXISTS point_to_point_bids;
 
 DROP TABLE IF EXISTS unit_conventions;
 
+DROP TABLE IF EXISTS unit_basis_rules;
+
 DROP TABLE IF EXISTS quantity_types;
 
 DROP TABLE IF EXISTS unit_management_metadata;
@@ -1192,14 +1194,30 @@ CREATE TABLE unit_conventions (
     -- discriminator); reserved for future use.
     discriminator_column_2 TEXT NULL,
     discriminator_value_2 TEXT NULL,
+    -- Base reachable without leaving the database: NULL means same-row
+    -- base_power/base_voltage; otherwise a same-row column name or an
+    -- FK-hop path (col->table.col->table.base_col).
+    base_power_ref TEXT NULL,
+    base_voltage_ref TEXT NULL,
     description TEXT NULL,
-    -- Distinct units per discriminator value for a polymorphic column.
-    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2)
+    -- Distinct units per discriminator value (and quantity_type, for columns
+    -- like admittance whose NATURAL_UNITS value is disambiguated by quantity)
+    -- for a polymorphic column.
+    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2, quantity_type)
 ) strict;
 
 -- For non-polymorphic columns (no discriminator) enforce one row per column.
 -- A table-level UNIQUE can't do this because SQLite treats each NULL
 -- discriminator_value as distinct, so guard those rows with a partial index.
 CREATE UNIQUE INDEX uq_unit_conventions_no_discriminator
-    ON unit_conventions (table_name, column_name)
+    ON unit_conventions (table_name, column_name, quantity_type)
     WHERE discriminator_value IS NULL;
+
+-- Per-quantity-type pu resolution rule: how to divide a COMPONENT_BASE value
+-- down to a physical quantity, in terms of base_power/base_voltage (or a
+-- unit_conventions base_power_ref/base_voltage_ref override).
+CREATE TABLE unit_basis_rules (
+    quantity_type TEXT PRIMARY KEY REFERENCES quantity_types (name),
+    base_expression TEXT NOT NULL,
+    description TEXT NULL
+) strict;

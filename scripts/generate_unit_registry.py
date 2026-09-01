@@ -23,13 +23,13 @@ CANONICAL CHECKSUM REPRESENTATION (must match verify_unit_registry.py exactly)
 --------------------------------------------------------------------------------
 The seal row `unit_management_metadata.unit_conventions_checksum` stores the
 sha256 hex digest of a canonical byte representation built from the LIVE content
-of three tables: quantity_types, allowed_units, unit_conventions.
+of four tables: quantity_types, allowed_units, unit_conventions, unit_basis_rules.
 
 Field / row / table separators (ASCII control chars, chosen so they cannot
 appear in any legitimate field value):
     US  = '\x1f'  (unit separator)  -- between fields within a row
     RS  = '\x1e'  (record separator) -- between rows within a table
-    GS  = '\x1d'  (group separator)  -- between the three table blocks
+    GS  = '\x1d'  (group separator)  -- between the four table blocks
 
 Per-table row field order (NULLs rendered as the empty string):
     quantity_types    : name, default_unit, dimension, description
@@ -38,13 +38,16 @@ Per-table row field order (NULLs rendered as the empty string):
     allowed_units     : quantity_type, unit
     unit_conventions  : table_name, column_name, quantity_type, unit,
                         discriminator_column, discriminator_value,
-                        discriminator_column_2, discriminator_value_2, description
+                        discriminator_column_2, discriminator_value_2,
+                        base_power_ref, base_voltage_ref, description
+    unit_basis_rules  : quantity_type, base_expression, description
 
 Rows within each table are sorted (ascending, Python default string sort) by the
 tuple of their fields in the order listed above. Field values are joined with US,
-rows joined with RS. The three table blocks (quantity_types, allowed_units,
-unit_conventions -- in that fixed order) are joined with GS. The result is
-UTF-8 encoded and hashed with hashlib.sha256; the hex digest is the seal.
+rows joined with RS. The four table blocks (quantity_types, allowed_units,
+unit_conventions, unit_basis_rules -- in that fixed order) are joined with GS.
+The result is UTF-8 encoded and hashed with hashlib.sha256; the hex digest is
+the seal.
 """
 
 import argparse
@@ -63,6 +66,58 @@ DEFAULT_CONVENTIONS = os.path.join(REPO_ROOT, "schema", "column_conventions.json
 DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "schema", "unit_registry.sql")
 
 CONVENTION_VERSION = "sienna-griddb-1.1"
+
+# Per-quantity-type pu resolution rule: how a COMPONENT_BASE value divides down
+# to a physical quantity. These are exactly the quantity types that ever carry
+# unit='pu' in column_conventions.json -- keep that in sync if it changes.
+UNIT_BASIS_RULES = [
+    {
+        "quantity_type": "Voltage",
+        "base_expression": "base_voltage",
+        "description": "Per-unit voltage: divide by the row's base voltage",
+    },
+    {
+        "quantity_type": "Resistance",
+        "base_expression": "base_voltage^2/base_power",
+        "description": "Per-unit resistance: base impedance is base_voltage^2/base_power",
+    },
+    {
+        "quantity_type": "Reactance",
+        "base_expression": "base_voltage^2/base_power",
+        "description": "Per-unit reactance: base impedance is base_voltage^2/base_power",
+    },
+    {
+        "quantity_type": "Susceptance",
+        "base_expression": "base_power/base_voltage^2",
+        "description": "Per-unit susceptance: base admittance is base_power/base_voltage^2",
+    },
+    {
+        "quantity_type": "Conductance",
+        "base_expression": "base_power/base_voltage^2",
+        "description": "Per-unit conductance: base admittance is base_power/base_voltage^2",
+    },
+    {
+        "quantity_type": "ActivePower",
+        "base_expression": "base_power",
+        "description": "Per-unit active power: divide by the row's base power",
+    },
+    {
+        "quantity_type": "ReactivePower",
+        "base_expression": "base_power",
+        "description": "Per-unit reactive power: divide by the row's base power",
+    },
+    {
+        "quantity_type": "ApparentPower",
+        "base_expression": "base_power",
+        "description": "Per-unit apparent power: divide by the row's base power",
+    },
+    {
+        "quantity_type": "ActivePowerChangeRate",
+        "base_expression": "base_power",
+        "description": "Per-unit active power ramp rate: divide by the row's base power; "
+        "the /min in pu/min is a per-minute rate, not a separate time base",
+    },
+]
 
 
 def canonical_dimension(dimension):
@@ -107,6 +162,8 @@ def load_conventions(path):
                 "discriminator_value": entry.get("discriminator_value"),
                 "discriminator_column_2": entry.get("discriminator_column_2"),
                 "discriminator_value_2": entry.get("discriminator_value_2"),
+                "base_power_ref": entry.get("base_power_ref"),
+                "base_voltage_ref": entry.get("base_voltage_ref"),
                 "description": entry.get("description"),
             }
         )
@@ -127,7 +184,7 @@ def validate_pairs(conventions, allowed_units):
     return offenders
 
 
-def canonical_repr(quantity_types, allowed_units, conventions):
+def canonical_repr(quantity_types, allowed_units, conventions, basis_rules):
     qt_rows = (
         (
             r["name"],
@@ -148,19 +205,29 @@ def canonical_repr(quantity_types, allowed_units, conventions):
             none_to_empty(r["discriminator_value"]),
             none_to_empty(r["discriminator_column_2"]),
             none_to_empty(r["discriminator_value_2"]),
+            none_to_empty(r["base_power_ref"]),
+            none_to_empty(r["base_voltage_ref"]),
             none_to_empty(r["description"]),
         )
         for r in conventions
     )
-    return repr_from_rows(qt_rows, au_rows, uc_rows)
+    ub_rows = (
+        (
+            r["quantity_type"],
+            r["base_expression"],
+            none_to_empty(r["description"]),
+        )
+        for r in basis_rules
+    )
+    return repr_from_rows(qt_rows, au_rows, uc_rows, ub_rows)
 
 
-def checksum(quantity_types, allowed_units, conventions):
-    repr_str = canonical_repr(quantity_types, allowed_units, conventions)
+def checksum(quantity_types, allowed_units, conventions, basis_rules):
+    repr_str = canonical_repr(quantity_types, allowed_units, conventions, basis_rules)
     return hashlib.sha256(repr_str.encode("utf-8")).hexdigest()
 
 
-def emit(quantity_types, allowed_units, conventions, units_convention, seal):
+def emit(quantity_types, allowed_units, conventions, basis_rules, units_convention, seal):
     lines = []
     lines.append("PRAGMA foreign_keys = ON;")
     lines.append("")
@@ -209,7 +276,7 @@ def emit(quantity_types, allowed_units, conventions, units_convention, seal):
 
     lines.append("-- 3. Column unit conventions")
     lines.append(
-        "INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, description) VALUES"
+        "INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, base_power_ref, base_voltage_ref, description) VALUES"
     )
     uc_sorted = sorted(
         conventions,
@@ -223,7 +290,7 @@ def emit(quantity_types, allowed_units, conventions, units_convention, seal):
     uc_values = []
     for r in uc_sorted:
         uc_values.append(
-            "    ({}, {}, {}, {}, {}, {}, {}, {}, {})".format(
+            "    ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
                 sql_literal(r["table_name"]),
                 sql_literal(r["column_name"]),
                 sql_literal(r["quantity_type"]),
@@ -232,13 +299,32 @@ def emit(quantity_types, allowed_units, conventions, units_convention, seal):
                 sql_literal(r["discriminator_value"]),
                 sql_literal(r["discriminator_column_2"]),
                 sql_literal(r["discriminator_value_2"]),
+                sql_literal(r["base_power_ref"]),
+                sql_literal(r["base_voltage_ref"]),
                 sql_literal(r["description"]),
             )
         )
     lines.append(",\n".join(uc_values) + ";")
     lines.append("")
 
-    lines.append("-- 4. Registry metadata (non-seal rows)")
+    lines.append("-- 4. Per-quantity-type pu resolution rules")
+    lines.append(
+        "INSERT INTO unit_basis_rules (quantity_type, base_expression, description) VALUES"
+    )
+    ub_sorted = sorted(basis_rules, key=lambda r: r["quantity_type"])
+    ub_values = []
+    for r in ub_sorted:
+        ub_values.append(
+            "    ({}, {}, {})".format(
+                sql_literal(r["quantity_type"]),
+                sql_literal(r["base_expression"]),
+                sql_literal(r["description"]),
+            )
+        )
+    lines.append(",\n".join(ub_values) + ";")
+    lines.append("")
+
+    lines.append("-- 5. Registry metadata (non-seal rows)")
     lines.append("INSERT INTO unit_management_metadata (key, value, description) VALUES")
     meta_rows = sorted(
         [
@@ -264,7 +350,7 @@ def emit(quantity_types, allowed_units, conventions, units_convention, seal):
     lines.append(",\n".join(meta_values) + ";")
     lines.append("")
 
-    lines.append("-- 5. Seal row -- sha256 over canonical repr of the registry.")
+    lines.append("-- 6. Seal row -- sha256 over canonical repr of the registry.")
     lines.append(
         "-- Inserting this row activates the immutability triggers. See the"
     )
@@ -305,15 +391,22 @@ def main(argv=None):
             sys.stderr.write("  - " + offender + "\n")
         return 1
 
-    seal = checksum(quantity_types, allowed_units, conventions)
+    basis_rules = UNIT_BASIS_RULES
+
+    seal = checksum(quantity_types, allowed_units, conventions, basis_rules)
     content = emit(
-        quantity_types, allowed_units, conventions, units_convention, seal
+        quantity_types, allowed_units, conventions, basis_rules, units_convention, seal
     )
     with open(args.output, "w", encoding="utf-8") as handle:
         handle.write(content)
     sys.stderr.write(
-        "Wrote {} ({} quantity_types, {} allowed_units, {} unit_conventions)\n".format(
-            args.output, len(quantity_types), len(allowed_units), len(conventions)
+        "Wrote {} ({} quantity_types, {} allowed_units, {} unit_conventions, "
+        "{} unit_basis_rules)\n".format(
+            args.output,
+            len(quantity_types),
+            len(allowed_units),
+            len(conventions),
+            len(basis_rules),
         )
     )
     sys.stderr.write("Seal sha256: {}\n".format(seal))
