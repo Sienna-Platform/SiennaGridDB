@@ -96,6 +96,27 @@ UNIT_BASIS_RULES = [
         "base_expression": "base_power/base_voltage^2",
         "description": "Per-unit conductance: base admittance is base_power/base_voltage^2",
     },
+    {
+        "quantity_type": "ActivePower",
+        "base_expression": "base_power",
+        "description": "Per-unit active power: divide by the row's base power",
+    },
+    {
+        "quantity_type": "ReactivePower",
+        "base_expression": "base_power",
+        "description": "Per-unit reactive power: divide by the row's base power",
+    },
+    {
+        "quantity_type": "ApparentPower",
+        "base_expression": "base_power",
+        "description": "Per-unit apparent power: divide by the row's base power",
+    },
+    {
+        "quantity_type": "ActivePowerChangeRate",
+        "base_expression": "base_power",
+        "description": "Per-unit active power ramp rate: divide by the row's base power; "
+        "the /min in pu/min is a per-minute rate, not a separate time base",
+    },
 ]
 
 
