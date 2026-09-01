@@ -940,18 +940,6 @@ CREATE INDEX idx_hash ON time_series_associations (data_hash)
 
 CREATE INDEX idx_owner ON time_series_associations (owner_id, owner_category);
 
-CREATE INDEX idx_resolution ON time_series_associations (resolution);
-
-CREATE INDEX idx_ts_type ON time_series_associations (time_series_type);
-
-CREATE INDEX idx_name ON time_series_associations (name);
-
-CREATE INDEX idx_owner_type ON time_series_associations (owner_type);
-
-CREATE INDEX idx_category_owner ON time_series_associations (owner_category, owner_id);
-
-CREATE INDEX idx_interval ON time_series_associations (interval);
-
 -- Partial: component_field is optional, so unset rows cost zero index entries;
 -- `component_field = ?` can still use it (never true of NULL).
 CREATE INDEX idx_component_field ON time_series_associations (component_field)
