@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/SiennaSchemas
-          ref: feat/association-id
+          ref: main
           path: SiennaSchemas
 
       # TODO after psy6 merges to PowerSystems main: drop `ref`.
