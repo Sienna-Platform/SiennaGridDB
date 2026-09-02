@@ -931,19 +931,9 @@ CREATE UNIQUE INDEX uq_ts_assoc_coalesced ON time_series_associations
     (owner_id, owner_category, time_series_type, name,
      COALESCE(resolution, ''), COALESCE(interval, ''), features_hash);
 
+-- Used on every static_time_series insert/update: the FK-style existence
+-- check (triggers.sql) filters time_series_associations by uri per row.
 CREATE INDEX idx_uri ON time_series_associations (uri);
-
--- Partial: data_hash is the optional integrity hash (SiennaSchemas wire form);
--- rows without one cost zero index entries.
-CREATE INDEX idx_hash ON time_series_associations (data_hash)
-    WHERE data_hash IS NOT NULL;
-
-CREATE INDEX idx_owner ON time_series_associations (owner_id, owner_category);
-
--- Partial: component_field is optional, so unset rows cost zero index entries;
--- `component_field = ?` can still use it (never true of NULL).
-CREATE INDEX idx_component_field ON time_series_associations (component_field)
-    WHERE component_field IS NOT NULL;
 
 CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
