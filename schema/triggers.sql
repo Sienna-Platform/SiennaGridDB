@@ -1533,7 +1533,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations rows using a registered quantity_kind must carry a registered (quantity_kind, units) pair from allowed_units.'
+        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_type, unit) pair in allowed_units.'
     );
 
 END;
@@ -1566,7 +1566,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations rows using a registered quantity_kind must carry a registered (quantity_kind, units) pair from allowed_units.'
+        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_type, unit) pair in allowed_units.'
     );
 
 END;

@@ -124,7 +124,7 @@ flowchart TD
     W[INSERT/UPDATE attributes or time_series_associations] --> T{BEFORE trigger}
     T -->|known column/attribute name| M[unit + quantity_type must match\nthe registered unit_conventions row]
     T -->|unregistered attribute, physical value| A[unit + quantity_type must be\na valid pair in allowed_units]
-    T -->|association with REGISTERED quantity_kind| V[quantity_kind, units must be\na valid pair in allowed_units]
+    T -->|association with REGISTERED quantity_kind| V[units must match a registered\n(quantity_type, unit) pair in allowed_units]
     T -->|association with free-form quantity_kind| OK
     M -->|mismatch| X[RAISE ABORT]
     A -->|mismatch| X
@@ -153,7 +153,7 @@ sequenceDiagram
     participant Data as static_time_series
 
     App->>Assoc: INSERT (owner, name, units, quantity_kind, uri, ...)
-    Assoc->>Reg: trigger checks (quantity_kind, units) when quantity_kind is registered
+    Assoc->>Reg: trigger checks units against allowed_units when quantity_kind is registered
     Reg-->>Assoc: OK or ABORT
     App->>Data: INSERT (uri, timestep, value)
     Data->>Assoc: trigger checks uri exists on some association
