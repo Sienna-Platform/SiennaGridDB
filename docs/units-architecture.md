@@ -39,9 +39,13 @@ erDiagram
     quantity_types ||--o{ unit_conventions : "typed by"
     quantity_types ||--o{ unit_basis_rules : "typed by"
     quantity_types ||--o{ attributes : "typed by"
+    quantity_types }o..o{ time_series_associations : "guarded when name is registered"
     allowed_units ||--o{ attributes : validates
+    allowed_units }o..o{ time_series_associations : "validates registered kinds"
     unit_basis_rules }o..o{ unit_conventions : "quantity_type match, not FK"
     entities ||--o{ attributes : has
+    time_series_associations ||--o{ static_time_series : "values for (by uri)"
+    entities ||--o{ time_series_associations : owns
 
     quantity_types {
         text name PK
@@ -77,6 +81,25 @@ erDiagram
         text unit
         text quantity_type FK
     }
+    time_series_associations {
+        int id PK
+        int owner_id FK
+        text owner_category
+        text time_series_type
+        text name
+        int scenario_count
+        text units
+        text quantity_kind
+        text unit_system
+        text uri
+        text data_hash
+        text features_hash
+    }
+    static_time_series {
+        text uri
+        int timestep
+        real value
+    }
 ```
 
 Two ways a column gets its unit:
@@ -98,19 +121,65 @@ application code.
 
 ```mermaid
 flowchart TD
-    W[INSERT/UPDATE attributes] --> T{BEFORE trigger}
+    W[INSERT/UPDATE attributes or time_series_associations] --> T{BEFORE trigger}
     T -->|known column/attribute name| M[unit + quantity_type must match\nthe registered unit_conventions row]
     T -->|unregistered attribute, physical value| A[unit + quantity_type must be\na valid pair in allowed_units]
+    T -->|association with REGISTERED quantity_kind| V[units must match a registered\n(quantity_type, unit) pair in allowed_units]
+    T -->|association with free-form quantity_kind| OK
     M -->|mismatch| X[RAISE ABORT]
     A -->|mismatch| X
+    V -->|mismatch| X
     M -->|match| OK[write proceeds]
     A -->|match| OK
+    V -->|match| OK
 ```
 
 Registry writes themselves (`quantity_types`, `allowed_units`, `unit_conventions`) are blocked
 outright once `unit_management_metadata.unit_conventions_checksum` exists — the only way to change
 the vocabulary is regenerate-and-reload. The seal is **detection, not prevention**: SQLite has no
 privilege model, so `verify_unit_registry.py` is what actually catches tampering.
+
+## 4. Time series: unit-per-association, not unit-per-column
+
+A time series column can't have one fixed unit — the same `static_time_series` table holds load,
+wind, price, and reserve data. So the unit lives on the association row, exactly where infrastore's
+catalog puts it (`units`, `quantity_kind`, `unit_system`):
+
+```mermaid
+sequenceDiagram
+    participant App as Writer
+    participant Assoc as time_series_associations
+    participant Reg as allowed_units
+    participant Data as static_time_series
+
+    App->>Assoc: INSERT (owner, name, units, quantity_kind, uri, ...)
+    Assoc->>Reg: trigger checks units against allowed_units when quantity_kind is registered
+    Reg-->>Assoc: OK or ABORT
+    App->>Data: INSERT (uri, timestep, value)
+    Data->>Assoc: trigger checks uri exists on some association
+    Assoc-->>Data: OK or ABORT
+```
+
+Alongside those, `id` — the table's `INTEGER PRIMARY KEY AUTOINCREMENT` — carries the store-minted
+id, mirroring infrastore's own declaration verbatim. It is not decoration: a time-series-backed
+cost payload names its series by this number, spelled `association_id` on the wire — a
+`TIME_SERIES_*` function data's `association_id`, `FuelCurve.fuel_cost_time_series`,
+`MarketBidTimeSeriesCost.start_up_association_id`, and the two `*_association_id` fields on the
+incremental and average-rate curves. `association_id` is not a second column, only this one's wire
+spelling. `AUTOINCREMENT` is what makes it safe to carry: SQLite never reissues an id a delete
+freed, so a stored reference either still resolves to the same row or fails outright — never
+silently landing on a different series that later reused the same number. The id is meaningful
+only against its origin store; aggregating rows from more than one store means re-minting ids on
+import, exactly as infrastore's own `merge` does.
+
+`quantity_kind` is deliberately free-form, mirroring infrastore: composite economic quantities
+($/MWh, MMBtu/MWh) must not require a vocabulary migration. The guard fires only when a row uses a
+REGISTERED quantity-type name with an unregistered (or missing) unit — a typo on a known quantity
+is a defect, not new vocabulary. Dense values are located by `uri` (the SiennaSchemas wire form's
+required locator; here it keys `static_time_series` directly): inserts are rejected until some
+association declares the `uri`, so associations load first and arrays shared by many associations
+are stored once. The association's optional `data_hash` is an integrity hash of the array, not the
+key.
 
 ## 5. Basis: per-unit vs. natural units, and where the base number lives
 
@@ -243,3 +312,63 @@ keep their inline `unit`/`quantity_type` instead; the exemption is recorded in
   `test_pu_conventions_have_resolvable_basis` only exercises columns with a `COMPONENT_BASE` +
   `NATURAL_UNITS` sibling pair; pu-only columns with no such sibling arm (the
   `magnetizing_shunt` rows above) are not covered by any dimensional check.
+
+## 6. The infrastore mirror: association tables are a wire contract
+
+GridDB's `time_series_associations` (with its `feature_sets` companion) and
+`supplemental_attribute_associations` mirror infrastore's catalog tables column-for-column
+(`crates/infrastore-core/src/metadata/schema.rs`), so association rows written here deserialize
+straight into a store at the modeling stage. The mirror is the contract; consequences worth
+knowing:
+
+**`owner_category` and `time_series_type` hold the wire spelling, not infrastore's on-disk
+codes.** Infrastore packs both as `INTEGER` (`::code`) for a measured index-size win at its own
+scale; GridDB states its priority as user-friendly over performance (see the schema file header),
+so both columns are `TEXT` holding the string spelling every reader and wire payload already uses
+(`'Component'`/`'SupplementalAttribute'`; `'SingleTimeSeries'` through `'Scenarios'`) — no
+decoding needed. `data_hash` / `features_hash` / `timestamps_hash` are lowercase hex TEXT (64
+chars), matching infrastore's `hash_hex` spelling, not the raw 32-byte SHA-256 digest — directly
+readable in a plain `sqlite3` shell, no decode view needed. A `NonSequentialTimeSeries`'s
+explicit timestamp vector is not stored in this schema; `timestamps_hash` is only a locator into
+the producing store, which holds the vector itself.
+
+**Where the catalog and the SiennaSchemas wire form diverge, the wire form wins.** The schemas
+(`TimeSeries/*.json`) require `uri` (the dense-data locator) and `element_shape`, and declare
+`data_hash` an optional content hash; infrastore's catalog has no `uri` and requires `data_hash`.
+GridDB follows the schemas: `uri` is NOT NULL and keys `static_time_series`, `element_shape` is
+NOT NULL (default `'[]'` = scalar), `data_hash` is nullable. A row deserializing into a store that
+demands a hash computes it from the dense values at ingest.
+
+**Two shape columns describe two different things.** `element_shape` is the shape of *one
+timestep's* element — the trailing dims after the time axis, `'[]'` for scalar steps — and pairs
+with `element_type`, which says what that element means (`f64`, `tuple(N,dtype)`, a function-data
+kind). `array_shape` is the *whole stored array's* native geometry, whose trailing axes end with
+`element_shape`: `[length, *element_shape]` for static types, with forecasts prepending their
+window/percentile/scenario axes. It exists because a forecast's layout is a producer convention
+that cannot be reconstructed from `horizon`/`count`/`percentiles`/`scenario_count`; it is nullable
+(and wire-only for now — infrastore's catalog has no counterpart yet, same as `scenario_count`).
+
+**`unit_system` uses infrastore's spelling, not the component tables'.** Lowercase
+`'natural_units'` / `'component_base'`, NULL meaning unspecified, and deliberately no CHECK — a
+third basis must land without a format bump. Same two-valued concept as §5's `unit_basis`, a
+different vocabulary on purpose: infrastore validates only these two spellings and passes the
+value through untouched — it is the producing application that decides which basis a series
+uses, and both infrastore and GridDB just relay its choice.
+
+**`quantity_kind` is free-form; the registry guards only registered names.** Infrastore leaves the
+column unconstrained so composite economic quantities never force a migration. GridDB adds one
+write-side trigger on top: a row whose `quantity_kind` names a registered quantity type must pair
+it with a registered unit from `allowed_units`. Free-form kinds pass untouched; the divergence adds
+integrity without changing the row shape.
+
+**No per-series base snapshot.** A `component_base` series is interpreted against the owning
+component's own base columns (`base_power`, winding voltage bases, …) — the association carries no
+`base_power`/`base_voltage` of its own, matching infrastore, where the consumer's object model owns
+the bases. Resolvability at the data level is the writer's responsibility, same as cross-row
+`base_power` agreement in §5.
+
+**GridDB keeps referential integrity infrastore deliberately omits.** Infrastore's endpoints live
+in the consumer's object graph, so it has no FKs; here both endpoints live in this database, so
+`owner_id`/`component_id`/`attribute_id` are FK-enforced (plus an owner-domain trigger for
+`owner_category = 'SupplementalAttribute'`). FKs are GridDB-side only and vanish harmlessly on
+deserialization.

@@ -1,14 +1,14 @@
 """Schema-integrity guards outside the unit registry: the entity supertype
 triggers on discrete_controlled_ac_branches and the transformer tables, the
 transformer enum/pairwise CHECK constraints, and the static_time_series
-(uuid, idx) uniqueness contract."""
+(uuid, timestep) uniqueness contract."""
 
 import re
 import sqlite3
 
 import pytest
 
-from conftest import load_schemas_json, make_entity
+from conftest import SCHEMAS_PATH, load_schemas_json, make_entity
 
 
 def make_bus(conn, bus_id, name):
@@ -286,22 +286,54 @@ def test_transformer_enum_checks_match_schema(db, table, column, definition):
     )
 
 
+# Feature-set key reservation drift gate: feature_sets.key's CHECK NOT IN-list
+# hand-copies TimeSeriesFeatures.propertyNames.not.enum in SiennaSchemas'
+# TimeSeries/common.json (infrastore enforces the same list in
+# validate_features). Editing one list without the other fails here.
+def test_feature_set_key_check_matches_wire_reservation(db):
+    common_path = SCHEMAS_PATH / "TimeSeries" / "common.json"
+    if not common_path.exists():
+        pytest.skip("SiennaSchemas sibling checkout not found")
+    common = load_schemas_json("TimeSeries/common.json")
+    schema_names = set(
+        common["$defs"]["TimeSeriesFeatures"]["propertyNames"]["not"]["enum"]
+    )
+    (table_sql,) = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'feature_sets'"
+    ).fetchone()
+    match = re.search(r"key\s+NOT\s+IN\s*\(([^)]*)\)", table_sql)
+    assert match, "no CHECK NOT IN-list for feature_sets.key"
+    check_names = set(re.findall(r"'([^']*)'", match.group(1)))
+    only_in_db = check_names - schema_names
+    only_in_schemas = schema_names - check_names
+    assert not only_in_db and not only_in_schemas, (
+        f"feature_sets.key CHECK drifted from TimeSeriesFeatures.propertyNames: "
+        f"in schema.sql but not the wire schemas {sorted(only_in_db)}; "
+        f"in the wire schemas but not schema.sql {sorted(only_in_schemas)}"
+    )
+
+
 def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
-    """One value per (uuid, idx): a loader double-insert must fail loudly
+    """One value per (uri, timestep): a loader double-insert must fail loudly
     instead of silently duplicating timepoints."""
+    make_entity(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('ts-1', 'MW', 'ActivePower')"
+        "INSERT INTO time_series_associations("
+        "owner_id, owner_type, owner_category, time_series_type, name, "
+        "initial_timestamp, resolution, length, uri, features_hash) "
+        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
+        "'static:load', ?)",
+        ("0b" * 32,),
     )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 0, 1.5)"
+        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 0, 1.5)"
     )
-    with pytest.raises(sqlite3.IntegrityError, match="idx"):
+    with pytest.raises(sqlite3.IntegrityError, match="timestep"):
         fresh_db.execute(
-            "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 0, 2.5)"
+            "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 0, 2.5)"
         )
     fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('ts-1', 1, 2.5)"
+        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 1, 2.5)"
     )
 
 
@@ -464,26 +496,3 @@ def test_dc_flag_requires_topology_type(fresh_db):
         )
 
 
-def test_time_series_metadata_carries_time_reference_and_shape(fresh_db):
-    fresh_db.execute(
-        "INSERT INTO time_series_metadata"
-        "(uuid, unit, quantity_type, time_reference, array_shape) "
-        "VALUES ('ts-2', 'MW', 'ActivePower', 'America/Denver', '[8760]')"
-    )
-    (tr, shape) = fresh_db.execute(
-        "SELECT time_reference, array_shape FROM time_series_metadata "
-        "WHERE uuid = 'ts-2'"
-    ).fetchone()
-    assert tr == "America/Denver"
-    assert shape == "[8760]"
-
-
-def test_time_series_metadata_rejects_non_array_shape(fresh_db):
-    """array_shape must be a JSON array; a bare number or object is malformed
-    data, not a shape."""
-    with pytest.raises(sqlite3.IntegrityError):
-        fresh_db.execute(
-            "INSERT INTO time_series_metadata"
-            "(uuid, unit, quantity_type, array_shape) "
-            "VALUES ('ts-3', 'MW', 'ActivePower', '8760')"
-        )
