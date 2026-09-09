@@ -6,8 +6,16 @@
 -- production DDL is the hand-written schema/schema.sql; compare the two with
 --     python3 scripts/generate_sql_schema.py --diff
 -- to see where the hand-written schema has drifted from the schemas.
+--
+-- Reviewers: do not compare this file to schema/schema.sql by eye. It lists
+-- every mapped schema property, so it will show columns schema.sql omits
+-- on purpose; that is expected. CI runs --check (this file is current) and
+-- --diff (drift report, gating only on type contradictions). Review changes
+-- to schema.sql, and read this file only through the --diff output.
 
 -- thermal_generators: generated from ThermalStandard, ThermalMultiStart
+-- Stored via the generic `attributes` table (registered attribute-name
+-- conventions), not as columns: power_trajectory, start_time_limits, start_types
 CREATE TABLE thermal_generators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -28,10 +36,7 @@ CREATE TABLE thermal_generators (
     prime_mover_type TEXT NULL DEFAULT 'OT' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
     fuel TEXT NULL DEFAULT 'OTHER' CHECK (fuel IN ('ANTHRACITE_COAL', 'BITUMINOUS_COAL', 'LIGNITE_COAL', 'SUBBITUMINOUS_COAL', 'WASTE_COAL', 'REFINED_COAL', 'SYNTHESIS_GAS_COAL', 'DISTILLATE_FUEL_OIL', 'JET_FUEL', 'KEROSENE', 'PETROLEUM_COKE', 'RESIDUAL_FUEL_OIL', 'PROPANE', 'SYNTHESIS_GAS_PETROLEUM_COKE', 'WASTE_OIL', 'BLAST_FURNACE_GAS', 'NATURAL_GAS', 'OTHER_GAS', 'AG_BYPRODUCT', 'MUNICIPAL_WASTE', 'OTHER_BIOMASS_SOLIDS', 'WOOD_WASTE_SOLIDS', 'OTHER_BIOMASS_LIQUIDS', 'SLUDGE_WASTE', 'BLACK_LIQUOR', 'WOOD_WASTE_LIQUIDS', 'LANDFILL_GAS', 'OTHER_BIOMASS_GAS', 'NUCLEAR', 'WASTE_HEAT', 'TIRE_DERIVED_FUEL', 'COAL', 'GEOTHERMAL', 'OTHER')) REFERENCES fuels (name),
     time_at_status REAL NULL DEFAULT 600000.0, -- Units: min
-    dynamic_injector INTEGER NULL,
-    power_trajectory JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    start_time_limits JSON NULL, -- Units: min
-    start_types INTEGER NULL
+    dynamic_injector INTEGER NULL
 );
 
 -- renewable_generators: generated from RenewableDispatch, RenewableNonDispatch
@@ -444,14 +449,13 @@ CREATE TABLE supply_technologies (
     region JSON NULL,
     prime_mover_type TEXT NULL DEFAULT 'OT' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
     fuel JSON NULL,
-    co2 JSON NULL, -- Units: t/MMBtu
     cofire_start_limits JSON NULL, -- Units: 1
     cofire_level_limits JSON NULL, -- Units: 1
-    capital_costs JSON NULL, -- Units: USD/MW
+    capital_costs JSON NULL,
     operation_costs JSON NULL, -- Units: USD/MWh
     unit_size REAL NULL DEFAULT 0.0, -- Units: MW
     capacity_limits JSON NULL, -- Units: MW
-    outage_factor REAL NULL DEFAULT 1.0, -- Units: 1
+    outage_factor JSON NULL,
     min_generation_fraction REAL NULL DEFAULT 0.0, -- Units: 1
     ramp_limits JSON NULL, -- Units: MW/min
     time_limits JSON NULL, -- Units: min
@@ -471,9 +475,7 @@ CREATE TABLE storage_technologies (
     min_discharge_fraction REAL NULL DEFAULT 0.0, -- Units: 1
     prime_mover_type TEXT NULL DEFAULT 'OT' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')),
     storage_tech TEXT NOT NULL CHECK (storage_tech IN ('PTES', 'LIB', 'LAB', 'FLWB', 'SIB', 'ZIB', 'HGS', 'LAES', 'OTHER_CHEM', 'OTHER_MECH', 'OTHER_THERM')),
-    capital_costs_energy JSON NULL, -- Units: USD/MWh
-    capital_costs_charge JSON NULL, -- Units: USD/MW
-    capital_costs_discharge JSON NULL, -- Units: USD/MW
+    capital_costs JSON NULL,
     operation_costs JSON NULL, -- Units: USD/MWh
     unit_size_discharge REAL NULL DEFAULT 0.0, -- Units: MW
     unit_size_charge REAL NULL, -- Units: MW
@@ -498,7 +500,7 @@ CREATE TABLE transport_technologies (
     start_node INTEGER NULL,
     end_node INTEGER NULL,
     capacity_limits JSON NULL, -- Units: MW
-    capital_costs JSON NULL, -- Units: USD/MW
+    capital_costs JSON NULL,
     resistance REAL NULL DEFAULT 0.0, -- Units: ohm
     voltage REAL NULL DEFAULT 0.0, -- Units: kV
     unit_size REAL NULL DEFAULT 0.0, -- Units: MW

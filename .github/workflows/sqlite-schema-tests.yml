@@ -17,8 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # TODO after SiennaSchemas release: switch to the release tarball instead of pinning the PR branch.
-      # feat/association-id, not jm/units: jm/units predates the association_id vocabulary.
-      - name: Checkout SiennaSchemas (feat/association-id branch)
+      - name: Checkout SiennaSchemas (main)
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/SiennaSchemas

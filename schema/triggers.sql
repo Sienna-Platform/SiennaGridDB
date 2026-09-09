@@ -1556,8 +1556,8 @@ SELECT
         -- (quantity_type, unit) pair from allowed_units.
         -- Physical = anything except boolean, text, or null -- except that a
         -- numeric identifier (bus number, node reference) is not physical at all,
-        -- so names listed in attribute_identifiers are exempt rather than being
-        -- forced to carry a made-up unit.
+        -- so (TYPE, name) pairs listed in attribute_identifiers are exempt rather
+        -- than being forced to carry a made-up unit.
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -1571,9 +1571,10 @@ SELECT
             SELECT
                 1
             FROM
-                attribute_identifiers
+                attribute_identifiers ai
             WHERE
-                LOWER(name) = LOWER(NEW.name)
+                LOWER(ai.TYPE) = LOWER(NEW.TYPE)
+                AND LOWER(ai.name) = LOWER(NEW.name)
         )
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
@@ -1633,7 +1634,7 @@ SELECT
             'Known attribute must use the registered unit and quantity_type from unit_conventions.'
         )
         -- Unknown attribute with physical value: must have a vocabulary-valid
-        -- (quantity_type, unit) pair from allowed_units. Identifier names are
+        -- (quantity_type, unit) pair from allowed_units. (TYPE, name) pairs are
         -- exempt, as on insert -- see attribute_identifiers.
         WHEN NOT EXISTS (
             SELECT
@@ -1648,9 +1649,10 @@ SELECT
             SELECT
                 1
             FROM
-                attribute_identifiers
+                attribute_identifiers ai
             WHERE
-                LOWER(name) = LOWER(NEW.name)
+                LOWER(ai.TYPE) = LOWER(NEW.TYPE)
+                AND LOWER(ai.name) = LOWER(NEW.name)
         )
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
@@ -1786,14 +1788,13 @@ END;
 
 -- =============================================================================
 -- Cost Payload Power-Units Guard
--- The DB stores no system/component base, so cost payloads must express their
--- variable curve in NATURAL_UNITS. Any other value -- COMPONENT_BASE or junk --
--- is uninterpretable here and rejected loudly (upstream's UnitSystem enum has no
--- other member; a value the enum doesn't know is malformed data, not a basis).
--- NULL/absent power_units passes (payload may be a plain curve). Applies to the
--- nine cost-bearing columns: production_cost on the three generator tables and
--- the operation_cost(s) blobs elsewhere (renewable_generators carries two:
--- production_cost and operation_cost.curtailment_cost).
+-- column_conventions.json registers cost curves in natural units only (USD/h,
+-- USD/MWh, MMBtu/MWh by curve_type/variable_cost_type), with no power_units
+-- discriminator -- so a COMPONENT_BASE payload has no registered unit and is
+-- rejected here, alongside junk values. NULL/absent power_units passes
+-- (payload may be a plain curve). Admitting COMPONENT_BASE (upstream's
+-- UnitSystem allows it, against the owning component's base_power) needs pu
+-- conventions plus that discriminator -- a follow-up, not this guard.
 -- The authoritative list of guarded cost payload paths is
 -- column_conventions.json (production_cost / operation_cost* rows); keep in sync.
 -- =============================================================================
@@ -1805,7 +1806,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1818,7 +1819,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1832,7 +1833,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1846,7 +1847,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1859,7 +1860,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1872,7 +1873,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1886,7 +1887,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1900,7 +1901,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1913,7 +1914,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1926,7 +1927,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1939,7 +1940,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1952,7 +1953,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1966,7 +1967,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1980,7 +1981,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -1996,7 +1997,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -2010,7 +2011,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -2029,7 +2030,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -2043,7 +2044,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -2059,7 +2060,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;
@@ -2073,7 +2074,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the DB stores no base to interpret relative units'
+        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
     );
 
 END;

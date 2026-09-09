@@ -75,8 +75,8 @@
       {"component": "FACTSControlDevice", "file": "Operations/StaticInjection/FACTSControlDevice.json", "is_psy": true}
     ],
     "balancing_topologies": [
-      {"component": "ACBus", "file": "Operations/Topology/ACBus.json", "is_psy": true},
-      {"component": "DCBus", "file": "Operations/Topology/DCBus.json", "is_psy": true}
+      {"component": "ACBus", "file": "Core/Topology/ACBus.json", "is_psy": true},
+      {"component": "DCBus", "file": "Core/Topology/DCBus.json", "is_psy": true}
     ],
     "supply_technologies": [
       {"component": "SupplyTechnology", "file": "Investments/Technologies/SupplyTechnology.json", "is_psy": false}

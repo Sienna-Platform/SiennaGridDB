@@ -158,10 +158,10 @@ def test_branch_parameter_columns_store_values(fresh_db):
 
     make_entity(fresh_db, 1, entity_table="transmission_lines", entity_type="Line")
     fresh_db.execute(
-        "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g) "
+        "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, power_units) "
         "VALUES (1, 'line1', ?, 100.0, 0.01, 0.1, "
         "json('{\"from\": 0.005, \"to\": 0.005}'), "
-        "json('{\"from\": 0.0, \"to\": 0.0}'))",
+        "json('{\"from\": 0.0, \"to\": 0.0}'), 'COMPONENT_BASE')",
         (_arc(1),),
     )
     row = fresh_db.execute(
@@ -175,8 +175,9 @@ def test_branch_parameter_columns_store_values(fresh_db):
     make_entity(fresh_db, 2, entity_table="transmission_lines", entity_type="Line")
     with pytest.raises(sqlite3.IntegrityError, match="r >= 0"):
         fresh_db.execute(
-            "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x) "
-            "VALUES (2, 'line2', ?, 100.0, -0.5, 0.1)",
+            "INSERT INTO transmission_lines "
+            "(id, name, arc_id, continuous_rating, r, x, power_units) "
+            "VALUES (2, 'line2', ?, 100.0, -0.5, 0.1, 'COMPONENT_BASE')",
             (_arc(2),),
         )
 
@@ -244,8 +245,8 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
     make_entity(fresh_db, 1, entity_table="discrete_controlled_ac_branches", entity_type="DiscreteControlledACBranch")
     fresh_db.execute(
         "INSERT INTO discrete_controlled_ac_branches "
-        "(id, name, arc_id, r, x, rating, discrete_branch_type, branch_status, normal_branch_status) "
-        "VALUES (1, 'sw1', ?, 0.0, 0.0, 100.0, 'BREAKER', 'CLOSED', 'CLOSED')",
+        "(id, name, arc_id, r, x, rating, power_units, discrete_branch_type, branch_status, normal_branch_status) "
+        "VALUES (1, 'sw1', ?, 0.0, 0.0, 100.0, 'COMPONENT_BASE', 'BREAKER', 'CLOSED', 'CLOSED')",
         (arc,),
     )
     row = fresh_db.execute(

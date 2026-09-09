@@ -70,7 +70,17 @@ attribute too, not a column. Those rows carry their own `attributes.unit` and
 `attributes.quantity_type` instead, validated against `allowed_units` on write. This is
 how the point-to-point HVDC fields (LCC impedances, VSC setpoints) are handled.
 
-Current registry: **41 quantity types, 66 allowed units, 406 conventions.**
+**Columns vs. `attributes`, as a rule.** A table sourced from several upstream components
+carries the fields common to all of them as columns. A field only some variants carry goes
+through `sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table
+instead, registered as an `attributes.<name>` convention when its unit is unambiguous (left
+unregistered, like a `unit_basis`-discriminated column, when the unit depends on a sibling
+that is itself an attribute). `two_terminal_hvdc_lines` follows this for all three HVDC
+variants; `thermal_generators` follows it for ThermalMultiStart's `start_time_limits` and
+`start_types` (`power_trajectory` is basis-dependent on `power_units` and stays
+unregistered, same as VSC's `dc_setpoint_*`).
+
+Current registry: **41 quantity types, 66 allowed units, 408 conventions.**
 
 The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`

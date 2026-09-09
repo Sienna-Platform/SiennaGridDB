@@ -218,7 +218,7 @@ CREATE TABLE transmission_lines (
     g TEXT NULL DEFAULT '{"from": 0.0, "to": 0.0}' CHECK (g IS NULL OR json_valid(g)),
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     FOREIGN KEY (arc_id) REFERENCES arcs (id) ON DELETE CASCADE
 ) strict;
 
@@ -236,7 +236,7 @@ CREATE TABLE discrete_controlled_ac_branches (
     x REAL NOT NULL CHECK (x >= 0),
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     discrete_branch_type TEXT NOT NULL DEFAULT 'OTHER'
         CHECK (discrete_branch_type IN ('SWITCH', 'BREAKER', 'OTHER')),
     branch_status TEXT NOT NULL DEFAULT 'CLOSED'
@@ -291,7 +291,7 @@ CREATE TABLE transformer_circuits (
     active_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     reactive_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_voltage_primary REAL NULL CHECK (base_voltage_primary > 0), -- Units: kV
     base_voltage_secondary REAL NULL CHECK (base_voltage_secondary > 0) -- Units: kV
 ) strict;
@@ -361,7 +361,7 @@ CREATE TABLE transmission_interchanges (
     max_flow_from REAL NOT NULL,
     max_flow_to REAL NOT NULL,
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 ) strict;
 
 -- NOTE: The purpose of these tables is to capture data of **existing units only**.
@@ -374,7 +374,7 @@ CREATE TABLE thermal_generators (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Power limits (JSON: {"min": ..., "max": ...}):
     active_power_limits JSON NOT NULL, -- Units: per power_units
     reactive_power_limits JSON NULL, -- Units: per power_units
@@ -438,7 +438,7 @@ CREATE TABLE renewable_generators (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     power_factor REAL NOT NULL DEFAULT 1.0 CHECK (
         power_factor > 0
         AND power_factor <= 1.0
@@ -478,7 +478,7 @@ CREATE TABLE hydro_generators (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Power limits (JSON: {"min": ..., "max": ...}):
     active_power_limits JSON NOT NULL, -- Units: per power_units
     reactive_power_limits JSON NULL, -- Units: per power_units
@@ -530,7 +530,7 @@ CREATE TABLE storage_units (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Storage capacity and limits (JSON: {"min": ..., "max": ...}):
     storage_capacity REAL NOT NULL CHECK (storage_capacity >= 0),
     -- Unit basis for storage_capacity: MWH is the conventional interchange form;
@@ -626,7 +626,8 @@ CREATE TABLE supply_technologies (
     ramp_limits JSON NULL,
     -- Time limits (JSON: {"up": ..., "down": ...}, minutes):
     time_limits JSON NULL,
-    outage_factor REAL NULL,
+    -- Outage factors (JSON: {"min": forced, "max": planned}, fraction):
+    outage_factor JSON NULL,
     min_generation_fraction REAL NULL,
     capital_costs JSON NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
     operation_costs JSON NOT NULL DEFAULT '{"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}',
@@ -700,23 +701,33 @@ CREATE TABLE attributes (
     UNIQUE(entity_id, name)
 );
 
--- Attribute names that hold an identifier rather than a physical quantity (bus
--- numbers, node references, zone ids). The unit-validation triggers classify any
--- numeric JSON value as physical and demand a unit for it, which would force an
--- identifier to be labelled with one; listing the name here exempts it instead.
--- Add a row rather than inventing a Dimensionless unit for a key.
+-- Attribute (TYPE, name) pairs that hold an identifier rather than a physical
+-- quantity (bus numbers, node references, zone ids). The unit-validation
+-- triggers classify any numeric JSON value as physical and demand a unit for
+-- it, which would force an identifier to be labelled with one; listing the
+-- pair here exempts it instead. Add a row rather than inventing a
+-- Dimensionless unit for a key.
+-- Scoped by TYPE, not by name alone: a name is not an identifier everywhere
+-- (a future unit-bearing attribute could reuse one of these names on a
+-- different component type).
 CREATE TABLE attribute_identifiers (
-    name TEXT PRIMARY KEY,
-    description TEXT NULL
+    TYPE TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NULL,
+    PRIMARY KEY (TYPE, name)
 ) strict;
 
 INSERT INTO
-    attribute_identifiers (name, description)
+    attribute_identifiers (TYPE, name, description)
 VALUES
-    ('number', 'Bus number'),
-    ('start_node', 'Transport technology from-node reference'),
-    ('end_node', 'Transport technology to-node reference'),
-    ('load_zone', 'Load zone reference');
+    ('ACBus', 'number', 'Bus number'),
+    ('DCBus', 'number', 'Bus number'),
+    ('ACBus', 'load_zone', 'Load zone reference'),
+    ('DCBus', 'load_zone', 'Load zone reference'),
+    ('NodalACTransportTechnology', 'start_node', 'Transport technology from-node reference'),
+    ('NodalHVDCTransportTechnology', 'start_node', 'Transport technology from-node reference'),
+    ('NodalACTransportTechnology', 'end_node', 'Transport technology to-node reference'),
+    ('NodalHVDCTransportTechnology', 'end_node', 'Transport technology to-node reference');
 
 -- Optional entity data that may or may not be used for modeling
 -- (geolocation, outages, ...).
@@ -814,7 +825,7 @@ CREATE TABLE loads (
     name TEXT NOT NULL UNIQUE,
     balancing_topology INTEGER NOT NULL,
     base_power REAL NOT NULL,
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     FOREIGN KEY(balancing_topology) REFERENCES balancing_topologies (id) ON DELETE CASCADE
 );
 
@@ -869,7 +880,7 @@ CREATE TABLE synchronous_condensers (
     reactive_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     rating REAL NOT NULL CHECK (rating > 0), -- Units: per power_units
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Reactive power limits (JSON: {"min": ..., "max": ...}), NULL when not applicable:
     reactive_power_limits TEXT NULL
         CHECK (reactive_power_limits IS NULL OR json_valid(reactive_power_limits)), -- Units: per power_units
@@ -896,7 +907,7 @@ CREATE TABLE sources (
     -- the bus it connects to:
     base_voltage REAL NULL CHECK (base_voltage IS NULL OR base_voltage > 0), -- Units: kV
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     active_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     reactive_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     -- Power limits (JSON: {"min": ..., "max": ...}), NULL when not applicable:
@@ -1014,7 +1025,7 @@ CREATE TABLE two_terminal_hvdc_lines (
         CHECK (converter_type IN ('GENERIC', 'LCC', 'VSC')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     active_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     -- Terminal power limits (JSON: {"min": ..., "max": ...}):
     active_power_limits_from TEXT NULL
@@ -1056,7 +1067,7 @@ CREATE TABLE facts_control_devices (
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
         CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Independent max reactive power ceiling (non-binding sentinel default):
     max_reactive_power REAL NOT NULL DEFAULT 9999.0 CHECK (max_reactive_power >= 0), -- Units: per power_units
     shunt_control_type TEXT NOT NULL DEFAULT 'STATCOM'
@@ -1085,7 +1096,7 @@ CREATE TABLE interconnecting_converters (
     ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
-    power_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Remote-bus voltage control, droop, and power-factor weighting:
     remote_bus_control INTEGER NULL CHECK (remote_bus_control IS NULL OR remote_bus_control >= 1),
     rmpct REAL NOT NULL DEFAULT 100.0 CHECK (rmpct >= 0),

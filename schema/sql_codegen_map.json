@@ -10,6 +10,11 @@
         "prime_mover_type": "REFERENCES prime_mover_types (name)",
         "fuel": "REFERENCES fuels (name)"
       },
+      "attribute_channel": [
+        "power_trajectory",
+        "start_time_limits",
+        "start_types"
+      ],
       "db_only": [
         "production_cost"
       ]

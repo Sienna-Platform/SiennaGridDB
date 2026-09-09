@@ -67,8 +67,8 @@ def insert_thermal(conn, gen_id, bus_id, production_cost):
     conn.execute(
         """INSERT INTO thermal_generators
                (id, name, prime_mover_type, fuel, balancing_topology, rating,
-                base_power, active_power_limits, operation_cost)
-           VALUES (?, ?, 'ST', 'NATURAL_GAS', ?, 203.2, 100.0,
+                base_power, power_units, active_power_limits, operation_cost)
+           VALUES (?, ?, 'ST', 'NATURAL_GAS', ?, 203.2, 100.0, 'NATURAL_UNITS',
                    '{"min": 0.0, "max": 203.2}', ?)""",
         (gen_id, f"gen-{gen_id}", bus_id, json.dumps(operation_cost)),
     )
@@ -293,7 +293,8 @@ def test_source_defaults_match_psy(fresh_db):
     bus = make_bus(fresh_db, 1, "bus-1")
     make_entity(fresh_db, 2, "sources", "Source")
     fresh_db.execute(
-        "INSERT INTO sources(id, name, bus, r_th, x_th) VALUES (2, 'src', ?, 0.0, 0.0)",
+        "INSERT INTO sources(id, name, bus, r_th, x_th, power_units) "
+        "VALUES (2, 'src', ?, 0.0, 0.0, 'COMPONENT_BASE')",
         (bus,),
     )
     row = fresh_db.execute(

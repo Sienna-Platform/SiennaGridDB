@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 406
+EXPECTED_UNIT_CONVENTIONS = 408
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -544,8 +544,8 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, unit_basis=None):
         "INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)",
         (arc_eid, from_eid, to_eid),
     )
-    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x"]
-    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x]
+    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x", "power_units"]
+    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x, "COMPONENT_BASE"]
     if unit_basis is not None:
         cols.append("unit_basis")
         vals.append(unit_basis)
@@ -642,8 +642,9 @@ def _insert_thermal(conn, gen_id, topo_id, production_cost):
     conn.execute(
         "INSERT INTO thermal_generators("
         "id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, "
-        "active_power_limits, operation_cost) "
-        "VALUES (?, 'tg', 'CT', 'OTHER', ?, 1.0, 1.0, '{\"min\":0,\"max\":1}', ?)",
+        "power_units, active_power_limits, operation_cost) "
+        "VALUES (?, 'tg', 'CT', 'OTHER', ?, 1.0, 1.0, 'COMPONENT_BASE', "
+        "'{\"min\":0,\"max\":1}', ?)",
         (gen_id, topo_id, _thermal_operation_cost(production_cost)),
     )
 
@@ -735,10 +736,10 @@ def _insert_storage_unit(conn, unit_id, topo_id, operation_cost):
     conn.execute(
         "INSERT INTO storage_units("
         "id, name, prime_mover_type, storage_technology_type, balancing_topology, "
-        "rating, base_power, storage_capacity, storage_level_limits, "
+        "rating, base_power, power_units, storage_capacity, storage_level_limits, "
         "initial_storage_capacity_level, input_active_power_limits, "
         "output_active_power_limits, efficiency, operation_cost) "
-        "VALUES (?, 'su', 'BA', 'LI', ?, 1.0, 1.0, 1.0, "
+        "VALUES (?, 'su', 'BA', 'LI', ?, 1.0, 1.0, 'COMPONENT_BASE', 1.0, "
         "'{\"min\":0,\"max\":1}', 0.0, '{\"min\":0,\"max\":1}', "
         "'{\"min\":0,\"max\":1}', '{\"in\":0.9,\"out\":0.9}', ?)",
         (unit_id, topo_id, operation_cost),
@@ -1109,7 +1110,7 @@ import re  # noqa: E402
 # EmissionsData.json property names carrying an enum the trigger probes.
 _EMISSIONS_ENUM_FIELDS = ["pollutant", "mass_unit", "energy_unit", "basis"]
 
-EMISSIONS_DATA_REL = "Operations/SupplementalAttributes/EmissionsData.json"
+EMISSIONS_DATA_REL = "Core/SupplementalAttributes/EmissionsData.json"
 
 
 def _schema_enum(prop, current_rel_file=EMISSIONS_DATA_REL):
@@ -1147,7 +1148,7 @@ def _extract_trigger_in_lists(trigger_sql):
 def test_emissions_enum_lists_match_schema(db, action):
     """DRIFT GATE: the hardcoded enum members in the EmissionsData guard trigger
     must exactly equal the enum arrays reachable from
-    SiennaSchemas/Operations/SupplementalAttributes/EmissionsData.json's
+    SiennaSchemas/Core/SupplementalAttributes/EmissionsData.json's
     properties (via their Core/common.json $refs). Editing an enum there
     without updating the trigger (or vice versa) fails here."""
     properties = load_schemas_json(EMISSIONS_DATA_REL)["properties"]
@@ -1277,6 +1278,54 @@ def test_demoted_hvdc_attribute_conventions(db, name, expected):
         assert [r[0] for r in rows] == [expected]
 
 
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # ThermalMultiStart fields routed through attribute_channel (C8):
+        # unambiguous units get a fixed convention, same as time_at_status.
+        ("start_time_limits", "OperationalDuration/min"),
+        ("start_types", "Dimensionless/1"),
+        # power_units-discriminated, same reason r/dc_setpoint_* stay unregistered
+        # above: the discriminator column lives on thermal_generators, not on the
+        # attributes row itself.
+        ("power_trajectory", None),
+    ],
+)
+def test_thermal_multistart_attribute_conventions(db, name, expected):
+    rows = db.execute(
+        "SELECT quantity_type || '/' || unit FROM unit_conventions "
+        "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
+        (name,),
+    ).fetchall()
+    if expected is None:
+        assert rows == [], f"attributes.{name} should stay unregistered, got {rows}"
+    else:
+        assert [r[0] for r in rows] == [expected]
+
+
+def test_attribute_start_time_limits_registered_unit_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    insert_attribute(
+        fresh_db, 1, "start_time_limits", '{"hot": 30, "warm": 120, "cold": 300}',
+        "min", "OperationalDuration",
+    )
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM attributes WHERE name = 'start_time_limits'"
+    ).fetchone()
+    assert count == 1
+
+
+def test_attribute_start_time_limits_wrong_unit_rejected(fresh_db):
+    make_entity(fresh_db, 1)
+    with pytest.raises(
+        sqlite3.IntegrityError, match="Known attribute must use the registered unit"
+    ):
+        insert_attribute(
+            fresh_db, 1, "start_time_limits", '{"hot": 0.5, "warm": 2, "cold": 5}',
+            "h", "OperationalDuration",
+        )
+
+
 def test_interconnecting_converter_setpoints_two_discriminator(db):
     """InterconnectingConverter dc_setpoint/ac_setpoint are mode-multiplexed by
     dc_control/ac_control, the same enums used by TwoTerminalVSCLine; their
@@ -1346,8 +1395,9 @@ def _build_transmission_line(conn, base_id, unit_basis):
     arc = _provision_arc(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="transmission_lines", entity_type="Line")
     conn.execute(
-        "INSERT INTO transmission_lines(id, name, arc_id, continuous_rating, r, x, unit_basis) "
-        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?)",
+        "INSERT INTO transmission_lines"
+        "(id, name, arc_id, continuous_rating, r, x, unit_basis, power_units) "
+        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?, 'COMPONENT_BASE')",
         (base_id, f"line_{base_id}", arc, unit_basis),
     )
 
@@ -1356,7 +1406,8 @@ def _build_transformer_circuit(conn, base_id, unit_basis):
     arc = _provision_arc(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="transformer_circuits", entity_type="Circuit")
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, unit_basis) VALUES (?, ?, ?)",
+        "INSERT INTO transformer_circuits(id, arc_id, unit_basis, power_units) "
+        "VALUES (?, ?, ?, 'COMPONENT_BASE')",
         (base_id, arc, unit_basis),
     )
 
@@ -1400,7 +1451,8 @@ def _build_source(conn, base_id, unit_basis):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="sources", entity_type="Source")
     conn.execute(
-        "INSERT INTO sources(id, name, bus, r_th, x_th, unit_basis) VALUES (?, ?, ?, 0.0, 0.0, ?)",
+        "INSERT INTO sources(id, name, bus, r_th, x_th, unit_basis, power_units) "
+        "VALUES (?, ?, ?, 0.0, 0.0, ?, 'COMPONENT_BASE')",
         (base_id, f"src_{base_id}", bus, unit_basis),
     )
 
@@ -1418,8 +1470,9 @@ def _build_facts_control_device(conn, base_id, unit_basis):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="facts_control_devices", entity_type="FACTSControlDevice")
     conn.execute(
-        "INSERT INTO facts_control_devices(id, name, bus, voltage_setpoint, unit_basis) "
-        "VALUES (?, ?, ?, 1.0, ?)",
+        "INSERT INTO facts_control_devices"
+        "(id, name, bus, voltage_setpoint, unit_basis, power_units) "
+        "VALUES (?, ?, ?, 1.0, ?, 'COMPONENT_BASE')",
         (base_id, f"facts_{base_id}", bus, unit_basis),
     )
 
@@ -1432,8 +1485,9 @@ def _build_interconnecting_converter(conn, base_id, unit_basis):
         entity_type="InterconnectingConverter",
     )
     conn.execute(
-        "INSERT INTO interconnecting_converters(id, name, bus, dc_bus, unit_basis) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO interconnecting_converters"
+        "(id, name, bus, dc_bus, unit_basis, power_units) "
+        "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE')",
         (base_id, f"conv_{base_id}", ac_bus, dc_bus, unit_basis),
     )
 

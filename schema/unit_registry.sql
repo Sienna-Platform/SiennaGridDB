@@ -171,6 +171,8 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, disc
     ('attributes', 'rmpct_from', 'Fraction', '1', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): VSC from-converter remote-regulation share stored as attribute'),
     ('attributes', 'rmpct_to', 'Fraction', '1', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): VSC to-converter remote-regulation share stored as attribute'),
     ('attributes', 'start_fuel_mmbtu_per_mw', 'StartFuelPerCapacity', 'MMBtu/MW', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): start fuel per unit capacity; mirrors the supply_technologies column stored as attribute'),
+    ('attributes', 'start_time_limits', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): ThermalMultiStart hot/warm/cold start time limits stored as attribute'),
+    ('attributes', 'start_types', 'Dimensionless', '1', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): ThermalMultiStart start-type count (hot/warm/cold), mirrors the rectifier_bridges/inverter_bridges count precedent'),
     ('attributes', 'time_at_status', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): time spent in the current on/off status stored as attribute'),
     ('attributes', 'time_limits', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): time limits stored as attribute'),
     ('attributes', 'value_of_lost_load', 'CostPerEnergy', 'USD/MWh', NULL, NULL, NULL, NULL, 'Attribute-name convention (not a physical column): value of lost load stored as attribute'),
@@ -377,7 +379,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, disc
     ('supply_technologies', 'operation_costs.shut_down', 'Money', 'USD', NULL, NULL, NULL, NULL, 'Shut-down cost (operation_costs JSON path)'),
     ('supply_technologies', 'operation_costs.start_up', 'Money', 'USD', NULL, NULL, NULL, NULL, 'Start-up cost (operation_costs JSON path)'),
     ('supply_technologies', 'operation_costs.variable', 'CostPerEnergy', 'USD/MWh', NULL, NULL, NULL, NULL, 'Variable cost per unit of energy (operation_costs JSON path); payload power_units must be NATURAL_UNITS'),
-    ('supply_technologies', 'outage_factor', 'Fraction', '1', NULL, NULL, NULL, NULL, 'Outage factor'),
+    ('supply_technologies', 'outage_factor', 'Fraction', '1', NULL, NULL, NULL, NULL, 'JSON {min, max} outage factors'),
     ('supply_technologies', 'ramp_limits', 'ActivePowerChangeRate', 'MW/min', NULL, NULL, NULL, NULL, 'JSON {up, down} ramp limits'),
     ('supply_technologies', 'start_fuel_mmbtu_per_mw', 'StartFuelPerCapacity', 'MMBtu/MW', NULL, NULL, NULL, NULL, 'Start-up fuel per unit of capacity'),
     ('supply_technologies', 'time_limits', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, 'JSON {up, down} time limits'),
@@ -536,4 +538,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', '89c36de17c1b20289470763ac75bc27023f40790c2146280bf672ca80e8b5239', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '86cbbfd3f34cddd69141faff7d1c8576d9d4f77ff60e3e6fe3620949a3ac84ef', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

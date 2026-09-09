@@ -88,6 +88,12 @@ HEADER = """\
 -- production DDL is the hand-written schema/schema.sql; compare the two with
 --     python3 scripts/generate_sql_schema.py --diff
 -- to see where the hand-written schema has drifted from the schemas.
+--
+-- Reviewers: do not compare this file to schema/schema.sql by eye. It lists
+-- every mapped schema property, so it will show columns schema.sql omits
+-- on purpose; that is expected. CI runs --check (this file is current) and
+-- --diff (drift report, gating only on type contradictions). Review changes
+-- to schema.sql, and read this file only through the --diff output.
 
 """
 
