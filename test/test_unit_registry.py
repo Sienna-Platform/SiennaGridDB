@@ -544,8 +544,8 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, unit_basis=None):
         "INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)",
         (arc_eid, from_eid, to_eid),
     )
-    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x", "power_units"]
-    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x, "COMPONENT_BASE"]
+    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x", "power_units", "base_power"]
+    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x, "COMPONENT_BASE", 100.0]
     if unit_basis is not None:
         cols.append("unit_basis")
         vals.append(unit_basis)
@@ -1396,8 +1396,8 @@ def _build_transmission_line(conn, base_id, unit_basis):
     make_entity(conn, base_id, entity_table="transmission_lines", entity_type="Line")
     conn.execute(
         "INSERT INTO transmission_lines"
-        "(id, name, arc_id, continuous_rating, r, x, unit_basis, power_units) "
-        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?, 'COMPONENT_BASE')",
+        "(id, name, arc_id, continuous_rating, r, x, unit_basis, power_units, base_power) "
+        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?, 'COMPONENT_BASE', 100.0)",
         (base_id, f"line_{base_id}", arc, unit_basis),
     )
 
@@ -1406,8 +1406,8 @@ def _build_transformer_circuit(conn, base_id, unit_basis):
     arc = _provision_arc(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="transformer_circuits", entity_type="Circuit")
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, unit_basis, power_units) "
-        "VALUES (?, ?, ?, 'COMPONENT_BASE')",
+        "INSERT INTO transformer_circuits(id, arc_id, unit_basis, power_units, base_power) "
+        "VALUES (?, ?, ?, 'COMPONENT_BASE', 100.0)",
         (base_id, arc, unit_basis),
     )
 
@@ -1433,7 +1433,8 @@ def _build_fixed_admittance(conn, base_id, unit_basis):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="fixed_admittance", entity_type="FixedAdmittance")
     conn.execute(
-        "INSERT INTO fixed_admittance(id, name, bus, unit_basis) VALUES (?, ?, ?, ?)",
+        "INSERT INTO fixed_admittance(id, name, bus, unit_basis, base_power) "
+        "VALUES (?, ?, ?, ?, 100.0)",
         (base_id, f"fa_{base_id}", bus, unit_basis),
     )
 
@@ -1442,7 +1443,8 @@ def _build_switched_admittance(conn, base_id, unit_basis):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="switched_admittance", entity_type="SwitchedAdmittance")
     conn.execute(
-        "INSERT INTO switched_admittance(id, name, bus, unit_basis) VALUES (?, ?, ?, ?)",
+        "INSERT INTO switched_admittance(id, name, bus, unit_basis, base_power) "
+        "VALUES (?, ?, ?, ?, 100.0)",
         (base_id, f"sa_{base_id}", bus, unit_basis),
     )
 
@@ -1451,8 +1453,8 @@ def _build_source(conn, base_id, unit_basis):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="sources", entity_type="Source")
     conn.execute(
-        "INSERT INTO sources(id, name, bus, r_th, x_th, unit_basis, power_units) "
-        "VALUES (?, ?, ?, 0.0, 0.0, ?, 'COMPONENT_BASE')",
+        "INSERT INTO sources(id, name, bus, r_th, x_th, unit_basis, power_units, base_power) "
+        "VALUES (?, ?, ?, 0.0, 0.0, ?, 'COMPONENT_BASE', 100.0)",
         (base_id, f"src_{base_id}", bus, unit_basis),
     )
 
@@ -1461,7 +1463,8 @@ def _build_tmodel_hvdc_line(conn, base_id, unit_basis):
     arc = _provision_arc(conn, base_id * 100, is_dc=1)
     make_entity(conn, base_id, entity_table="tmodel_hvdc_lines", entity_type="TModelHVDCLine")
     conn.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, unit_basis) VALUES (?, ?, ?, 0.01, ?)",
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, unit_basis, base_power) "
+        "VALUES (?, ?, ?, 0.01, ?, 100.0)",
         (base_id, f"tm_{base_id}", arc, unit_basis),
     )
 
@@ -1471,8 +1474,8 @@ def _build_facts_control_device(conn, base_id, unit_basis):
     make_entity(conn, base_id, entity_table="facts_control_devices", entity_type="FACTSControlDevice")
     conn.execute(
         "INSERT INTO facts_control_devices"
-        "(id, name, bus, voltage_setpoint, unit_basis, power_units) "
-        "VALUES (?, ?, ?, 1.0, ?, 'COMPONENT_BASE')",
+        "(id, name, bus, voltage_setpoint, unit_basis, power_units, base_power) "
+        "VALUES (?, ?, ?, 1.0, ?, 'COMPONENT_BASE', 100.0)",
         (base_id, f"facts_{base_id}", bus, unit_basis),
     )
 
@@ -1486,8 +1489,8 @@ def _build_interconnecting_converter(conn, base_id, unit_basis):
     )
     conn.execute(
         "INSERT INTO interconnecting_converters"
-        "(id, name, bus, dc_bus, unit_basis, power_units) "
-        "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE')",
+        "(id, name, bus, dc_bus, unit_basis, power_units, base_power) "
+        "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE', 100.0)",
         (base_id, f"conv_{base_id}", ac_bus, dc_bus, unit_basis),
     )
 

@@ -40,7 +40,8 @@ def make_arc(conn, arc_id, from_id, to_id):
 def make_circuit(conn, circuit_id, arc_id):
     make_entity(conn, circuit_id, "transformer_circuits", "TransformerCircuit")
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, power_units) VALUES (?, ?, 'COMPONENT_BASE')",
+        "INSERT INTO transformer_circuits(id, arc_id, power_units, base_power) "
+        "VALUES (?, ?, 'COMPONENT_BASE', 100.0)",
         (circuit_id, arc_id),
     )
     return circuit_id
@@ -69,8 +70,8 @@ def _insert_discrete_branch(conn, entity_id):
     arc_id = _arc_between_new_buses(conn)
     conn.execute(
         "INSERT INTO discrete_controlled_ac_branches"
-        "(id, name, arc_id, r, x, rating, power_units) "
-        "VALUES (?, 'row', ?, 0.0, 0.01, 100.0, 'COMPONENT_BASE')",
+        "(id, name, arc_id, r, x, rating, power_units, base_power) "
+        "VALUES (?, 'row', ?, 0.0, 0.01, 100.0, 'COMPONENT_BASE', 100.0)",
         (entity_id, arc_id),
     )
 
@@ -78,7 +79,8 @@ def _insert_discrete_branch(conn, entity_id):
 def _insert_circuit(conn, entity_id):
     arc_id = _arc_between_new_buses(conn)
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, power_units) VALUES (?, ?, 'COMPONENT_BASE')",
+        "INSERT INTO transformer_circuits(id, arc_id, power_units, base_power) "
+        "VALUES (?, ?, 'COMPONENT_BASE', 100.0)",
         (entity_id, arc_id),
     )
 
@@ -86,8 +88,8 @@ def _insert_circuit(conn, entity_id):
 def _insert_two_terminal_hvdc(conn, entity_id):
     arc_id = _arc_between_new_buses(conn)
     conn.execute(
-        "INSERT INTO two_terminal_hvdc_lines(id, name, arc_id, converter_type, power_units) "
-        "VALUES (?, 'row', ?, 'VSC', 'COMPONENT_BASE')",
+        "INSERT INTO two_terminal_hvdc_lines(id, name, arc_id, converter_type, power_units, base_power) "
+        "VALUES (?, 'row', ?, 'VSC', 'COMPONENT_BASE', 100.0)",
         (entity_id, arc_id),
     )
 
@@ -95,8 +97,8 @@ def _insert_two_terminal_hvdc(conn, entity_id):
 def _insert_synchronous_condenser(conn, entity_id):
     bus = make_bus(conn, 1, "b1")
     conn.execute(
-        "INSERT INTO synchronous_condensers(id, name, bus, rating, power_units) "
-        "VALUES (?, 'row', ?, 2.0, 'COMPONENT_BASE')",
+        "INSERT INTO synchronous_condensers(id, name, bus, rating, power_units, base_power) "
+        "VALUES (?, 'row', ?, 2.0, 'COMPONENT_BASE', 2.0)",
         (entity_id, bus),
     )
 
@@ -239,9 +241,9 @@ def test_transformer_circuit_control_fields_roundtrip(fresh_db):
     make_entity(fresh_db, 4, "transformer_circuits", "TransformerCircuit")
     fresh_db.execute(
         "INSERT INTO transformer_circuits"
-        "(id, arc_id, tap, alpha, r, x, control_objective, control_limits, rating, power_units) "
+        "(id, arc_id, tap, alpha, r, x, control_objective, control_limits, rating, power_units, base_power) "
         "VALUES (4, ?, 1.05, 0.1, 0.001, 0.05, 'ASYMMETRIC_ACTIVE_POWER_FLOW', "
-        "json('{\"min\": -0.5, \"max\": 0.5}'), 250.0, 'COMPONENT_BASE')",
+        "json('{\"min\": -0.5, \"max\": 0.5}'), 250.0, 'COMPONENT_BASE', 100.0)",
         (arc_id,),
     )
     row = fresh_db.execute(
@@ -253,8 +255,8 @@ def test_transformer_circuit_control_fields_roundtrip(fresh_db):
     make_entity(fresh_db, 5, "transformer_circuits", "TransformerCircuit")
     with pytest.raises(sqlite3.IntegrityError, match="control_objective"):
         fresh_db.execute(
-            "INSERT INTO transformer_circuits(id, arc_id, control_objective, power_units) "
-            "VALUES (5, ?, 'ASSYMETRIC_ACTIVE_POWER_FLOW', 'COMPONENT_BASE')",
+            "INSERT INTO transformer_circuits(id, arc_id, control_objective, power_units, base_power) "
+            "VALUES (5, ?, 'ASSYMETRIC_ACTIVE_POWER_FLOW', 'COMPONENT_BASE', 100.0)",
             (arc_id,),
         )
 
@@ -354,7 +356,8 @@ def test_tmodel_hvdc_line_requires_dc_buses(fresh_db):
 def test_tmodel_hvdc_line_accepts_dc_buses(fresh_db):
     make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
     fresh_db.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r) VALUES (99, 'dc', ?, 0.1)",
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_power) "
+        "VALUES (99, 'dc', ?, 0.1, 100.0)",
         (_dc_arc(fresh_db),),
     )
 
@@ -383,7 +386,8 @@ def test_arc_domain_trigger_fires_on_update(fresh_db):
     """Re-pointing an existing row's arc is checked too, not just the insert."""
     make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
     fresh_db.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r) VALUES (99, 'dc', ?, 0.1)",
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_power) "
+        "VALUES (99, 'dc', ?, 0.1, 100.0)",
         (_dc_arc(fresh_db),),
     )
     with pytest.raises(sqlite3.IntegrityError, match="must connect DC buses"):
@@ -396,8 +400,8 @@ def test_interconnecting_converter_bridges_ac_and_dc(fresh_db):
     ac, dc = make_bus(fresh_db, 1, "ac"), make_dc_bus(fresh_db, 2, "dc")
     make_entity(fresh_db, 99, "interconnecting_converters", "InterconnectingConverter")
     fresh_db.execute(
-        "INSERT INTO interconnecting_converters(id, name, bus, dc_bus, power_units) "
-        "VALUES (99, 'c', ?, ?, 'COMPONENT_BASE')",
+        "INSERT INTO interconnecting_converters(id, name, bus, dc_bus, power_units, base_power) "
+        "VALUES (99, 'c', ?, ?, 'COMPONENT_BASE', 100.0)",
         (ac, dc),
     )
 

@@ -217,17 +217,17 @@ CREATE TABLE transmission_lines (
     b TEXT NULL CHECK (b IS NULL OR json_valid(b)),
     g TEXT NULL DEFAULT '{"from": 0.0, "to": 0.0}' CHECK (g IS NULL OR json_valid(g)),
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     FOREIGN KEY (arc_id) REFERENCES arcs (id) ON DELETE CASCADE
 ) strict;
 
 -- Switches and breakers connecting AC buses (PSY DiscreteControlledACBranch).
--- r/x are per-unit on system base (this component has no natural-units option
+-- r/x are per-unit on base_power (this component has no natural-units option
 -- in PSY, unlike transmission_lines); rating is stored per power_units
 -- (COMPONENT_BASE -> pu, NATURAL_UNITS -> MVA), mirroring
 -- transmission_lines.continuous_rating. base_power is the same per-row
--- system-base snapshot as transmission_lines.base_power.
+-- value as transmission_lines.base_power.
 CREATE TABLE discrete_controlled_ac_branches (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -235,7 +235,7 @@ CREATE TABLE discrete_controlled_ac_branches (
     r REAL NOT NULL CHECK (r >= 0),
     x REAL NOT NULL CHECK (x >= 0),
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     discrete_branch_type TEXT NOT NULL DEFAULT 'OTHER'
         CHECK (discrete_branch_type IN ('SWITCH', 'BREAKER', 'OTHER')),
@@ -290,7 +290,7 @@ CREATE TABLE transformer_circuits (
     rating_c REAL NULL CHECK (rating_c >= 0), -- Units: per power_units
     active_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     reactive_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_voltage_primary REAL NULL CHECK (base_voltage_primary > 0), -- Units: kV
     base_voltage_secondary REAL NULL CHECK (base_voltage_secondary > 0) -- Units: kV
@@ -360,7 +360,7 @@ CREATE TABLE transmission_interchanges (
     arc_id INTEGER REFERENCES arcs(id) ON DELETE CASCADE,
     max_flow_from REAL NOT NULL,
     max_flow_to REAL NOT NULL,
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 ) strict;
 
@@ -842,7 +842,7 @@ CREATE TABLE fixed_admittance (
     y_b REAL NOT NULL DEFAULT 0.0,
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
         CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0) -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0) -- Units: MVA
 ) strict;
 
 -- Switched shunt admittance (PSY SwitchedAdmittance). Same y_g/y_b + unit_basis
@@ -857,7 +857,7 @@ CREATE TABLE switched_admittance (
     y_b REAL NOT NULL DEFAULT 0.0,
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
         CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     control_mode TEXT NOT NULL DEFAULT 'FIXED'
         CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE',
             'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT',
@@ -879,7 +879,7 @@ CREATE TABLE synchronous_condensers (
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     reactive_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     rating REAL NOT NULL CHECK (rating > 0), -- Units: per power_units
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Reactive power limits (JSON: {"min": ..., "max": ...}), NULL when not applicable:
     reactive_power_limits TEXT NULL
@@ -906,7 +906,7 @@ CREATE TABLE sources (
     -- from the Source schema's required list, and a source may take the voltage of
     -- the bus it connects to:
     base_voltage REAL NULL CHECK (base_voltage IS NULL OR base_voltage > 0), -- Units: kV
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     active_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     reactive_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
@@ -1024,7 +1024,7 @@ CREATE TABLE two_terminal_hvdc_lines (
     converter_type TEXT NOT NULL DEFAULT 'GENERIC'
         CHECK (converter_type IN ('GENERIC', 'LCC', 'VSC')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     active_power_flow REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     -- Terminal power limits (JSON: {"min": ..., "max": ...}):
@@ -1052,7 +1052,7 @@ CREATE TABLE tmodel_hvdc_lines (
     r REAL NOT NULL,
     unit_basis TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
         CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0) -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0) -- Units: MVA
 ) strict;
 
 -- FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly
@@ -1066,7 +1066,7 @@ CREATE TABLE facts_control_devices (
     voltage_setpoint REAL NOT NULL,
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
         CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Independent max reactive power ceiling (non-binding sentinel default):
     max_reactive_power REAL NOT NULL DEFAULT 9999.0 CHECK (max_reactive_power >= 0), -- Units: per power_units
@@ -1095,7 +1095,7 @@ CREATE TABLE interconnecting_converters (
     ac_setpoint REAL NOT NULL DEFAULT 1.0,
     ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
     unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    base_power REAL NOT NULL DEFAULT 100.0 CHECK (base_power > 0), -- Units: MVA
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Remote-bus voltage control, droop, and power-factor weighting:
     remote_bus_control INTEGER NULL CHECK (remote_bus_control IS NULL OR remote_bus_control >= 1),

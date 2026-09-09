@@ -289,12 +289,13 @@ def test_source_impedance_columns_are_lowercase(db):
 
 
 def test_source_defaults_match_psy(fresh_db):
-    """A minimal insert must land on the schema defaults, not zeros."""
+    """A minimal insert (base_power supplied -- it has no default) must land on
+    the remaining schema defaults, not zeros."""
     bus = make_bus(fresh_db, 1, "bus-1")
     make_entity(fresh_db, 2, "sources", "Source")
     fresh_db.execute(
-        "INSERT INTO sources(id, name, bus, r_th, x_th, power_units) "
-        "VALUES (2, 'src', ?, 0.0, 0.0, 'COMPONENT_BASE')",
+        "INSERT INTO sources(id, name, bus, r_th, x_th, power_units, base_power) "
+        "VALUES (2, 'src', ?, 0.0, 0.0, 'COMPONENT_BASE', 100.0)",
         (bus,),
     )
     row = fresh_db.execute(

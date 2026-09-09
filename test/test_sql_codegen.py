@@ -158,10 +158,10 @@ def test_branch_parameter_columns_store_values(fresh_db):
 
     make_entity(fresh_db, 1, entity_table="transmission_lines", entity_type="Line")
     fresh_db.execute(
-        "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, power_units) "
+        "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, power_units, base_power) "
         "VALUES (1, 'line1', ?, 100.0, 0.01, 0.1, "
         "json('{\"from\": 0.005, \"to\": 0.005}'), "
-        "json('{\"from\": 0.0, \"to\": 0.0}'), 'COMPONENT_BASE')",
+        "json('{\"from\": 0.0, \"to\": 0.0}'), 'COMPONENT_BASE', 100.0)",
         (_arc(1),),
     )
     row = fresh_db.execute(
@@ -171,13 +171,13 @@ def test_branch_parameter_columns_store_values(fresh_db):
     assert row == (0.01, 0.1, 0.005, 0.0)
     # Use a FRESH id (id=1 already exists above) so the raised IntegrityError is
     # the CHECK (r >= 0) bound being violated, not a duplicate-primary-key clash.
-    # arc_id/continuous_rating/x are NOT NULL, so supply them and leave r negative.
+    # arc_id/continuous_rating/x/base_power are NOT NULL, so supply them and leave r negative.
     make_entity(fresh_db, 2, entity_table="transmission_lines", entity_type="Line")
     with pytest.raises(sqlite3.IntegrityError, match="r >= 0"):
         fresh_db.execute(
             "INSERT INTO transmission_lines "
-            "(id, name, arc_id, continuous_rating, r, x, power_units) "
-            "VALUES (2, 'line2', ?, 100.0, -0.5, 0.1, 'COMPONENT_BASE')",
+            "(id, name, arc_id, continuous_rating, r, x, power_units, base_power) "
+            "VALUES (2, 'line2', ?, 100.0, -0.5, 0.1, 'COMPONENT_BASE', 100.0)",
             (_arc(2),),
         )
 
@@ -245,8 +245,8 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
     make_entity(fresh_db, 1, entity_table="discrete_controlled_ac_branches", entity_type="DiscreteControlledACBranch")
     fresh_db.execute(
         "INSERT INTO discrete_controlled_ac_branches "
-        "(id, name, arc_id, r, x, rating, power_units, discrete_branch_type, branch_status, normal_branch_status) "
-        "VALUES (1, 'sw1', ?, 0.0, 0.0, 100.0, 'COMPONENT_BASE', 'BREAKER', 'CLOSED', 'CLOSED')",
+        "(id, name, arc_id, r, x, rating, power_units, base_power, discrete_branch_type, branch_status, normal_branch_status) "
+        "VALUES (1, 'sw1', ?, 0.0, 0.0, 100.0, 'COMPONENT_BASE', 100.0, 'BREAKER', 'CLOSED', 'CLOSED')",
         (arc,),
     )
     row = fresh_db.execute(
