@@ -3,9 +3,7 @@
 Schema for the SQL database for Sienna Applications
 
 > [!IMPORTANT]
-> The griddb schema was designed using SQLite 3.45 to use some of the jsonb
-> functionality. We do not intend to provide backwards compatibility since when
-> we deisgined this 3.45 had already a year of being deployed.
+> This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
 
 ## How To(s)
 
@@ -63,24 +61,19 @@ them:
 | `unit_conventions` | The column→(quantity_type, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_types` to show table, column, unit, quantity, and dimension in one place. |
 
-Some columns are deliberately *not* registered. A convention's `discriminator_column`
-names a sibling column, so a field whose unit depends on a basis choice or a control mode
-cannot be registered once it lives in the generic `attributes` table — the sibling is an
-attribute too, not a column. Those rows carry their own `attributes.unit` and
-`attributes.quantity_type` instead, validated against `allowed_units` on write. This is
-how the point-to-point HVDC fields (LCC impedances, VSC setpoints) are handled.
+**Columns vs. `attributes`.** A table sourced from several upstream components keeps the
+fields common to all of them as columns. A field only some variants carry goes through
+`sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
+There it is registered as an `attributes.<name>` convention when its unit is unambiguous,
+validated against `allowed_units` on write — or left unregistered when its unit depends on
+a sibling attribute (a `discriminator_column` must name a sibling *column*, and a field
+inside `attributes` has no column sibling to name). `two_terminal_hvdc_lines` follows this
+for all three HVDC variants (LCC impedances, VSC setpoints); `thermal_generators` follows
+it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_trajectory` stays
+unregistered, basis-dependent on the attribute `power_units`, same as VSC's
+`dc_setpoint_*`).
 
-**Columns vs. `attributes`, as a rule.** A table sourced from several upstream components
-carries the fields common to all of them as columns. A field only some variants carry goes
-through `sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table
-instead, registered as an `attributes.<name>` convention when its unit is unambiguous (left
-unregistered, like a `unit_basis`-discriminated column, when the unit depends on a sibling
-that is itself an attribute). `two_terminal_hvdc_lines` follows this for all three HVDC
-variants; `thermal_generators` follows it for ThermalMultiStart's `start_time_limits` and
-`start_types` (`power_trajectory` is basis-dependent on `power_units` and stays
-unregistered, same as VSC's `dc_setpoint_*`).
-
-Current registry: **41 quantity types, 66 allowed units, 408 conventions.**
+Current registry: **41 quantity types, 66 allowed units, 405 conventions.**
 
 The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
@@ -92,55 +85,32 @@ sha256-sealed **mirror** of it, never a second source.
 
 ### Reading a value: where do I look?
 
-Four different things determine how a stored value reads, and each is looked up differently.
+To resolve any column's unit:
 
-- **A column with one fixed unit** (e.g. `transmission_lines.continuous_rating`) — look it up
-  in `unit_conventions` (or the joined `column_units` view) by `table_name`/`column_name`; its
-  `unit` is the whole answer, with no row-by-row variation.
+1. **Look up the column** in `unit_conventions` (or the joined `column_units` view) by
+   `table_name`/`column_name`.
+2. **If more than one row comes back**, the column is discriminated — each row names a
+   `discriminator_column` (e.g. `unit_basis`, `admittance_units`, `power_units`); match it
+   against that same column's value on the row you're reading.
+3. **Read the matched row's `unit`.** If it is `pu`, resolve it against the base column on
+   the *same row* — `base_power` for power/impedance quantities, `base_voltage` for voltage
+   quantities — never a system-wide table.
 
-  *Worked example:* `column_units` has one row for `(transmission_lines,
-  continuous_rating)` → `unit = MVA`, `quantity_type = ApparentPower`. Every
-  `continuous_rating` value in `transmission_lines` is megavolt-amperes.
+*Worked example:* `transmission_lines.r` has two `unit_conventions` rows, discriminated by
+`unit_basis`: `COMPONENT_BASE` → `unit = pu`, `NATURAL_UNITS` → `unit = ohm`. A row with
+`unit_basis = 'COMPONENT_BASE'`, `r = 0.02`, `base_power = 100` reads as 0.02 pu on a
+100 MVA base; the same line with `unit_basis = 'NATURAL_UNITS'` would carry `r` directly
+in ohm. A column with only one `unit_conventions` row (e.g.
+`transmission_lines.continuous_rating` → `MVA`) skips step 2: that unit applies to every
+row, unconditionally.
 
-- **A column discriminated by `unit_basis`** (the branch/device electrical parameters —
-  `transmission_lines.r`/`x`/`b`/`g`, `transformer_circuits.r`/`x`, admittances, HVDC
-  impedances) — `unit_conventions` carries one row per `unit_basis` value for that column.
-  Read the row's own `unit_basis` first, then the same row's own base column —
-  `base_power` for power/impedance quantities, `base_voltage` for voltage quantities (e.g.
-  `sources.internal_voltage`, always stored as `pu` against the row's own `base_voltage`) —
-  never a system-wide table.
+Two kinds of value sit outside `unit_conventions` entirely:
 
-  *Worked example:* `transmission_lines.r` has two `unit_conventions` rows — `unit_basis =
-  COMPONENT_BASE` → `unit = pu`, `unit_basis = NATURAL_UNITS` → `unit = ohm`. A row with
-  `unit_basis = 'COMPONENT_BASE'`, `r = 0.02`, `base_power = 100` reads as 0.02 pu on a
-  100 MVA base; the same line with `unit_basis = 'NATURAL_UNITS'` would carry `r` directly
-  in ohm.
-
-- **A time-series association row** — the canonical unit lives on `time_series_metadata`
-  (joined by `time_series_uuid`/`uuid`), not on `time_series_associations` itself; see
-  [Time-series units](#time-series-units) below.
-
-  *Worked example:* series `uuid = 'a1b2...'` has `time_series_metadata.unit = 'MW'`,
-  `quantity_type = 'ActivePower'` — every value in that series is megawatts, regardless of
-  what (if anything) the deprecated `time_series_associations.units` says for the same uuid.
-
-- **A cost JSON payload** (`operation_cost` / `operation_costs` / `production_cost`) — its own
-  embedded `power_units` key, at whatever nesting the cost shape puts it (e.g.
-  `production_cost.power_units`, or `operation_cost.curtailment_cost.power_units` on
-  `renewable_generators`). Per-table triggers **require it to be `NATURAL_UNITS`** — the DB
-  stores no base to interpret a relative one, so `COMPONENT_BASE` (legal at the JSON Schema
-  layer) is rejected here.
-
-  *Worked example:* `thermal_generators.production_cost` with
-  `json_extract(production_cost, '$.power_units') = 'NATURAL_UNITS'` reads its
-  `variable_operation_cost` curve directly in MW/MWh; an INSERT with `'COMPONENT_BASE'` there
-  is rejected by the `validate_thermal_generators_cost_units_insert` trigger.
-
-**Stage-2 territory:** a generic basis-resolution table (sketched on sibling branches as
-`unit_basis_rules`, mapping a quantity type to the expression that resolves its base) is not
-part of this branch's DDL — no such table exists here yet, so there is no schema.sql entry to
-carry. Today, resolution is exactly the two same-row lookups above (`unit_basis` +
-`base_power`/`base_voltage`); nothing generic sits behind them yet.
+- **Time-series values** — the unit lives on `time_series_metadata` (joined by `uuid`), not
+  on the row you're reading; see [Time-series units](#time-series-units) below.
+- **Cost JSON payloads** (`operation_cost` / `production_cost`) — carry their own embedded
+  `power_units` key. Triggers require it to be `NATURAL_UNITS`, since the DB stores no base
+  to resolve `COMPONENT_BASE` against.
 
 ### Time-series units
 
@@ -224,8 +194,7 @@ over the hand-written DDL — both are checked against it instead.
 
 Hand-written, not generated: `schema/schema.sql` (production DDL) and `schema/triggers.sql`
 (validation triggers). `schema.sql` does not consume `generated_schema.sql` at build time —
-`--diff` is a drift *report*, not a build dependency; see
-[Generated DDL](#generated-ddl-sql-codegen-from-the-json-schemas) above for how the two relate.
+`--diff` is a drift *report*, not a build dependency.
 
 ### Mapping and config files
 

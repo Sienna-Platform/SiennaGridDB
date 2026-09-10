@@ -71,7 +71,7 @@ def test_thermal_standard():
         id=3,
         name="test_thermal",
         available=True,
-        status=True,
+        status="ONLINE",
         bus=3,
         active_power=0.0,
         reactive_power=0.0,

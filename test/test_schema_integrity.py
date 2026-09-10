@@ -455,7 +455,7 @@ def test_identifier_attribute_needs_no_unit(fresh_db, name, entity_type):
 def test_non_identifier_numeric_attribute_still_needs_a_unit(fresh_db):
     """The exemption is scoped to the listed (TYPE, name) pairs, not to integers in general."""
     owner = _attr_owner(fresh_db, "ACBus")
-    with pytest.raises(sqlite3.IntegrityError, match="require a vocabulary-valid unit"):
+    with pytest.raises(sqlite3.IntegrityError, match="needs a vocabulary-valid unit"):
         fresh_db.execute(
             "INSERT INTO attributes(entity_id, TYPE, name, value) "
             "VALUES (?, 'ACBus', 'not_an_identifier', '8901')",
@@ -466,7 +466,7 @@ def test_non_identifier_numeric_attribute_still_needs_a_unit(fresh_db):
 def test_identifier_exemption_is_scoped_by_type(fresh_db):
     """'number' is exempt on ACBus but not on a TYPE that was never seeded for it."""
     owner = _attr_owner(fresh_db, "ThermalStandard")
-    with pytest.raises(sqlite3.IntegrityError, match="require a vocabulary-valid unit"):
+    with pytest.raises(sqlite3.IntegrityError, match="needs a vocabulary-valid unit"):
         fresh_db.execute(
             "INSERT INTO attributes(entity_id, TYPE, name, value) "
             "VALUES (?, 'ThermalStandard', 'number', '8901')",

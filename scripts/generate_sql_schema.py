@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Generate SQLite DDL from the SiennaSchemas JSON Schemas (SQL codegen).
 
-This is the SQL analogue of the openapi-generator Python/Julia model codegen:
-the JSON Schemas in SiennaSchemas are the source of truth, and this script
-mechanically projects the components mapped in schema/schema_map.json into
-CREATE TABLE statements, written to schema/generated_schema.sql.
+Projects the components mapped in schema/schema_map.json into CREATE TABLE
+statements, written to schema/generated_schema.sql. This is a REFERENCE
+artifact, not the production DDL (schema/schema.sql is hand-written); it
+exists so drift between the two is visible and mechanically checkable via
+--diff.
 
 Inputs (stdlib only, no third-party deps):
   --schemas-path  SiennaSchemas checkout root. Default: ../SiennaSchemas
@@ -17,11 +18,6 @@ Inputs (stdlib only, no third-party deps):
                               properties stored in the generic `attributes`
                               table instead of dedicated columns, e.g. branch
                               r/x/b/g).
-
-Output: schema/generated_schema.sql -- a REFERENCE artifact. It is not
-executed by the build chain (schema/schema.sql remains the production DDL);
-it exists so drift between the hand-written DDL and the schemas is visible
-and mechanically checkable. Run with --diff to get the drift report.
 
 Codegen rules
 -------------
@@ -53,15 +49,9 @@ Modes:
   (none)    write schema/generated_schema.sql
   --check   regenerate in memory and exit non-zero if the checked-in file
             differs (staleness gate, mirrors generate_unit_registry.py)
-  --diff    build generated DDL and the hand-written schema.sql in memory and
-            report per-table column drift (missing / extra / type mismatch /
-            nullability relaxation). Exit non-zero only on a type mismatch for a
-            same-named column. Nullability relaxations (a schema-required column
-            made nullable in schema.sql, compared via PRAGMA table_info notnull)
-            are reported for review but, like the missing/extra-column coverage
-            gaps, are non-gating -- the hand-written DDL is a curated subset.
-            (CHECK-constraint comparison is deferred: parsing it out of
-            sqlite_master.sql is fragile.)
+  --diff    report per-table column drift against the hand-written schema.sql;
+            see diff() for what gates a non-zero exit and what is reported
+            but non-gating.
 """
 
 import argparse
@@ -89,11 +79,10 @@ HEADER = """\
 --     python3 scripts/generate_sql_schema.py --diff
 -- to see where the hand-written schema has drifted from the schemas.
 --
--- Reviewers: do not compare this file to schema/schema.sql by eye. It lists
--- every mapped schema property, so it will show columns schema.sql omits
--- on purpose; that is expected. CI runs --check (this file is current) and
--- --diff (drift report, gating only on type contradictions). Review changes
--- to schema.sql, and read this file only through the --diff output.
+-- Do not compare this file to schema/schema.sql by eye: it lists every
+-- mapped schema property, so it shows columns schema.sql omits on purpose.
+-- Read drift through --diff output instead. CI runs --check (this file is
+-- current) and --diff (drift report, gating only on type contradictions).
 
 """
 
@@ -295,9 +284,8 @@ def generate(schemas_path):
 # --------------------------------------------------------------------------- diff
 def table_columns(conn, table):
     """column name -> (SQL type upper-cased, is_not_null). PRAGMA table_info
-    row layout is (cid, name, type, notnull, dflt_value, pk); notnull was
-    previously discarded, which let a schema-required column silently ship as
-    nullable in the hand-written DDL."""
+    row layout is (cid, name, type, notnull, dflt_value, pk); notnull is kept
+    so a nullability relaxation in the hand-written DDL is visible."""
     return {
         row[1]: (row[2].upper(), bool(row[3]))
         for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -348,12 +336,10 @@ def diff(generated_sql):
         for col in shared:
             gen_type, gen_notnull = gen_cols[col]
             hand_type, hand_notnull = hand_cols[col]
-            # Type comparison. SQLite stores JSON as TEXT; a JSON-typed
-            # projection of a TEXT column (or vice versa) is the same physical
-            # storage class, so it is a note rather than a mismatch.
             # TEXT/JSON and INTEGER/BOOLEAN pairs share a storage class: the
             # hand-written DDL uses the STRICT-legal spelling (TEXT+json_valid,
-            # INTEGER+CHECK IN (0,1)) of the generated JSON/BOOLEAN type.
+            # INTEGER+CHECK IN (0,1)) of the generated JSON/BOOLEAN type, so
+            # that pairing is a note, not a mismatch.
             if gen_type != hand_type:
                 if {gen_type, hand_type} in ({"TEXT", "JSON"}, {"INTEGER", "BOOLEAN"}):
                     print(
@@ -366,15 +352,13 @@ def diff(generated_sql):
                         f"schema.sql says {hand_type}"
                     )
                     type_conflicts += 1
-            # Nullability comparison (previously invisible: PRAGMA notnull was
-            # discarded). GATE the DANGEROUS direction -- a column the schemas
-            # require (NOT NULL) that the hand-written DDL relaxed to NULL. That
-            # is a constraint-loss defect: a consumer trusting the schema's
+            # Gate only the dangerous direction: a column the schemas require
+            # (NOT NULL) that the hand-written DDL relaxed to NULL is a
+            # constraint-loss defect -- a consumer trusting the schema's
             # required-ness reads a NULL where a value must exist. The reverse
             # (hand-written stricter than the schema) is a deliberate curation
-            # choice, not a loss, so it is not reported. (CHECK-constraint
-            # comparison is deferred: parsing it out of sqlite_master.sql is
-            # fragile.)
+            # choice, not reported. CHECK-constraint comparison is deferred:
+            # parsing it out of sqlite_master.sql is fragile.
             if gen_notnull and not hand_notnull:
                 print(
                     f"[{table}] NULLABILITY RELAXATION {col}: schemas require "

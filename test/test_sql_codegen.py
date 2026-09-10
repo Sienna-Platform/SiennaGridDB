@@ -187,7 +187,7 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     component has no natural-units option in PSY, unlike transmission_lines),
     registered in unit_conventions with no discriminator. rating is stored
     flexibly per power_units, asserted separately below. base_power is the
-    per-row system-base snapshot r/x normalize against, mirroring transmission_lines."""
+    component base r/x are per-unitized against, mirroring transmission_lines."""
     cols = {
         row[1]: row[2]
         for row in fresh_db.execute("PRAGMA table_info(discrete_controlled_ac_branches)")
@@ -397,8 +397,8 @@ def test_units_comment_plain_x_unit_unchanged():
 
 
 def test_units_comment_flat_x_units_unchanged():
-    """A flat x-units map (no nested discriminator) renders exactly as before:
-    ', '-joined 'key: value' pairs, sorted by key."""
+    """A flat x-units map (no nested discriminator) renders as ', '-joined
+    'key: value' pairs, sorted by key."""
     prop = {
         "x-unit-discriminator": "parameter_units",
         "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"},

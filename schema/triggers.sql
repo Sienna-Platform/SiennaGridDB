@@ -14,7 +14,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table planning_regions before insertion'
+        'planning_regions.id must exist in entities with entity_table planning_regions before insert'
     );
 
 END;
@@ -35,7 +35,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table balancing_topologies before insertion'
+        'balancing_topologies.id must exist in entities with entity_table balancing_topologies before insert'
     );
 
 END;
@@ -56,7 +56,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table arcs before insertion'
+        'arcs.id must exist in entities with entity_table arcs before insert'
     );
 
 END;
@@ -77,7 +77,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table transmission_lines before insertion'
+        'transmission_lines.id must exist in entities with entity_table transmission_lines before insert'
     );
 
 END;
@@ -98,7 +98,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table discrete_controlled_ac_branches before insertion'
+        'discrete_controlled_ac_branches.id must exist in entities with entity_table discrete_controlled_ac_branches before insert'
     );
 
 END;
@@ -119,7 +119,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table transformer_circuits before insertion'
+        'transformer_circuits.id must exist in entities with entity_table transformer_circuits before insert'
     );
 
 END;
@@ -140,7 +140,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table two_winding_transformers before insertion'
+        'two_winding_transformers.id must exist in entities with entity_table two_winding_transformers before insert'
     );
 
 END;
@@ -161,7 +161,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table three_winding_transformers before insertion'
+        'three_winding_transformers.id must exist in entities with entity_table three_winding_transformers before insert'
     );
 
 END;
@@ -182,7 +182,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table transmission_interchanges before insertion'
+        'transmission_interchanges.id must exist in entities with entity_table transmission_interchanges before insert'
     );
 
 END;
@@ -203,7 +203,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table thermal_generators before insertion'
+        'thermal_generators.id must exist in entities with entity_table thermal_generators before insert'
     );
 
 END;
@@ -224,7 +224,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table renewable_generators before insertion'
+        'renewable_generators.id must exist in entities with entity_table renewable_generators before insert'
     );
 
 END;
@@ -245,7 +245,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table hydro_generators before insertion'
+        'hydro_generators.id must exist in entities with entity_table hydro_generators before insert'
     );
 
 END;
@@ -266,7 +266,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table storage_units before insertion'
+        'storage_units.id must exist in entities with entity_table storage_units before insert'
     );
 
 END;
@@ -287,7 +287,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table hydro_reservoirs before insertion'
+        'hydro_reservoirs.id must exist in entities with entity_table hydro_reservoirs before insert'
     );
 
 END;
@@ -308,7 +308,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table supply_technologies before insertion'
+        'supply_technologies.id must exist in entities with entity_table supply_technologies before insert'
     );
 
 END;
@@ -329,7 +329,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table transport_technologies before insertion'
+        'transport_technologies.id must exist in entities with entity_table transport_technologies before insert'
     );
 
 END;
@@ -350,7 +350,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table storage_technologies before insertion'
+        'storage_technologies.id must exist in entities with entity_table storage_technologies before insert'
     );
 
 END;
@@ -371,7 +371,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table demand_technologies before insertion'
+        'demand_technologies.id must exist in entities with entity_table demand_technologies before insert'
     );
 
 END;
@@ -392,7 +392,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table supplemental_attributes before insertion'
+        'supplemental_attributes.id must exist in entities with entity_table supplemental_attributes before insert'
     );
 
 END;
@@ -407,7 +407,7 @@ INSERT ON plants
     ) BEGIN
 SELECT RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table plants before insertion'
+        'plants.id must exist in entities with entity_table plants before insert'
     );
 END;
 
@@ -427,7 +427,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table loads before insertion'
+        'loads.id must exist in entities with entity_table loads before insert'
     );
 
 END;
@@ -448,7 +448,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table fixed_admittance before insertion'
+        'fixed_admittance.id must exist in entities with entity_table fixed_admittance before insert'
     );
 
 END;
@@ -469,7 +469,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table switched_admittance before insertion'
+        'switched_admittance.id must exist in entities with entity_table switched_admittance before insert'
     );
 
 END;
@@ -490,7 +490,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table sources before insertion'
+        'sources.id must exist in entities with entity_table sources before insert'
     );
 
 END;
@@ -511,7 +511,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table two_terminal_hvdc_lines before insertion'
+        'two_terminal_hvdc_lines.id must exist in entities with entity_table two_terminal_hvdc_lines before insert'
     );
 
 END;
@@ -532,7 +532,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table synchronous_condensers before insertion'
+        'synchronous_condensers.id must exist in entities with entity_table synchronous_condensers before insert'
     );
 
 END;
@@ -553,7 +553,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table tmodel_hvdc_lines before insertion'
+        'tmodel_hvdc_lines.id must exist in entities with entity_table tmodel_hvdc_lines before insert'
     );
 
 END;
@@ -575,7 +575,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table facts_control_devices before insertion'
+        'facts_control_devices.id must exist in entities with entity_table facts_control_devices before insert'
     );
 
 END;
@@ -596,7 +596,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table interconnecting_converters before insertion'
+        'interconnecting_converters.id must exist in entities with entity_table interconnecting_converters before insert'
     );
 
 END;
@@ -617,7 +617,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table trading_hubs before insertion'
+        'trading_hubs.id must exist in entities with entity_table trading_hubs before insert'
     );
 
 END;
@@ -638,7 +638,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table virtual_participants before insertion'
+        'virtual_participants.id must exist in entities with entity_table virtual_participants before insert'
     );
 
 END;
@@ -659,7 +659,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'Entity ID must exist in entities table with entity_table point_to_point_bids before insertion'
+        'point_to_point_bids.id must exist in entities with entity_table point_to_point_bids before insert'
     );
 
 END;
@@ -679,7 +679,7 @@ SELECT
                 entities
             WHERE
                 id = NEW.from_id
-        ) THEN RAISE(ABORT, 'from_id entity does not exist')
+        ) THEN RAISE(ABORT, 'arcs.from_id must reference an existing entity')
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -687,7 +687,7 @@ SELECT
                 entities
             WHERE
                 id = NEW.to_id
-        ) THEN RAISE(ABORT, 'to_id entity does not exist')
+        ) THEN RAISE(ABORT, 'arcs.to_id must reference an existing entity')
         WHEN (
             SELECT
                 et.is_topology
@@ -698,7 +698,7 @@ SELECT
                 e.id = NEW.from_id
         ) = 0 THEN RAISE(
             ABORT,
-            'Invalid from_id entity type: must be a topology type (entity_types.is_topology = 1)'
+            'arcs.from_id must reference a topology entity (entity_types.is_topology = 1)'
         )
         WHEN (
             SELECT
@@ -710,7 +710,7 @@ SELECT
                 e.id = NEW.to_id
         ) = 0 THEN RAISE(
             ABORT,
-            'Invalid to_id entity type: must be a topology type (entity_types.is_topology = 1)'
+            'arcs.to_id must reference a topology entity (entity_types.is_topology = 1)'
         )
     END;
 
@@ -731,7 +731,7 @@ SELECT
                 entities
             WHERE
                 id = NEW.from_id
-        ) THEN RAISE(ABORT, 'from_id entity does not exist')
+        ) THEN RAISE(ABORT, 'arcs.from_id must reference an existing entity')
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -739,7 +739,7 @@ SELECT
                 entities
             WHERE
                 id = NEW.to_id
-        ) THEN RAISE(ABORT, 'to_id entity does not exist')
+        ) THEN RAISE(ABORT, 'arcs.to_id must reference an existing entity')
         WHEN (
             SELECT
                 et.is_topology
@@ -750,7 +750,7 @@ SELECT
                 e.id = NEW.from_id
         ) = 0 THEN RAISE(
             ABORT,
-            'Invalid from_id entity type: must be a topology type (entity_types.is_topology = 1)'
+            'arcs.from_id must reference a topology entity (entity_types.is_topology = 1)'
         )
         WHEN (
             SELECT
@@ -762,19 +762,17 @@ SELECT
                 e.id = NEW.to_id
         ) = 0 THEN RAISE(
             ABORT,
-            'Invalid to_id entity type: must be a topology type (entity_types.is_topology = 1)'
+            'arcs.to_id must reference a topology entity (entity_types.is_topology = 1)'
         )
     END;
 
 END;
 
--- Enforce that a turbine can have at most 1 upstream reservoir
--- (i.e., at most 1 row where sink is a turbine and source is a reservoir)
+-- A turbine (hydro_generators or storage_units) may draw from at most one upstream reservoir.
 CREATE TRIGGER IF NOT EXISTS enforce_turbine_single_upstream_reservoir BEFORE
 INSERT
     ON hydro_reservoir_connections
     WHEN (
-        -- Check if sink is a turbine (hydro_generators or storage_units)
         SELECT
             entity_table
         FROM
@@ -783,7 +781,6 @@ INSERT
             id = NEW.sink_id
     ) IN ('hydro_generators', 'storage_units')
     AND (
-        -- Check if source is a reservoir
         SELECT
             entity_table
         FROM
@@ -805,7 +802,7 @@ SELECT
                 AND e_source.entity_table = 'hydro_reservoirs'
         ) THEN RAISE(
             ABORT,
-            'Turbine already has an upstream reservoir. Each turbine can have at most 1 upstream reservoir.'
+            'A turbine may have at most one upstream reservoir.'
         )
     END;
 
@@ -846,19 +843,17 @@ SELECT
                 AND hrc.rowid != OLD.rowid
         ) THEN RAISE(
             ABORT,
-            'Turbine already has an upstream reservoir. Each turbine can have at most 1 upstream reservoir.'
+            'A turbine may have at most one upstream reservoir.'
         )
     END;
 
 END;
 
--- Enforce that a turbine can have at most 1 downstream reservoir
--- (i.e., at most 1 row where source is a turbine and sink is a reservoir)
+-- A turbine (hydro_generators or storage_units) may feed at most one downstream reservoir.
 CREATE TRIGGER IF NOT EXISTS enforce_turbine_single_downstream_reservoir BEFORE
 INSERT
     ON hydro_reservoir_connections
     WHEN (
-        -- Check if source is a turbine (hydro_generators or storage_units)
         SELECT
             entity_table
         FROM
@@ -867,7 +862,6 @@ INSERT
             id = NEW.source_id
     ) IN ('hydro_generators', 'storage_units')
     AND (
-        -- Check if sink is a reservoir
         SELECT
             entity_table
         FROM
@@ -889,7 +883,7 @@ SELECT
                 AND e_sink.entity_table = 'hydro_reservoirs'
         ) THEN RAISE(
             ABORT,
-            'Turbine already has a downstream reservoir. Each turbine can have at most 1 downstream reservoir.'
+            'A turbine may have at most one downstream reservoir.'
         )
     END;
 
@@ -930,13 +924,13 @@ SELECT
                 AND hrc.rowid != OLD.rowid
         ) THEN RAISE(
             ABORT,
-            'Turbine already has a downstream reservoir. Each turbine can have at most 1 downstream reservoir.'
+            'A turbine may have at most one downstream reservoir.'
         )
     END;
 
 END;
 
--- Reverse cascade triggers: delete from entities when child table row is deleted
+-- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.
 CREATE TRIGGER IF NOT EXISTS delete_planning_regions_entity
 AFTER
     DELETE ON planning_regions FOR EACH ROW
@@ -1287,10 +1281,9 @@ END;
 
 -- =============================================================================
 -- Unit Registry Immutability Triggers
--- UPDATE and DELETE are blocked unconditionally.
--- INSERT is blocked only after the registry is sealed (checksum exists).
+-- UPDATE and DELETE are always blocked; INSERT is blocked once the registry is
+-- sealed (a checksum row exists).
 -- =============================================================================
--- unit_management_metadata
 CREATE TRIGGER IF NOT EXISTS prevent_unit_management_metadata_update BEFORE
 UPDATE
     ON unit_management_metadata
@@ -1298,7 +1291,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_management_metadata is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'unit_management_metadata is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1308,7 +1301,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_management_metadata is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'unit_management_metadata is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1328,12 +1321,11 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_management_metadata is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'unit_management_metadata is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
--- quantity_types
 CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_update BEFORE
 UPDATE
     ON quantity_types
@@ -1341,7 +1333,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1351,7 +1343,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1371,12 +1363,11 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
--- unit_conventions
 CREATE TRIGGER IF NOT EXISTS prevent_unit_conventions_update BEFORE
 UPDATE
     ON unit_conventions
@@ -1384,7 +1375,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_conventions is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'unit_conventions is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1394,7 +1385,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_conventions is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'unit_conventions is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1414,13 +1405,12 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'unit_conventions is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'unit_conventions is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
--- allowed_units (registry vocabulary): UPDATE and DELETE are blocked
--- unconditionally; INSERT is blocked only after the registry is sealed.
+-- allowed_units is the registry vocabulary table, sealed the same way.
 CREATE TRIGGER IF NOT EXISTS prevent_allowed_units_update BEFORE
 UPDATE
     ON allowed_units
@@ -1428,7 +1418,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'allowed_units is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'allowed_units is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1438,7 +1428,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'allowed_units is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'allowed_units is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1458,15 +1448,14 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'allowed_units is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+        'allowed_units is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
 -- =============================================================================
--- Time Series Metadata Unit Validation Triggers (registry-linked)
--- The (quantity_type, unit) pair on each series must be a registered vocabulary
--- entry in allowed_units.
+-- Time Series Metadata Unit Validation Triggers
+-- Each row's (quantity_type, unit) pair must be a registered entry in allowed_units.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_insert BEFORE
 INSERT
@@ -1511,10 +1500,11 @@ SELECT
 END;
 
 -- =============================================================================
--- Attribute Unit Validation Triggers (registry-linked)
--- Known attribute names must match registered unit and quantity_type.
--- Unknown attributes with numeric or structured (non-boolean, non-text, non-null) JSON values
--- must provide unit and quantity_type. Boolean, text, and null-valued attributes pass freely.
+-- Attribute Unit Validation Triggers
+-- A known attribute name must use its registered unit and quantity_type from
+-- unit_conventions. An unknown attribute with a numeric or structured value
+-- needs a vocabulary-valid pair from allowed_units, unless attribute_identifiers
+-- lists it as a non-physical identifier. Boolean, text, and null values are exempt.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_attribute_unit_insert BEFORE
 INSERT
@@ -1522,9 +1512,7 @@ INSERT
 BEGIN
 SELECT
     CASE
-        -- Known attribute name: the (unit, quantity_type) must match some
-        -- registered row for that name. Polymorphic names carry several rows,
-        -- so any matching row satisfies the check (NOT EXISTS over the match).
+        -- Polymorphic attribute names have multiple registered rows; matching any one is enough.
         WHEN EXISTS (
             SELECT
                 1
@@ -1550,14 +1538,10 @@ SELECT
             )
         ) THEN RAISE(
             ABORT,
-            'Known attribute must use the registered unit and quantity_type from unit_conventions.'
+            'attributes.name is a known name and must use its registered unit and quantity_type.'
         )
-        -- Unknown attribute with physical value: must have a vocabulary-valid
-        -- (quantity_type, unit) pair from allowed_units.
-        -- Physical = anything except boolean, text, or null -- except that a
-        -- numeric identifier (bus number, node reference) is not physical at all,
-        -- so (TYPE, name) pairs listed in attribute_identifiers are exempt rather
-        -- than being forced to carry a made-up unit.
+        -- A numeric identifier (e.g. a bus number) isn't a physical quantity;
+        -- attribute_identifiers exempts it from needing a unit.
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -1591,7 +1575,7 @@ SELECT
             )
         ) THEN RAISE(
             ABORT,
-            'Attributes with numeric or structured values require a vocabulary-valid unit and quantity_type from allowed_units. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
+            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
         )
     END;
 
@@ -1603,9 +1587,7 @@ UPDATE
 BEGIN
 SELECT
     CASE
-        -- Known attribute name: the (unit, quantity_type) must match some
-        -- registered row for that name. Polymorphic names carry several rows,
-        -- so any matching row satisfies the check (NOT EXISTS over the match).
+        -- Polymorphic attribute names have multiple registered rows; matching any one is enough.
         WHEN EXISTS (
             SELECT
                 1
@@ -1631,11 +1613,10 @@ SELECT
             )
         ) THEN RAISE(
             ABORT,
-            'Known attribute must use the registered unit and quantity_type from unit_conventions.'
+            'attributes.name is a known name and must use its registered unit and quantity_type.'
         )
-        -- Unknown attribute with physical value: must have a vocabulary-valid
-        -- (quantity_type, unit) pair from allowed_units. (TYPE, name) pairs are
-        -- exempt, as on insert -- see attribute_identifiers.
+        -- A numeric identifier (e.g. a bus number) isn't a physical quantity;
+        -- attribute_identifiers exempts it from needing a unit.
         WHEN NOT EXISTS (
             SELECT
                 1
@@ -1669,7 +1650,7 @@ SELECT
             )
         ) THEN RAISE(
             ABORT,
-            'Attributes with numeric or structured values require a vocabulary-valid unit and quantity_type from allowed_units. Use unit=1 and quantity_type=Dimensionless for dimensionless quantities.'
+            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
         )
     END;
 
@@ -1677,9 +1658,8 @@ END;
 
 -- =============================================================================
 -- Time Series Data Validation Triggers
--- Units live on time_series_metadata (one row per uuid), so a series cannot
--- carry mixed units. Each static_time_series row must reference an existing
--- metadata row.
+-- time_series_metadata holds one unit per uuid, so a series can't carry mixed
+-- units. Each static_time_series row must reference an existing metadata row.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists BEFORE
 INSERT
@@ -1696,7 +1676,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata before insertion.'
+        'static_time_series.uuid must exist in time_series_metadata.'
     );
 
 END;
@@ -1716,15 +1696,15 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata before insertion.'
+        'static_time_series.uuid must exist in time_series_metadata.'
     );
 
 END;
 
 -- =============================================================================
 -- Deprecated time_series_associations.units guard
--- The column is deprecated in favor of time_series_metadata.unit. When set, it
--- must agree with the series metadata unit.
+-- time_series_metadata.unit is the source of truth; a non-null
+-- time_series_associations.units for the same uuid must match it.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
 INSERT
@@ -1751,7 +1731,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
+        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid.'
     );
 
 END;
@@ -1781,22 +1761,18 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid, or no time_series_metadata row exists.'
+        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid.'
     );
 
 END;
 
 -- =============================================================================
 -- Cost Payload Power-Units Guard
--- column_conventions.json registers cost curves in natural units only (USD/h,
--- USD/MWh, MMBtu/MWh by curve_type/variable_cost_type), with no power_units
--- discriminator -- so a COMPONENT_BASE payload has no registered unit and is
--- rejected here, alongside junk values. NULL/absent power_units passes
--- (payload may be a plain curve). Admitting COMPONENT_BASE (upstream's
--- UnitSystem allows it, against the owning component's base_power) needs pu
--- conventions plus that discriminator -- a follow-up, not this guard.
--- The authoritative list of guarded cost payload paths is
--- column_conventions.json (production_cost / operation_cost* rows); keep in sync.
+-- column_conventions.json registers cost curves in natural units only, with no
+-- power_units discriminator, so only NATURAL_UNITS passes; a NULL or absent
+-- power_units passes too, since the payload may be a plain curve. Keep this
+-- trigger set in sync with column_conventions.json's production_cost /
+-- operation_cost* rows.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_insert BEFORE
 INSERT
@@ -1806,7 +1782,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1819,7 +1795,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1833,7 +1809,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1847,7 +1823,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1860,7 +1836,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1873,7 +1849,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1887,7 +1863,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1901,7 +1877,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1914,7 +1890,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1927,7 +1903,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1940,7 +1916,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1953,7 +1929,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1967,7 +1943,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1981,13 +1957,13 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
 
--- sources carries PSY ImportExportCost, whose two guarded paths are the import
--- and export offer curves rather than a `variable` curve.
+-- sources' ImportExportCost payload guards import_offer_curves and
+-- export_offer_curves, not a `variable` curve.
 CREATE TRIGGER IF NOT EXISTS validate_sources_cost_units_insert BEFORE
 INSERT
     ON sources
@@ -1997,7 +1973,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2011,16 +1987,13 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
 
--- virtual_participants carries the schemas' discriminated MarketBidCost /
--- MarketBidTimeSeriesCost payload; both variants nest their supply and demand
--- curves in a CostCurve-shaped incremental_offer_curves / decremental_offer_curves
--- member, each carrying its own power_units, mirroring sources' ImportExportCost
--- guard above.
+-- virtual_participants' MarketBidCost payload guards incremental_offer_curves
+-- and decremental_offer_curves, mirroring the sources guard above.
 CREATE TRIGGER IF NOT EXISTS validate_virtual_participants_cost_units_insert BEFORE
 INSERT
     ON virtual_participants
@@ -2030,7 +2003,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2044,13 +2017,13 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
 
--- point_to_point_bids.spread_bid mirrors virtual_participants.operation_cost's
--- shape (incremental side only, per the schema); guarded the same way.
+-- point_to_point_bids.spread_bid has the same incremental/decremental
+-- offer-curve shape as virtual_participants.operation_cost, guarded the same way.
 CREATE TRIGGER IF NOT EXISTS validate_point_to_point_bids_cost_units_insert BEFORE
 INSERT
     ON point_to_point_bids
@@ -2060,7 +2033,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2074,20 +2047,17 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS; the unit registry covers cost curves in natural units only'
+        'cost payload power_units must be NATURAL_UNITS.'
     );
 
 END;
 
 -- =============================================================================
 -- EmissionsData supplemental-attribute payload guard
--- supplemental_attributes stores free-form JSON per TYPE; for TYPE =
--- 'EmissionsData' the payload's enum-bearing fields must use the schema enums
--- (Core/common.json MassUnit/EnergyUnit/PollutantType/EmissionBasis) and the
--- energy_unit must be consistent with the basis, mirroring the schema's allOf
--- rule. Required fields (pollutant, basis, energy_unit) are rejected when
--- absent: pollutant/basis via explicit IS NULL terms, energy_unit via the
--- NULL-safe basis-gated IS NOT checks. Absent optional fields (mass_unit) pass.
+-- For TYPE = 'EmissionsData', pollutant/basis/energy_unit must be present and
+-- use the schema's enum values; energy_unit is required only for the basis it
+-- matches (FUEL_INPUT: MMBTU or GJ; POWER_OUTPUT: MWH), via NULL-safe IS NOT
+-- checks. mass_unit is optional and passes when absent.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_supplemental_emissions_insert BEFORE
 INSERT
@@ -2151,14 +2121,12 @@ END;
 
 -- =============================================================================
 -- Bus-domain triggers (AC vs DC)
--- The two HVDC families are not interchangeable: tmodel_hvdc_lines is a
--- DC-network branch and must run between DC buses (entity_types.is_dc = 1),
--- reached from the AC side through interconnecting_converters, while every AC
--- branch and every point-to-point two_terminal_hvdc_lines row must run between
--- AC topologies (is_dc = 0). A foreign key cannot express this: arcs reference
--- entities generically, and the domain lives on the entity's type.
--- Not enforced here: transmission_interchanges, a market construct between
--- areas rather than a physical branch.
+-- tmodel_hvdc_lines must run between DC buses (is_dc = 1); every AC branch,
+-- including point-to-point two_terminal_hvdc_lines, must run between AC
+-- topologies (is_dc = 0). A foreign key can't express this, since arcs
+-- reference entities generically and the domain lives on entity_types.
+-- transmission_interchanges, a market construct rather than a physical
+-- branch, is not checked here.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_insert BEFORE
 INSERT
@@ -2316,7 +2284,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0): a point-to-point HVDC line terminates on AC buses and its DC side is internal. Use tmodel_hvdc_lines between DC buses for a multi-terminal DC network.'
+        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for a DC-network branch instead.'
     );
 
 END;
@@ -2339,7 +2307,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0): a point-to-point HVDC line terminates on AC buses and its DC side is internal. Use tmodel_hvdc_lines between DC buses for a multi-terminal DC network.'
+        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for a DC-network branch instead.'
     );
 
 END;
@@ -2362,7 +2330,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1): it is a DC-network branch, reached from the AC side through interconnecting_converters. Use two_terminal_hvdc_lines for point-to-point HVDC between AC buses.'
+        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
     );
 
 END;
@@ -2385,7 +2353,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1): it is a DC-network branch, reached from the AC side through interconnecting_converters. Use two_terminal_hvdc_lines for point-to-point HVDC between AC buses.'
+        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
     );
 
 END;

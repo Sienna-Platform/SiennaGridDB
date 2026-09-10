@@ -223,10 +223,10 @@ def _expand_schema_units_map(units_map):
     """Expand a (possibly nested) schema x-units map into a flat
     {(primary_value, secondary_value): unit} map.
 
-    A flat entry (`{"SYSTEM_BASE": "pu", ...}`) expands to (primary_value, None).
+    A flat entry (`{"COMPONENT_BASE": "pu", ...}`) expands to (primary_value, None).
     A nested entry (a field whose unit depends on a SECOND discriminator, e.g.
     `dc_setpoint_from`'s `DC_VOLTAGE` value being `{"x-unit-discriminator":
-    "voltage_units", "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"}}`)
+    "voltage_units", "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"}}`)
     expands to one (primary_value, secondary_value) entry per secondary key.
     Must not choke on a dict value -- that is the whole point of this helper.
     """
@@ -274,7 +274,7 @@ def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_p
     if units_map is None:
         # The schema annotates a single representation (e.g. x-unit=pu for branch
         # r/x/b/g, the PSY-native basis) while the registry additionally offers
-        # other units via the discriminator (SYSTEM_BASE->pu, NATURAL_UNITS->ohm/S).
+        # other units via the discriminator (COMPONENT_BASE->pu, NATURAL_UNITS->ohm/S).
         # Positive match when the schema's single x-unit appears among the
         # registered discriminated units for this column.
         schema_unit = ann["unit"]
@@ -398,7 +398,7 @@ def psy_field_is_documented_natural(name, field, component_props):
       a device MVA base itself. Exact names, not a prefix — a new base_power_*
       field must be reviewed and added here, not silently exempted.
     - a device quantity entered "at unity voltage" (e.g. FACTS max_shunt_current, a
-      current expressed as MVA at unity voltage): a device basis, not a system-base
+      current expressed as MVA at unity voltage): a device basis, not a component-base
       power, so PSY deliberately stores it unconverted. The idiom is specific — only
       max_shunt_current uses it today — so it exempts exactly that pattern.
     - a component whose schema carries no `power_units` property at all: by design it

@@ -270,14 +270,11 @@
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
       "skip": [
-        "dynamic_injector",
-        "admittance_units"
+        "dynamic_injector"
       ],
       "db_only": [
         "y_g",
-        "y_b",
-        "unit_basis",
-        "base_power"
+        "y_b"
       ]
     },
     "switched_admittance": {
@@ -285,14 +282,7 @@
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
       "skip": [
-        "dynamic_injector",
-        "admittance_units"
-      ],
-      "db_only": [
-        "y_g",
-        "y_b",
-        "unit_basis",
-        "base_power"
+        "dynamic_injector"
       ]
     },
     "interconnecting_converters": {
