@@ -16,8 +16,14 @@ repos:
       - id: end-of-file-fixer
       - id: mixed-line-ending
         args: [--fix=lf]
+      # --no-sort-keys: the schema JSON files order keys by meaning, not
+      # alphabetically (a convention row reads table, column, quantity_type,
+      # unit, description). The three map files below additionally keep one
+      # object per line, or compact inline dicts, so a 265-row table stays
+      # reviewable in a diff; expanding them costs 3-7x the lines.
       - id: pretty-format-json
-        args: [--autofix, --indent=2]
+        args: [--autofix, --indent=2, --no-sort-keys]
+        exclude: "^schema/(column_conventions|schema_map|sql_codegen_map)\\.json$"
       - id: trailing-whitespace
       - id: check-merge-conflict
         args: [--assume-in-merge]

@@ -3,15 +3,9 @@
 
 Recomputes the canonical sha256 from the LIVE contents of quantity_types,
 allowed_units and unit_conventions, and compares it to the stored
-unit_management_metadata.unit_conventions_checksum row.
-
-The canonical representation MUST match generate_unit_registry.py exactly:
-
-    US = '\x1f' between fields, RS = '\x1e' between rows, GS = '\x1d' between
-    the three table blocks. NULLs render as the empty string. Rows are sorted
-    by their field tuple. Table blocks are joined in the fixed order
-    quantity_types, allowed_units, unit_conventions. See the generator's module
-    docstring for the authoritative spec.
+unit_management_metadata.unit_conventions_checksum row. Builds the canonical
+representation via _common.repr_from_rows, the same helper generate_unit_registry.py
+uses, so the two cannot drift apart; see _common.py's module docstring for the spec.
 
 Usage: verify_unit_registry.py <database-path>
 Exit 0 on match, 1 on mismatch or missing seal.

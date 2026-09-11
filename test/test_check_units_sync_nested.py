@@ -31,11 +31,11 @@ NESTED_PROP = {
         "DC_POWER": "MW",
         "DC_VOLTAGE": {
             "x-unit-discriminator": "voltage_units",
-            "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"},
+            "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
         },
         "DC_VOLTAGE_DROOP": {
             "x-unit-discriminator": "voltage_units",
-            "x-units": {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "kV"},
+            "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
         },
     },
 }
@@ -53,7 +53,7 @@ def _matching_registry_rows():
         {"discriminator_value": "DC_POWER", "quantity_type": "ActivePower", "unit": "MW"},
         {
             "discriminator_value": "DC_VOLTAGE",
-            "discriminator_value_2": "SYSTEM_BASE",
+            "discriminator_value_2": "COMPONENT_BASE",
             "quantity_type": "Voltage",
             "unit": "pu",
         },
@@ -65,7 +65,7 @@ def _matching_registry_rows():
         },
         {
             "discriminator_value": "DC_VOLTAGE_DROOP",
-            "discriminator_value_2": "SYSTEM_BASE",
+            "discriminator_value_2": "COMPONENT_BASE",
             "quantity_type": "Voltage",
             "unit": "pu",
         },
@@ -82,17 +82,17 @@ def test_expand_schema_units_map_nested():
     expanded = _expand_schema_units_map(NESTED_PROP["x-units"])
     assert expanded == {
         ("DC_POWER", None): "MW",
-        ("DC_VOLTAGE", "SYSTEM_BASE"): "pu",
+        ("DC_VOLTAGE", "COMPONENT_BASE"): "pu",
         ("DC_VOLTAGE", "NATURAL_UNITS"): "kV",
-        ("DC_VOLTAGE_DROOP", "SYSTEM_BASE"): "pu",
+        ("DC_VOLTAGE_DROOP", "COMPONENT_BASE"): "pu",
         ("DC_VOLTAGE_DROOP", "NATURAL_UNITS"): "kV",
     }
 
 
 def test_expand_schema_units_map_flat_unchanged():
-    flat = {"SYSTEM_BASE": "pu", "NATURAL_UNITS": "ohm"}
+    flat = {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"}
     assert _expand_schema_units_map(flat) == {
-        ("SYSTEM_BASE", None): "pu",
+        ("COMPONENT_BASE", None): "pu",
         ("NATURAL_UNITS", None): "ohm",
     }
 

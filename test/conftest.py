@@ -2,7 +2,7 @@
 
 The database is built purely with Python's ``sqlite3`` by ``executescript``-ing
 the four schema files in order, with ``PRAGMA foreign_keys = ON``. No sqlite3
-CLI dependency (Phase 2 removed it).
+CLI dependency.
 """
 
 import json
@@ -38,12 +38,17 @@ def load_schemas_json(rel_path):
 
 
 def make_entity(
-    conn, entity_id, entity_table="thing", entity_type="thing_type", is_topology=0
+    conn,
+    entity_id,
+    entity_table="thing",
+    entity_type="thing_type",
+    is_topology=0,
+    is_dc=0,
 ):
     """Insert an entity (and its type) so FK-bearing rows can reference it."""
     conn.execute(
-        "INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES (?, ?)",
-        (entity_type, is_topology),
+        "INSERT OR IGNORE INTO entity_types(name, is_topology, is_dc) VALUES (?, ?, ?)",
+        (entity_type, is_topology, is_dc),
     )
     conn.execute(
         "INSERT INTO entities(id, entity_table, entity_type) VALUES (?, ?, ?)",
