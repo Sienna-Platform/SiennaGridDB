@@ -5,9 +5,10 @@ on:
     branches:
       - main
     tags: ["*"]
+  # Every branch, not just PRs into main: this repo develops in stacked PRs
+  # (#174 -> #173 -> main and so on), and branch-filtering to main meant the
+  # stacked ones never ran CI at all.
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -39,9 +40,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/power-openapi-models
-          # TODO drop the ref once jd/openapi_deps_update (models regenerated for
-          # OperationalStates) is on main.
-          ref: jd/openapi_deps_update
           path: power-openapi-models
           fetch-depth: 1
 

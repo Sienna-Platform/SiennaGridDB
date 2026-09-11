@@ -5,6 +5,39 @@ Schema for the SQL database for Sienna Applications
 > [!IMPORTANT]
 > This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
 
+## What this repository ships
+
+The product is **SQL**, not a Python package. `schema/` holds the four files that build a
+database — `schema.sql` (tables), `triggers.sql` (integrity), `unit_registry.sql`
+(the generated, sha256-sealed unit vocabulary) and `views.sql` — and `scripts/` holds the
+Python tooling that generates and verifies them. Nothing here is importable; the
+`pyproject.toml` exists to set up the dev environment and host the linter config.
+
+A release is a tarball attached to a `v*` GitHub Release, containing `schema/`,
+`scripts/`, `README.md`, `LICENSE` and `.justfile` under a single top-level directory:
+
+```console
+tar -xzf sienna-griddb-v0.1.0.tar.gz
+cd sienna-griddb-v0.1.0
+just new-db                     # or the four sqlite3 calls below
+```
+
+### Scope of 0.1
+
+Read this before building on it:
+
+- **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
+  table, so it builds a new database and must never be applied to one holding data.
+  `PRAGMA user_version` is bumped on every schema change but nothing reads it.
+- **Roughly half the data model is typed.** 44 of 96 upstream components have a table.
+  Dynamics has none; services/reserves and the investment policy layer have none. See the
+  open coverage issue.
+- **No converter.** Nothing loads a PowerSystems `System` into these tables or back. The
+  bridge is deliberately out of scope for 0.1.
+- **The unit registry is the load-bearing deliverable** — 405 column conventions, sealed
+  and tamper-guarded, readable through the `column_units` view as an authoritative
+  `(table, column) -> (quantity_kind, unit, basis rule)` map.
+
 ## How To(s)
 
 ### How to install `just`
@@ -215,7 +248,7 @@ generator's `bus` column, say), but a relationship where either side can have se
 of the other — or where the link itself carries data, or where the "other side" spans
 several different component tables — has no single column to hold it. `schema/schema.sql`
 handles each of these cases with a dedicated association table: a row per link rather
-than a column on either side. Four exist:
+than a column on either side. Five exist:
 
 | Table | Links | Why it needs its own table |
 |---|---|---|
@@ -223,16 +256,21 @@ than a column on either side. Four exist:
 | `plant_associations` | a plant ↔ its member entities | a plant groups multiple generating units of varying concrete types, and the link carries a payload (`group_index`) that doesn't belong on the generic `entities` row or on any one device table |
 | `combined_cycle_associations` | a plant ↔ the CT/CA units feeding into or receiving from its HRSGs | stated directly in the table's own comment: "a CT or CA can feed multiple HRSGs and an HRSG can have multiple CTs/CAs" — genuinely many-to-many, which is why it is a separate table from `plant_associations` rather than another row shape in it (`plant_associations` enforces one row per `(plant, entity)`, which this relationship violates) |
 | `time_series_associations` | a time series ↔ the entity that owns it | one entity can own several time series (different resolutions, different features), and the association row is what makes a stored series queryable by owner without touching the series data itself |
+| `trading_hub_associations` | a trading hub ↔ its member entities | a hub aggregates several settlement points and an entity can belong to more than one hub, so neither side can hold the link; `UNIQUE (trading_hub_id, entity_id)` keeps one row per membership |
 
-Two of the four (`supplemental_attribute_associations`, `time_series_associations`)
+Two of the five (`supplemental_attribute_associations`, `time_series_associations`)
 resolve one side of the link through `entities` — the supertype table every component
 row also has a row in (`id`, `entity_table`, `entity_type`) — so a single
 `component_id`/`owner_id` column can point at a generator, a bus, or any other component
-type without a separate FK per possible target. `plant_associations` and
-`combined_cycle_associations` reference `entities` the same way for their non-owning
+type without a separate FK per possible target. `plant_associations`, `combined_cycle_associations` and
+`trading_hub_associations` reference `entities` the same way for their non-owning
 side (`entity_id`); their owning side (`plant_id`) always points at `plants`, since that
-side is never ambiguous. All four declare their FKs `ON DELETE CASCADE`, so a deleted
+side is never ambiguous. All five declare their FKs `ON DELETE CASCADE`, so a deleted
 component or attribute takes its association rows with it rather than leaving orphans.
+
+`hydro_reservoir_connections` is association-shaped too, but it is listed with the hydro
+topology rather than here: it links two reservoirs to each other, not a component to a
+grouping, and its integrity is enforced by the hydro-topology triggers.
 
 ### Two ways to identify a row
 
