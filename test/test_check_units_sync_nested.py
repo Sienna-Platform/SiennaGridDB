@@ -1,12 +1,16 @@
 """Tests for scripts/check_units_sync.py's handling of NESTED x-units (a field
-whose unit depends on TWO discriminators, e.g. TwoTerminalVSCLine.dc_setpoint_from
-and InterconnectingConverter.dc_setpoint).
+whose unit depends on TWO discriminators). The live example is
+InterconnectingConverter.dc_setpoint, discriminated by dc_control and then by
+voltage_setpoint_units.
 
 These exercise `_l1_discriminated` (and its `_expand_schema_units_map` helper)
-directly with in-memory fixtures -- deliberately NOT via schema_map.json/
-sql_codegen_map.json, which the real TwoTerminalVSCLine/InterconnectingConverter
-components must not be added to (out of scope; would trigger unrelated
-generated_schema.sql churn).
+directly with in-memory fixtures -- deliberately NOT via schema_map.json /
+sql_codegen_map.json. The table, column and component names passed below are
+inert labels used only in the failure messages: the fixture is synthetic and the
+assertions never read them, so they are modelled on the old
+TwoTerminalVSCLine.dc_setpoint_from field (folded into two_terminal_hvdc_lines,
+where the variant-specific setpoints now live in the attributes channel) and left
+alone to keep the nested shape unambiguous.
 """
 
 import sys
@@ -14,7 +18,7 @@ import sys
 from conftest import SCRIPTS_DIR
 
 sys.path.insert(0, str(SCRIPTS_DIR))
-from check_units_sync import (  # noqa: E402
+from check_units_sync import (
     Report,
     _expand_schema_units_map,
     _l1_discriminated,
@@ -48,7 +52,11 @@ ALLOWED_PAIRS = {
 
 
 def _matching_registry_rows():
-    """Registry rows matching NESTED_PROP exactly (the sync-clean case)."""
+    """Registry rows matching NESTED_PROP exactly (the sync-clean case).
+
+    Both sides speak the same two-value basis vocabulary (COMPONENT_BASE |
+    NATURAL_UNITS), so the registry fixture mirrors the schema map key-for-key.
+    """
     return [
         {"discriminator_value": "DC_POWER", "quantity_type": "ActivePower", "unit": "MW"},
         {
@@ -161,3 +169,41 @@ def test_l1_discriminated_nested_missing_registry_key_is_fail():
     layer, message = report.fails[0]
     assert layer == "L1"
     assert "discriminator key mismatch" in message
+
+
+def test_l1_flat_x_unit_with_registry_superset_warns():
+    """A flat schema x-unit matching one registry arm passes, but the arms the
+    schema cannot express are surfaced as a WARN -- the representability gap
+    that hid the Line r/x/b/g natural-units arm."""
+    ann = schema_property_annotation({"type": "number", "x-unit": "pu"})
+    rows = [
+        {"discriminator_value": "COMPONENT_BASE", "quantity_type": "Resistance", "unit": "pu"},
+        {"discriminator_value": "NATURAL_UNITS", "quantity_type": "Resistance", "unit": "ohm"},
+    ]
+    report = Report()
+    warns = _l1_discriminated(
+        report, "transmission_lines", "r", "Line", ann, rows,
+        {("Resistance", "pu"), ("Resistance", "ohm")},
+    )
+    assert warns == 1
+    assert report.fails == []
+    layer, message = report.warns[0]
+    assert layer == "L1"
+    assert "cannot express" in message
+    assert "ohm" in message
+
+
+def test_l1_flat_x_unit_exact_registry_match_is_silent():
+    """A flat schema x-unit whose unit is the registry's only arm is fully clean."""
+    ann = schema_property_annotation({"type": "number", "x-unit": "pu"})
+    rows = [
+        {"discriminator_value": "COMPONENT_BASE", "quantity_type": "Resistance", "unit": "pu"},
+    ]
+    report = Report()
+    warns = _l1_discriminated(
+        report, "discrete_controlled_ac_branches", "r", "DiscreteControlledACBranch",
+        ann, rows, {("Resistance", "pu")},
+    )
+    assert warns == 0
+    assert report.fails == []
+    assert report.warns == []
