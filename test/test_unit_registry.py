@@ -459,7 +459,7 @@ def test_association_registered_quantity_kind_bad_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="registered .quantity_kind, units. pair",
+        match="registered .quantity_type, unit. pair",
     ):
         _insert_association(fresh_db, 1, units="bananas", quantity_kind="ActivePower")
 
@@ -468,7 +468,7 @@ def test_association_registered_quantity_kind_missing_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="registered .quantity_kind, units. pair",
+        match="registered .quantity_type, unit. pair",
     ):
         _insert_association(fresh_db, 1, units=None, quantity_kind="ActivePower")
 

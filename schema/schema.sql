@@ -822,8 +822,8 @@ CREATE TABLE feature_sets (
         'ext', 'features', 'horizon', 'id', 'initial_timestamp', 'interval',
         'length', 'name', 'owner_category', 'owner_id', 'owner_type',
         'percentiles', 'quantity_kind', 'resolution', 'scenario_count',
-        'time_reference', 'time_series_type', 'timestamps', 'unit_system',
-        'units', 'uri'
+        'time_reference', 'time_series_type', 'timestamps', 'timestamps_uri',
+        'unit_system', 'units', 'uri'
     )),
     value_kind TEXT NOT NULL CHECK (value_kind IN ('int', 'float', 'bool', 'str')),
     value_int INTEGER,
