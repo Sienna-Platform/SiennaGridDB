@@ -58,11 +58,11 @@ them:
 
 | Table | Role |
 |---|---|
-| `quantity_types` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
-| `allowed_units` | The units permitted for each quantity type (e.g. `MW` for `ActivePower`). |
-| `unit_conventions` | The column→(quantity_type, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
-| `unit_basis_rules` | For each of the 5 quantity types that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
-| `column_units` (view) | Joins `unit_conventions` with `quantity_types` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
+| `quantity_kinds` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
+| `allowed_units` | The units permitted for each quantity kind (e.g. `MW` for `ActivePower`). |
+| `unit_conventions` | The column→(quantity_kind, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
+| `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
+| `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
 **Columns vs. `attributes`.** A table sourced from several upstream components keeps the
 fields common to all of them as columns. A field only some variants carry goes through
@@ -76,9 +76,9 @@ it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_traject
 unregistered, basis-dependent on the attribute `power_units`, same as VSC's
 `dc_setpoint_*`).
 
-Current registry: **41 quantity types, 66 allowed units, 405 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 405 conventions.**
 
-The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary in
+The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
 is the **sole vocabulary authority** — see SiennaSchemas'
 [Units](https://sienna-platform.github.io/SiennaSchemas/units/) page for how to read it, and
@@ -334,7 +334,7 @@ Hand-written, not generated: `schema/schema.sql` (production DDL) and `schema/tr
   foreign-key clauses, which properties live in the generic `attributes` table instead of a
   dedicated column, which are intentionally not persisted, and which hand-written columns
   have no schema property at all (so the drift gate doesn't flag them as missing).
-- **`schema/column_conventions.json`** — DB-owned column → `(quantity_type, unit)` map; the
+- **`schema/column_conventions.json`** — DB-owned column → `(quantity_kind, unit)` map; the
   input `generate_unit_registry.py` seeds `unit_conventions` from, alongside `Core/units.json`.
 - **`schema/coverage_decisions.json`** — a proposal (awaiting sign-off) recording, for every
   schema property with no column in `schema.sql`, what should happen to it (new column,

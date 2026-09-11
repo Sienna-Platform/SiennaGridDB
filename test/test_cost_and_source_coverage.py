@@ -202,21 +202,21 @@ CURVE_FORM_EXPECTATIONS = [
 
 
 @pytest.mark.parametrize(
-    "table, column, curve_type, cost_type, quantity_type, unit",
+    "table, column, curve_type, cost_type, quantity_kind, unit",
     CURVE_FORM_EXPECTATIONS,
 )
 def test_variable_cost_convention_follows_curve_form(
-    db, table, column, curve_type, cost_type, quantity_type, unit
+    db, table, column, curve_type, cost_type, quantity_kind, unit
 ):
     row = db.execute(
-        """SELECT quantity_type, unit, discriminator_column, discriminator_value_2
+        """SELECT quantity_kind, unit, discriminator_column, discriminator_value_2
            FROM unit_conventions
            WHERE table_name = ? AND column_name = ? AND discriminator_value = ?
              AND (discriminator_value_2 IS ? OR discriminator_value_2 = ?)""",
         (table, column, curve_type, cost_type, cost_type),
     ).fetchone()
     assert row is not None, f"no convention for {table}.{column} {curve_type}"
-    assert (row[0], row[1]) == (quantity_type, unit)
+    assert (row[0], row[1]) == (quantity_kind, unit)
     assert row[2].endswith("value_curve.curve_type")
 
 

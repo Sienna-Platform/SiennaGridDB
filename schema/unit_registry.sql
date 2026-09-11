@@ -5,8 +5,8 @@ PRAGMA foreign_keys = ON;
 -- Source of truth: SiennaSchemas Core/units.json + schema/column_conventions.json
 -- Must run AFTER schema.sql and triggers.sql, BEFORE views.sql.
 
--- 1. Quantity types
-INSERT INTO quantity_types (name, default_unit, dimension, description) VALUES
+-- 1. Quantity kinds
+INSERT INTO quantity_kinds (name, default_unit, dimension, description) VALUES
     ('ActivePower', 'MW', '{"L":2,"M":1,"T":-3}', 'Active (real) power'),
     ('ActivePowerChangeRate', 'MW/min', '{"L":2,"M":1,"T":-4}', 'Rate of change of active power (ramp)'),
     ('Angle', 'rad', '{}', 'Angle (allowed units rad and deg)'),
@@ -49,8 +49,8 @@ INSERT INTO quantity_types (name, default_unit, dimension, description) VALUES
     ('Volume', 'm3', '{"L":3}', 'Volume'),
     ('VolumeFlowRate', 'm3/s', '{"L":3,"T":-1}', 'Volumetric flow rate');
 
--- 2. Allowed (quantity_type, unit) vocabulary
-INSERT INTO allowed_units (quantity_type, unit) VALUES
+-- 2. Allowed (quantity_kind, unit) vocabulary
+INSERT INTO allowed_units (quantity_kind, unit) VALUES
     ('ActivePower', 'GW'),
     ('ActivePower', 'MW'),
     ('ActivePower', 'TW'),
@@ -119,7 +119,7 @@ INSERT INTO allowed_units (quantity_type, unit) VALUES
     ('VolumeFlowRate', 'm3/s');
 
 -- 3. Column unit conventions
-INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, base_power_ref, base_voltage_ref, description) VALUES
+INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, base_power_ref, base_voltage_ref, description) VALUES
     ('attributes', 'active_power', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Active power setpoint'),
     ('attributes', 'active_power_flow', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Branch active power flow'),
     ('attributes', 'active_power_limits', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Active power limits'),
@@ -527,7 +527,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, disc
     ('virtual_participants', 'operation_cost.incremental_offer_curves', 'CostPerTime', 'USD/h', 'operation_cost.incremental_offer_curves.value_curve.curve_type', 'INPUT_OUTPUT', NULL, NULL, NULL, NULL, 'Sell offer input-output cost curve: y is a cost rate at a power level (operation_cost JSON path); payload power_units must be NATURAL_UNITS');
 
 -- 4. Per-quantity-type pu resolution rules
-INSERT INTO unit_basis_rules (quantity_type, base_expression, description) VALUES
+INSERT INTO unit_basis_rules (quantity_kind, base_expression, description) VALUES
     ('ActivePower', 'base_power', 'Per-unit active power: divide by the row''s base power'),
     ('ActivePowerChangeRate', 'base_power', 'Per-unit active power ramp rate: divide by the row''s base power; the /min in pu/min is a per-minute rate, not a separate time base'),
     ('ApparentPower', 'base_power', 'Per-unit apparent power: divide by the row''s base power'),

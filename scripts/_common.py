@@ -10,7 +10,7 @@ CANONICAL CHECKSUM REPRESENTATION
 ---------------------------------
 The seal row ``unit_management_metadata.unit_conventions_checksum`` stores the
 sha256 hex digest of a canonical byte representation built from the content of
-four tables: quantity_types, allowed_units, unit_conventions, unit_basis_rules.
+four tables: quantity_kinds, allowed_units, unit_conventions, unit_basis_rules.
 
 Field / row / table separators (ASCII control chars, chosen so they cannot
 appear in any legitimate field value):
@@ -19,17 +19,17 @@ appear in any legitimate field value):
     GS  = '\x1d'  (group separator)  -- between the four table blocks
 
 Per-table row field order (NULLs rendered as the empty string):
-    quantity_types    : name, default_unit, dimension, description
-    allowed_units     : quantity_type, unit
-    unit_conventions  : table_name, column_name, quantity_type, unit,
+    quantity_kinds    : name, default_unit, dimension, description
+    allowed_units     : quantity_kind, unit
+    unit_conventions  : table_name, column_name, quantity_kind, unit,
                         discriminator_column, discriminator_value,
                         discriminator_column_2, discriminator_value_2,
                         base_power_ref, base_voltage_ref, description
-    unit_basis_rules  : quantity_type, base_expression, description
+    unit_basis_rules  : quantity_kind, base_expression, description
 
 Rows within each table are sorted (ascending, Python default tuple sort) by the
 tuple of their fields in the order listed above. Field values are joined with
-US, rows joined with RS. The four table blocks (quantity_types, allowed_units,
+US, rows joined with RS. The four table blocks (quantity_kinds, allowed_units,
 unit_conventions, unit_basis_rules -- in that fixed order) are joined with GS.
 The result is UTF-8 encoded and hashed with hashlib.sha256; the hex digest is
 the seal.
