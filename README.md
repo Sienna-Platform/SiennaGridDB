@@ -31,6 +31,27 @@ prints a row count. `just` is optional; the underlying commands are four `sqlite
 for f in schema.sql triggers.sql unit_registry.sql views.sql; do sqlite3 $DB_NAME < schema/$f; done
 ```
 
+## Foreign keys
+
+**Every connection must set `PRAGMA foreign_keys = ON`.** SQLite defaults it OFF
+per connection and does not store it in the file, so a database built by
+`just new-db` reports `foreign_keys = 0` when you next open it, and all 86
+foreign keys in this schema are inert until you turn them on:
+
+```sh
+sqlite3 griddb-example.sqlite "PRAGMA foreign_keys = ON; ..."
+```
+
+```python
+conn = sqlite3.connect("griddb-example.sqlite")
+conn.execute("PRAGMA foreign_keys = ON")   # required, every connection
+```
+
+The `PRAGMA foreign_keys = ON` at the top of `schema/schema.sql` governs the
+build connection only. There is no file-level equivalent. `ON DELETE CASCADE`
+also does nothing without it, so deleting a parent row silently orphans its
+children rather than removing them.
+
 ## Units
 
 The schema stores physical quantities in **natural units** — MW, MVAr, MVA, kV, and so
