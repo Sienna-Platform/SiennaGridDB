@@ -13,7 +13,7 @@ flowchart LR
         U[SiennaSchemas<br/>Core/units.json]
     end
     subgraph GridDB-owned
-        C[schema/column_conventions.json<br/>column → quantity_type, unit]
+        C[schema/column_conventions.json<br/>column → quantity_kind, unit]
     end
     U --> G[generate_unit_registry.py]
     C --> G
@@ -24,7 +24,7 @@ flowchart LR
     PSY[PowerSystems.jl descriptor] -.optional layer.-> S
 ```
 
-`generate_unit_registry.py` refuses any `(quantity_type, unit)` pair absent from `units.json` — the
+`generate_unit_registry.py` refuses any `(quantity_kind, unit)` pair absent from `units.json` — the
 registry can never invent vocabulary. Regeneration is deterministic: same inputs, byte-identical
 output, same seal.
 
@@ -35,33 +35,33 @@ a fixed schema column.
 
 ```mermaid
 erDiagram
-    quantity_types ||--o{ allowed_units : constrains
-    quantity_types ||--o{ unit_conventions : "typed by"
-    quantity_types ||--o{ unit_basis_rules : "typed by"
-    quantity_types ||--o{ attributes : "typed by"
-    quantity_types }o..o{ time_series_associations : "guarded when name is registered"
+    quantity_kinds ||--o{ allowed_units : constrains
+    quantity_kinds ||--o{ unit_conventions : "typed by"
+    quantity_kinds ||--o{ unit_basis_rules : "typed by"
+    quantity_kinds ||--o{ attributes : "typed by"
+    quantity_kinds }o..o{ time_series_associations : "guarded when name is registered"
     allowed_units ||--o{ attributes : validates
     allowed_units }o..o{ time_series_associations : "validates registered kinds"
-    unit_basis_rules }o..o{ unit_conventions : "quantity_type match, not FK"
+    unit_basis_rules }o..o{ unit_conventions : "quantity_kind match, not FK"
     entities ||--o{ attributes : has
     time_series_associations ||--o{ static_time_series : "values for (by uri)"
     entities ||--o{ time_series_associations : owns
 
-    quantity_types {
+    quantity_kinds {
         text name PK
         text default_unit
         text dimension
         text description
     }
     allowed_units {
-        text quantity_type FK
+        text quantity_kind FK
         text unit
     }
     unit_conventions {
         int id PK
         text table_name
         text column_name
-        text quantity_type FK
+        text quantity_kind FK
         text unit
         text discriminator_column
         text discriminator_value
@@ -69,7 +69,7 @@ erDiagram
         text base_voltage_ref
     }
     unit_basis_rules {
-        text quantity_type PK_FK
+        text quantity_kind PK_FK
         text base_expression
         text description
     }
@@ -79,7 +79,7 @@ erDiagram
         text name
         json value
         text unit
-        text quantity_type FK
+        text quantity_kind FK
     }
     time_series_associations {
         int id PK
@@ -108,7 +108,7 @@ Two ways a column gets its unit:
   joined for display through the `column_units` view.
 - **Polymorphic column** (`transformer_circuits.r`, whose unit depends on `parameter_units`) — one
   `unit_conventions` row per discriminator value. `attributes` rows follow the same idea but carry
-  their own `unit`/`quantity_type` inline, because the sibling discriminator doesn't exist in the
+  their own `unit`/`quantity_kind` inline, because the sibling discriminator doesn't exist in the
   generic attribute table.
 
 Time series don't use either — see §4. `parameter_units` and the pu resolution mechanism are §5.
@@ -122,9 +122,9 @@ application code.
 ```mermaid
 flowchart TD
     W[INSERT/UPDATE attributes or time_series_associations] --> T{BEFORE trigger}
-    T -->|known column/attribute name| M[unit + quantity_type must match\nthe registered unit_conventions row]
-    T -->|unregistered attribute, physical value| A[unit + quantity_type must be\na valid pair in allowed_units]
-    T -->|association with REGISTERED quantity_kind| V[units must match a registered\n(quantity_type, unit) pair in allowed_units]
+    T -->|known column/attribute name| M[unit + quantity_kind must match\nthe registered unit_conventions row]
+    T -->|unregistered attribute, physical value| A[unit + quantity_kind must be\na valid pair in allowed_units]
+    T -->|association with REGISTERED quantity_kind| V[units must match a registered\n(quantity_kind, unit) pair in allowed_units]
     T -->|association with free-form quantity_kind| OK
     M -->|mismatch| X[RAISE ABORT]
     A -->|mismatch| X
@@ -134,7 +134,7 @@ flowchart TD
     V -->|match| OK
 ```
 
-Registry writes themselves (`quantity_types`, `allowed_units`, `unit_conventions`) are blocked
+Registry writes themselves (`quantity_kinds`, `allowed_units`, `unit_conventions`) are blocked
 outright once `unit_management_metadata.unit_conventions_checksum` exists — the only way to change
 the vocabulary is regenerate-and-reload. The seal is **detection, not prevention**: SQLite has no
 privilege model, so `verify_unit_registry.py` is what actually catches tampering.
@@ -210,22 +210,22 @@ Which number the component's base happens to record (its own winding base, the s
 is the component's business; the label only says *where to find the number*, and the pu value
 is interpreted the same way once it's found.
 
-### Axis 2: `quantity_type` also selects the natural-unit representation
+### Axis 2: `quantity_kind` also selects the natural-unit representation
 
-Under `NATURAL_UNITS`, `quantity_type` picks *which* physical representation a column holds. This is
+Under `NATURAL_UNITS`, `quantity_kind` picks *which* physical representation a column holds. This is
 how the old `admittance_units` value `COMPONENT_MVAR` was absorbed without a third basis value:
 `fixed_admittance.y_b` (and `switched_admittance.y_b`) each carry three `unit_conventions` rows —
 
-| quantity_type | unit | parameter_units |
+| quantity_kind | unit | parameter_units |
 |---|---|---|
 | `Susceptance` | `S` | `NATURAL_UNITS` |
 | `ReactivePower` | `MVAr` | `NATURAL_UNITS` |
 | `Susceptance` | `pu` | `COMPONENT_BASE` |
 
 — the electrical form and the PSS/E form (MVAr at 1.0 pu voltage) are both natural units,
-distinguished only by `quantity_type`. This required widening `unit_conventions`' uniqueness key
+distinguished only by `quantity_kind`. This required widening `unit_conventions`' uniqueness key
 from `(table_name, column_name, discriminator_value, discriminator_value_2)` to also include
-`quantity_type`.
+`quantity_kind`.
 
 ### PSSE grounding: why transformers are the exception
 
@@ -265,10 +265,10 @@ resolved base is non-null when `parameter_units = 'COMPONENT_BASE'`, or making
 
 ### Mechanical resolution: rules + base references
 
-A sealed table, `unit_basis_rules` (5 rows), maps the five quantity types that ever carry pu to the
+A sealed table, `unit_basis_rules` (5 rows), maps the five quantity kinds that ever carry pu to the
 base expression that resolves them:
 
-| quantity_type | base_expression |
+| quantity_kind | base_expression |
 |---|---|
 | `Voltage` | `base_voltage` |
 | `Resistance`, `Reactance` | `base_voltage^2/base_power` |
@@ -291,7 +291,7 @@ two-winding and line paths. `transmission_lines`, `fixed_admittance`, `switched_
 `tmodel_hvdc_lines` also gained their own same-row `base_power`.
 
 Together these give one invariant, checked by `test_pu_conventions_have_resolvable_basis`: every
-`unit='pu'` convention has a `unit_basis_rules` row for its quantity type, and every base reference
+`unit='pu'` convention has a `unit_basis_rules` row for its quantity kind, and every base reference
 it names resolves *structurally* — the named column exists, or every FK hop's table/column/FK
 exists. That is a schema-shape guarantee, not a data guarantee: it says the base is reachable, not
 that any given row's base is populated — see the second Accepted limitation above. Not every pu
@@ -300,7 +300,7 @@ transformer tables are pu-only, with no `NATURAL_UNITS` sibling row.
 
 `attributes` rows are exempt from base references: an attribute's owner is polymorphic (`entity_id`
 → `entities`), so no single static path applies regardless of which table is on the other end. They
-keep their inline `unit`/`quantity_type` instead; the exemption is recorded in
+keep their inline `unit`/`quantity_kind` instead; the exemption is recorded in
 `coverage_decisions.json`.
 
 ### Open items
@@ -310,7 +310,7 @@ keep their inline `unit`/`quantity_type` instead; the exemption is recorded in
   transformers. Flagged for human review, not resolved here.
 - No cross-repo check catches a pu column typed with the wrong quantity dimension (e.g. a
   `Resistance` column mistakenly registered as `Voltage`, still `unit='pu'`) — upstream x-unit
-  annotations carry units, not quantity types, so there's nothing on the other side to contradict.
+  annotations carry units, not quantity kinds, so there's nothing on the other side to contradict.
   `test_pu_conventions_have_resolvable_basis` only exercises columns with a `COMPONENT_BASE` +
   `NATURAL_UNITS` sibling pair; pu-only columns with no such sibling arm (the
   `magnetizing_shunt` rows above) are not covered by any dimensional check.
@@ -359,7 +359,7 @@ uses, and both infrastore and GridDB just relay its choice.
 
 **`quantity_kind` is free-form; the registry guards only registered names.** Infrastore leaves the
 column unconstrained so composite economic quantities never force a migration. GridDB adds one
-write-side trigger on top: a row whose `quantity_kind` names a registered quantity type must pair
+write-side trigger on top: a row whose `quantity_kind` names a registered quantity kind must pair
 it with a registered unit from `allowed_units`. Free-form kinds pass untouched; the divergence adds
 integrity without changing the row shape.
 

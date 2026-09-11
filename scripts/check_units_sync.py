@@ -33,7 +33,7 @@ per-component property (base_power/base_voltage columns, or base_power_ref/
 base_voltage_ref FK paths) precisely so no system-level table has to exist. One extra
 upstream value exists outside that enum:
 
-    schema COMPONENT_MVAR -> GridDB NATURAL_UNITS, disambiguated by quantity_type
+    schema COMPONENT_MVAR -> GridDB NATURAL_UNITS, disambiguated by quantity_kind
                             (ReactivePower for a susceptance column, ActivePower for a
                             conductance column) rather than a separate basis value. The
                             registry rows this applies to (fixed_admittance/
@@ -76,10 +76,10 @@ PSY_MIRRORED_DEFS = frozenset({
 
 
 def build_units_vocabulary(units_json):
-    """Return {(quantity_type, unit)} membership set."""
+    """Return {(quantity_kind, unit)} membership set."""
     allowed_pairs = set()
     for row in units_json.get("allowed_units", []):
-        allowed_pairs.add((row["quantity_type"], row["unit"]))
+        allowed_pairs.add((row["quantity_kind"], row["unit"]))
     return allowed_pairs
 
 
@@ -207,7 +207,7 @@ def layer1(report, conventions, schema_map, schemas_path, allowed_pairs, doc_cac
 
             # non-discriminated single row — read registry values.
             row = rows[0]
-            reg_qt = row["quantity_type"]
+            reg_qt = row["quantity_kind"]
             reg_unit = row["unit"]
 
             if not ann["has_annotation"]:
@@ -336,7 +336,7 @@ def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_p
     """
     units_map = ann["units_map"]
     reg_map = {
-        (r["discriminator_value"], r.get("discriminator_value_2")): (r["quantity_type"], r["unit"])
+        (r["discriminator_value"], r.get("discriminator_value_2")): (r["quantity_kind"], r["unit"])
         for r in discriminated
     }
 
@@ -541,10 +541,9 @@ def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):
                     report.fail(
                         "L3",
                         "(a) power-unit contradiction %s.%s: schema x-unit=%s but PSY field "
-                        "conversion_unit=%s needs_conversion=%s comment-natural=%s"
+                        "conversion_unit=%s needs_conversion=%s"
                         % (comp, prop_name, ann["unit"], field.get("conversion_unit"),
-                           field.get("needs_conversion"),
-                           psy_field_is_documented_natural(prop_name, field, props)),
+                           field.get("needs_conversion")),
                     )
                     fail_count += 1
                 else:

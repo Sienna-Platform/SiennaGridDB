@@ -1326,31 +1326,31 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_update BEFORE
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_kinds_update BEFORE
 UPDATE
-    ON quantity_types
+    ON quantity_kinds
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
+        'quantity_kinds is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_delete BEFORE DELETE ON quantity_types
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_kinds_delete BEFORE DELETE ON quantity_kinds
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
+        'quantity_kinds is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_insert BEFORE
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_kinds_insert BEFORE
 INSERT
-    ON quantity_types
+    ON quantity_kinds
     WHEN EXISTS (
         SELECT
             1
@@ -1363,7 +1363,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
+        'quantity_kinds is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1513,7 +1513,7 @@ INSERT
         SELECT
             1
         FROM
-            quantity_types
+            quantity_kinds
         WHERE
             name = NEW.quantity_kind
     )
@@ -1525,7 +1525,7 @@ INSERT
             FROM
                 allowed_units au
             WHERE
-                au.quantity_type = NEW.quantity_kind
+                au.quantity_kind = NEW.quantity_kind
                 AND au.unit = NEW.units
         )
     )
@@ -1533,7 +1533,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_type, unit) pair in allowed_units.'
+        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_kind, unit) pair in allowed_units.'
     );
 
 END;
@@ -1546,7 +1546,7 @@ UPDATE
         SELECT
             1
         FROM
-            quantity_types
+            quantity_kinds
         WHERE
             name = NEW.quantity_kind
     )
@@ -1558,7 +1558,7 @@ UPDATE
             FROM
                 allowed_units au
             WHERE
-                au.quantity_type = NEW.quantity_kind
+                au.quantity_kind = NEW.quantity_kind
                 AND au.unit = NEW.units
         )
     )
@@ -1566,7 +1566,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_type, unit) pair in allowed_units.'
+        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_kind, unit) pair in allowed_units.'
     );
 
 END;
@@ -1622,7 +1622,7 @@ END;
 
 -- =============================================================================
 -- Attribute Unit Validation Triggers
--- A known attribute name must use its registered unit and quantity_type from
+-- A known attribute name must use its registered unit and quantity_kind from
 -- unit_conventions. An unknown attribute with a numeric or structured value
 -- needs a vocabulary-valid pair from allowed_units, unless attribute_identifiers
 -- lists it as a non-physical identifier. Boolean, text, and null values are exempt.
@@ -1645,7 +1645,7 @@ SELECT
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
@@ -1655,11 +1655,11 @@ SELECT
                     uc.table_name = 'attributes'
                     AND LOWER(uc.column_name) = LOWER(NEW.name)
                     AND uc.unit = NEW.unit
-                    AND uc.quantity_type = NEW.quantity_type
+                    AND uc.quantity_kind = NEW.quantity_kind
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is a known name and must use its registered unit and quantity_type.'
+            'attributes.name is a known name and must use its registered unit and quantity_kind.'
         )
         -- A numeric identifier (e.g. a bus number) isn't a physical quantity;
         -- attribute_identifiers exempts it from needing a unit.
@@ -1684,19 +1684,19 @@ SELECT
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
+            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_kind from allowed_units (use unit=1, quantity_kind=Dimensionless when none applies).'
         )
         -- An exempt identifier does not have to carry a unit, but if it carries
         -- one anyway the pair is still held to the vocabulary: exemption relieves
@@ -1721,23 +1721,23 @@ SELECT
         )
         AND (
             NEW.unit IS NOT NULL
-            OR NEW.quantity_type IS NOT NULL
+            OR NEW.quantity_kind IS NOT NULL
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_type must still be a registered allowed_units pair.'
+            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_kind must still be a registered allowed_units pair.'
         )
     END;
 
@@ -1761,7 +1761,7 @@ SELECT
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
@@ -1771,11 +1771,11 @@ SELECT
                     uc.table_name = 'attributes'
                     AND LOWER(uc.column_name) = LOWER(NEW.name)
                     AND uc.unit = NEW.unit
-                    AND uc.quantity_type = NEW.quantity_type
+                    AND uc.quantity_kind = NEW.quantity_kind
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is a known name and must use its registered unit and quantity_type.'
+            'attributes.name is a known name and must use its registered unit and quantity_kind.'
         )
         -- A numeric identifier (e.g. a bus number) isn't a physical quantity;
         -- attribute_identifiers exempts it from needing a unit.
@@ -1800,19 +1800,19 @@ SELECT
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
+            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_kind from allowed_units (use unit=1, quantity_kind=Dimensionless when none applies).'
         )
         -- An exempt identifier does not have to carry a unit, but if it carries
         -- one anyway the pair is still held to the vocabulary: exemption relieves
@@ -1837,23 +1837,23 @@ SELECT
         )
         AND (
             NEW.unit IS NOT NULL
-            OR NEW.quantity_type IS NOT NULL
+            OR NEW.quantity_kind IS NOT NULL
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_type must still be a registered allowed_units pair.'
+            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_kind must still be a registered allowed_units pair.'
         )
     END;
 

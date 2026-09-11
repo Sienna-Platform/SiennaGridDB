@@ -3,7 +3,7 @@
 
 Inputs (stdlib only, no third-party deps):
   --units-json   SiennaSchemas Core/units.json  (the vocabulary source of truth:
-                 quantity_types + allowed_units). Default: ../SiennaSchemas/Core/units.json
+                 quantity_kinds + allowed_units). Default: ../SiennaSchemas/Core/units.json
                  relative to this repository root.
   --conventions  schema/column_conventions.json (the DB-specific column mapping).
 
@@ -14,12 +14,12 @@ sha256 fingerprint over the registry content.
 Determinism: every collection is emitted in sorted order and there are no
 timestamps, so re-running the generator produces a byte-identical file.
 
-Validation: every (quantity_type, unit) pair used in column_conventions.json
+Validation: every (quantity_kind, unit) pair used in column_conventions.json
 must exist in units.json allowed_units. If any do not, the generator exits with
 a non-zero status and lists the offenders -- it never invents vocabulary.
 
 The seal row (unit_management_metadata.unit_conventions_checksum) is a sha256
-over a canonical byte representation of quantity_types, allowed_units,
+over a canonical byte representation of quantity_kinds, allowed_units,
 unit_conventions and unit_basis_rules; verify_unit_registry.py recomputes it
 from a live database and must match. See _common.py's module docstring for the
 exact representation (separators, field order, sort order) -- both this
@@ -45,51 +45,51 @@ DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "schema", "unit_registry.sql")
 CONVENTION_VERSION = "sienna-griddb-1.1"
 
 # Per-quantity-type pu resolution rule: how a COMPONENT_BASE value divides down
-# to a physical quantity. These are exactly the quantity types that ever carry
+# to a physical quantity. These are exactly the quantity kinds that ever carry
 # unit='pu' in column_conventions.json -- keep that in sync if it changes.
 UNIT_BASIS_RULES = [
     {
-        "quantity_type": "Voltage",
+        "quantity_kind": "Voltage",
         "base_expression": "base_voltage",
         "description": "Per-unit voltage: divide by the row's base voltage",
     },
     {
-        "quantity_type": "Resistance",
+        "quantity_kind": "Resistance",
         "base_expression": "base_voltage^2/base_power",
         "description": "Per-unit resistance: base impedance is base_voltage^2/base_power",
     },
     {
-        "quantity_type": "Reactance",
+        "quantity_kind": "Reactance",
         "base_expression": "base_voltage^2/base_power",
         "description": "Per-unit reactance: base impedance is base_voltage^2/base_power",
     },
     {
-        "quantity_type": "Susceptance",
+        "quantity_kind": "Susceptance",
         "base_expression": "base_power/base_voltage^2",
         "description": "Per-unit susceptance: base admittance is base_power/base_voltage^2",
     },
     {
-        "quantity_type": "Conductance",
+        "quantity_kind": "Conductance",
         "base_expression": "base_power/base_voltage^2",
         "description": "Per-unit conductance: base admittance is base_power/base_voltage^2",
     },
     {
-        "quantity_type": "ActivePower",
+        "quantity_kind": "ActivePower",
         "base_expression": "base_power",
         "description": "Per-unit active power: divide by the row's base power",
     },
     {
-        "quantity_type": "ReactivePower",
+        "quantity_kind": "ReactivePower",
         "base_expression": "base_power",
         "description": "Per-unit reactive power: divide by the row's base power",
     },
     {
-        "quantity_type": "ApparentPower",
+        "quantity_kind": "ApparentPower",
         "base_expression": "base_power",
         "description": "Per-unit apparent power: divide by the row's base power",
     },
     {
-        "quantity_type": "ActivePowerChangeRate",
+        "quantity_kind": "ActivePowerChangeRate",
         "base_expression": "base_power",
         "description": "Per-unit active power ramp rate: divide by the row's base power; "
         "the /min in pu/min is a per-minute rate, not a separate time base",
@@ -105,9 +105,9 @@ def canonical_dimension(dimension):
 def load_units(path):
     with open(path, "r", encoding="utf-8") as handle:
         data = json.load(handle)
-    quantity_types = []
-    for qt in data["quantity_types"]:
-        quantity_types.append(
+    quantity_kinds = []
+    for qt in data["quantity_kinds"]:
+        quantity_kinds.append(
             {
                 "name": qt["name"],
                 "default_unit": qt["default_unit"],
@@ -118,10 +118,10 @@ def load_units(path):
     allowed_units = []
     for au in data["allowed_units"]:
         allowed_units.append(
-            {"quantity_type": au["quantity_type"], "unit": au["unit"]}
+            {"quantity_kind": au["quantity_kind"], "unit": au["unit"]}
         )
     convention = data["convention"]
-    return quantity_types, allowed_units, convention
+    return quantity_kinds, allowed_units, convention
 
 
 def load_conventions(path):
@@ -133,7 +133,7 @@ def load_conventions(path):
             {
                 "table_name": entry["table"],
                 "column_name": entry["column"],
-                "quantity_type": entry["quantity_type"],
+                "quantity_kind": entry["quantity_kind"],
                 "unit": entry["unit"],
                 "discriminator_column": entry.get("discriminator_column"),
                 "discriminator_value": entry.get("discriminator_value"),
@@ -148,20 +148,20 @@ def load_conventions(path):
 
 
 def validate_pairs(conventions, allowed_units):
-    allowed = {(au["quantity_type"], au["unit"]) for au in allowed_units}
+    allowed = {(au["quantity_kind"], au["unit"]) for au in allowed_units}
     offenders = []
     for row in conventions:
-        pair = (row["quantity_type"], row["unit"])
+        pair = (row["quantity_kind"], row["unit"])
         if pair not in allowed:
             offenders.append(
-                "{table_name}.{column_name} -> ({quantity_type}, {unit})".format(
+                "{table_name}.{column_name} -> ({quantity_kind}, {unit})".format(
                     **row
                 )
             )
     return offenders
 
 
-def canonical_repr(quantity_types, allowed_units, conventions, basis_rules):
+def canonical_repr(quantity_kinds, allowed_units, conventions, basis_rules):
     qt_rows = (
         (
             r["name"],
@@ -169,14 +169,14 @@ def canonical_repr(quantity_types, allowed_units, conventions, basis_rules):
             r["dimension"],
             none_to_empty(r["description"]),
         )
-        for r in quantity_types
+        for r in quantity_kinds
     )
-    au_rows = ((r["quantity_type"], r["unit"]) for r in allowed_units)
+    au_rows = ((r["quantity_kind"], r["unit"]) for r in allowed_units)
     uc_rows = (
         (
             r["table_name"],
             r["column_name"],
-            r["quantity_type"],
+            r["quantity_kind"],
             r["unit"],
             none_to_empty(r["discriminator_column"]),
             none_to_empty(r["discriminator_value"]),
@@ -190,7 +190,7 @@ def canonical_repr(quantity_types, allowed_units, conventions, basis_rules):
     )
     ub_rows = (
         (
-            r["quantity_type"],
+            r["quantity_kind"],
             r["base_expression"],
             none_to_empty(r["description"]),
         )
@@ -199,12 +199,12 @@ def canonical_repr(quantity_types, allowed_units, conventions, basis_rules):
     return repr_from_rows(qt_rows, au_rows, uc_rows, ub_rows)
 
 
-def checksum(quantity_types, allowed_units, conventions, basis_rules):
-    repr_str = canonical_repr(quantity_types, allowed_units, conventions, basis_rules)
+def checksum(quantity_kinds, allowed_units, conventions, basis_rules):
+    repr_str = canonical_repr(quantity_kinds, allowed_units, conventions, basis_rules)
     return hashlib.sha256(repr_str.encode("utf-8")).hexdigest()
 
 
-def emit(quantity_types, allowed_units, conventions, basis_rules, units_convention, seal):
+def emit(quantity_kinds, allowed_units, conventions, basis_rules, units_convention, seal):
     lines = []
     lines.append("PRAGMA foreign_keys = ON;")
     lines.append("")
@@ -220,11 +220,11 @@ def emit(quantity_types, allowed_units, conventions, basis_rules, units_conventi
     )
     lines.append("")
 
-    lines.append("-- 1. Quantity types")
+    lines.append("-- 1. Quantity kinds")
     lines.append(
-        "INSERT INTO quantity_types (name, default_unit, dimension, description) VALUES"
+        "INSERT INTO quantity_kinds (name, default_unit, dimension, description) VALUES"
     )
-    qt_sorted = sorted(quantity_types, key=lambda r: r["name"])
+    qt_sorted = sorted(quantity_kinds, key=lambda r: r["name"])
     qt_values = []
     for r in qt_sorted:
         qt_values.append(
@@ -238,14 +238,14 @@ def emit(quantity_types, allowed_units, conventions, basis_rules, units_conventi
     lines.append(",\n".join(qt_values) + ";")
     lines.append("")
 
-    lines.append("-- 2. Allowed (quantity_type, unit) vocabulary")
-    lines.append("INSERT INTO allowed_units (quantity_type, unit) VALUES")
-    au_sorted = sorted(allowed_units, key=lambda r: (r["quantity_type"], r["unit"]))
+    lines.append("-- 2. Allowed (quantity_kind, unit) vocabulary")
+    lines.append("INSERT INTO allowed_units (quantity_kind, unit) VALUES")
+    au_sorted = sorted(allowed_units, key=lambda r: (r["quantity_kind"], r["unit"]))
     au_values = []
     for r in au_sorted:
         au_values.append(
             "    ({}, {})".format(
-                sql_literal(r["quantity_type"]), sql_literal(r["unit"])
+                sql_literal(r["quantity_kind"]), sql_literal(r["unit"])
             )
         )
     lines.append(",\n".join(au_values) + ";")
@@ -253,7 +253,7 @@ def emit(quantity_types, allowed_units, conventions, basis_rules, units_conventi
 
     lines.append("-- 3. Column unit conventions")
     lines.append(
-        "INSERT INTO unit_conventions (table_name, column_name, quantity_type, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, base_power_ref, base_voltage_ref, description) VALUES"
+        "INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, base_power_ref, base_voltage_ref, description) VALUES"
     )
     uc_sorted = sorted(
         conventions,
@@ -270,7 +270,7 @@ def emit(quantity_types, allowed_units, conventions, basis_rules, units_conventi
             "    ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
                 sql_literal(r["table_name"]),
                 sql_literal(r["column_name"]),
-                sql_literal(r["quantity_type"]),
+                sql_literal(r["quantity_kind"]),
                 sql_literal(r["unit"]),
                 sql_literal(r["discriminator_column"]),
                 sql_literal(r["discriminator_value"]),
@@ -286,14 +286,14 @@ def emit(quantity_types, allowed_units, conventions, basis_rules, units_conventi
 
     lines.append("-- 4. Per-quantity-type pu resolution rules")
     lines.append(
-        "INSERT INTO unit_basis_rules (quantity_type, base_expression, description) VALUES"
+        "INSERT INTO unit_basis_rules (quantity_kind, base_expression, description) VALUES"
     )
-    ub_sorted = sorted(basis_rules, key=lambda r: r["quantity_type"])
+    ub_sorted = sorted(basis_rules, key=lambda r: r["quantity_kind"])
     ub_values = []
     for r in ub_sorted:
         ub_values.append(
             "    ({}, {}, {})".format(
-                sql_literal(r["quantity_type"]),
+                sql_literal(r["quantity_kind"]),
                 sql_literal(r["base_expression"]),
                 sql_literal(r["description"]),
             )
@@ -355,13 +355,13 @@ def main(argv=None):
     parser.add_argument("--output", default=DEFAULT_OUTPUT)
     args = parser.parse_args(argv)
 
-    quantity_types, allowed_units, units_convention = load_units(args.units_json)
+    quantity_kinds, allowed_units, units_convention = load_units(args.units_json)
     conventions = load_conventions(args.conventions)
 
     offenders = validate_pairs(conventions, allowed_units)
     if offenders:
         sys.stderr.write(
-            "ERROR: column_conventions.json uses (quantity_type, unit) pairs "
+            "ERROR: column_conventions.json uses (quantity_kind, unit) pairs "
             "absent from units.json allowed_units:\n"
         )
         for offender in sorted(offenders):
@@ -370,17 +370,17 @@ def main(argv=None):
 
     basis_rules = UNIT_BASIS_RULES
 
-    seal = checksum(quantity_types, allowed_units, conventions, basis_rules)
+    seal = checksum(quantity_kinds, allowed_units, conventions, basis_rules)
     content = emit(
-        quantity_types, allowed_units, conventions, basis_rules, units_convention, seal
+        quantity_kinds, allowed_units, conventions, basis_rules, units_convention, seal
     )
     with open(args.output, "w", encoding="utf-8") as handle:
         handle.write(content)
     sys.stderr.write(
-        "Wrote {} ({} quantity_types, {} allowed_units, {} unit_conventions, "
+        "Wrote {} ({} quantity_kinds, {} allowed_units, {} unit_conventions, "
         "{} unit_basis_rules)\n".format(
             args.output,
-            len(quantity_types),
+            len(quantity_kinds),
             len(allowed_units),
             len(conventions),
             len(basis_rules),
