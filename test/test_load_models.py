@@ -30,13 +30,14 @@ pytest.importorskip(
 )
 
 from power_openapi_models.core.models import (  # noqa: E402
+    ACBus,
     CostCurve,
     InputOutputCurve,
     LinearFunctionData,
     StartUpStages,
     ThermalGenerationCost,
 )
-from power_openapi_models.operations.models import ACBus, ThermalStandard  # noqa: E402
+from power_openapi_models.operations.models import ThermalStandard  # noqa: E402
 
 
 def test_acbus():
