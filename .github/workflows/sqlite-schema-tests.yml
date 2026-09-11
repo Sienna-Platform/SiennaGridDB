@@ -16,13 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # TODO after SiennaSchemas release: switch to the release tarball instead of pinning the PR branch.
+      # TODO after the SiennaSchemas 0.1 release: pin the release tarball instead of main.
       - name: Checkout SiennaSchemas
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/SiennaSchemas
-          # TODO drop the ref once SiennaSchemas #48 (field deduplication) is on main.
-          ref: jd/field_deduplication
           path: SiennaSchemas
 
       # TODO after psy6 merges to PowerSystems main: drop `ref`.

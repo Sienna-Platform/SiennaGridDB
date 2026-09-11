@@ -463,7 +463,6 @@ CREATE TABLE supply_technologies (
     time_limits JSON NULL, -- Units: min
     start_fuel_mmbtu_per_mw REAL NULL DEFAULT 0.0, -- Units: MMBtu/MW
     lifetime INTEGER NULL DEFAULT 100, -- Units: yr
-    requirements JSON NULL DEFAULT '[]',
     financial_data JSON NOT NULL
 );
 
@@ -489,7 +488,6 @@ CREATE TABLE storage_technologies (
     efficiency JSON NULL, -- Units: 1
     losses REAL NULL DEFAULT 1.0, -- Units: 1
     lifetime INTEGER NULL DEFAULT 100, -- Units: yr
-    requirements JSON NULL DEFAULT '[]',
     financial_data JSON NOT NULL
 );
 
@@ -507,7 +505,6 @@ CREATE TABLE transport_technologies (
     voltage REAL NULL DEFAULT 0.0, -- Units: kV
     unit_size REAL NULL DEFAULT 0.0, -- Units: MW
     reactance REAL NULL DEFAULT 0.0, -- Units: ohm
-    requirements JSON NULL DEFAULT '[]',
     financial_data JSON NOT NULL,
     line_loss JSON NULL, -- Units: 1
     start_region INTEGER NULL,
@@ -526,8 +523,7 @@ CREATE TABLE demand_technologies (
     growth_rate REAL NULL DEFAULT 0.0, -- Units: 1
     new_demand_mw REAL NULL DEFAULT 0.0, -- Units: MW
     new_construction_year INTEGER NULL DEFAULT 2020,
-    region JSON NULL,
-    requirements JSON NULL DEFAULT '[]'
+    region JSON NULL
 );
 
 -- trading_hubs: generated from TradingHub
