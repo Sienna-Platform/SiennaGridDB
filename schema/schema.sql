@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 18; -- bump on every schema or registry change
+PRAGMA user_version = 19; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -629,6 +629,10 @@ CREATE TABLE attribute_identifiers (
     PRIMARY KEY (TYPE, name)
 ) strict;
 
+-- Matches the LOWER(TYPE)/LOWER(name) predicate in the attributes unit triggers.
+CREATE INDEX ix_attribute_identifiers_lower
+    ON attribute_identifiers (LOWER(TYPE), LOWER(name));
+
 INSERT INTO
     attribute_identifiers (TYPE, name, description)
 VALUES
@@ -1222,6 +1226,13 @@ CREATE TABLE unit_conventions (
 CREATE UNIQUE INDEX uq_unit_conventions_no_discriminator
     ON unit_conventions (table_name, column_name, quantity_kind)
     WHERE discriminator_value IS NULL;
+
+-- The attributes unit triggers match on LOWER(column_name) / LOWER(TYPE),
+-- which the plain UNIQUE constraints above cannot serve -- without these the
+-- lookup degrades to a scan of every 'attributes' convention on every
+-- attributes insert, the highest-volume write path in the schema.
+CREATE INDEX ix_unit_conventions_table_lower_column
+    ON unit_conventions (table_name, LOWER(column_name));
 
 -- Per-quantity-type pu resolution rule: how to divide a COMPONENT_BASE value
 -- down to a physical quantity, in terms of base_power/base_voltage (or a

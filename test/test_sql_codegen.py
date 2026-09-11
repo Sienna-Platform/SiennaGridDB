@@ -408,14 +408,16 @@ def test_units_comment_flat_x_units_unchanged():
 
 def test_units_comment_discriminator_renamed():
     """The table's renames apply to the discriminator name in the comment: the
-    discriminator names a sibling column, so a renamed column (parameter_units ->
-    parameter_units) must not leave the comment pointing at the upstream name."""
+    discriminator names a sibling column, so a renamed column
+    (voltage_setpoint_units -> parameter_units, as interconnecting_converters and
+    facts_control_devices do) must not leave the comment pointing at the upstream
+    name."""
     prop = {
-        "x-unit-discriminator": "parameter_units",
-        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"},
+        "x-unit-discriminator": "voltage_setpoint_units",
+        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
     }
-    renames = {"parameter_units": "parameter_units"}
-    assert units_comment(prop, renames) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)"
+    renames = {"voltage_setpoint_units": "parameter_units"}
+    assert units_comment(prop, renames) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)"
 
 
 def test_units_comment_nested_x_units():

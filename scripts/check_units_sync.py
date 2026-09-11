@@ -541,10 +541,9 @@ def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):
                     report.fail(
                         "L3",
                         "(a) power-unit contradiction %s.%s: schema x-unit=%s but PSY field "
-                        "conversion_unit=%s needs_conversion=%s comment-natural=%s"
+                        "conversion_unit=%s needs_conversion=%s"
                         % (comp, prop_name, ann["unit"], field.get("conversion_unit"),
-                           field.get("needs_conversion"),
-                           psy_field_is_documented_natural(prop_name, field, props)),
+                           field.get("needs_conversion")),
                     )
                     fail_count += 1
                 else:
