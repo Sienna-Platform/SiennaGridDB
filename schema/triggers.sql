@@ -1577,6 +1577,47 @@ SELECT
             ABORT,
             'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
         )
+        -- An exempt identifier does not have to carry a unit, but if it carries
+        -- one anyway the pair is still held to the vocabulary: exemption relieves
+        -- the requirement, it does not license an unregistered unit.
+        WHEN NOT EXISTS (
+            SELECT
+                1
+            FROM
+                unit_conventions
+            WHERE
+                table_name = 'attributes'
+                AND LOWER(column_name) = LOWER(NEW.name)
+        )
+        AND EXISTS (
+            SELECT
+                1
+            FROM
+                attribute_identifiers ai
+            WHERE
+                LOWER(ai.TYPE) = LOWER(NEW.TYPE)
+                AND LOWER(ai.name) = LOWER(NEW.name)
+        )
+        AND (
+            NEW.unit IS NOT NULL
+            OR NEW.quantity_type IS NOT NULL
+        )
+        AND (
+            NEW.unit IS NULL
+            OR NEW.quantity_type IS NULL
+            OR NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_type = NEW.quantity_type
+                    AND au.unit = NEW.unit
+            )
+        ) THEN RAISE(
+            ABORT,
+            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_type must still be a registered allowed_units pair.'
+        )
     END;
 
 END;
@@ -1651,6 +1692,47 @@ SELECT
         ) THEN RAISE(
             ABORT,
             'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
+        )
+        -- An exempt identifier does not have to carry a unit, but if it carries
+        -- one anyway the pair is still held to the vocabulary: exemption relieves
+        -- the requirement, it does not license an unregistered unit.
+        WHEN NOT EXISTS (
+            SELECT
+                1
+            FROM
+                unit_conventions
+            WHERE
+                table_name = 'attributes'
+                AND LOWER(column_name) = LOWER(NEW.name)
+        )
+        AND EXISTS (
+            SELECT
+                1
+            FROM
+                attribute_identifiers ai
+            WHERE
+                LOWER(ai.TYPE) = LOWER(NEW.TYPE)
+                AND LOWER(ai.name) = LOWER(NEW.name)
+        )
+        AND (
+            NEW.unit IS NOT NULL
+            OR NEW.quantity_type IS NOT NULL
+        )
+        AND (
+            NEW.unit IS NULL
+            OR NEW.quantity_type IS NULL
+            OR NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_type = NEW.quantity_type
+                    AND au.unit = NEW.unit
+            )
+        ) THEN RAISE(
+            ABORT,
+            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_type must still be a registered allowed_units pair.'
         )
     END;
 
