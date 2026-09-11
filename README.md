@@ -37,7 +37,7 @@ The schema stores physical quantities in **natural units** — MW, MVAr, MVA, kV
 on — with one deliberate exception: branch and device electrical parameters
 (`transmission_lines.r`/`x`/`b`/`g`, `transformer_circuits.r`/`x`, admittances, HVDC
 resistances, and similar) are **stored flexibly in per-unit on a component base OR
-natural units**. A per-row discriminator column, `unit_basis`
+natural units**. A per-row discriminator column, `parameter_units`
 (`COMPONENT_BASE` | `NATURAL_UNITS`), records which basis a row uses. `r`/`x` are scalar
 `REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as `json_valid`-checked text).
 Costs stay in natural currency units, and the cost JSON blobs must carry
@@ -90,16 +90,16 @@ To resolve any column's unit:
 1. **Look up the column** in `unit_conventions` (or the joined `column_units` view) by
    `table_name`/`column_name`.
 2. **If more than one row comes back**, the column is discriminated — each row names a
-   `discriminator_column` (e.g. `unit_basis`, `admittance_units`, `power_units`); match it
+   `discriminator_column` (e.g. `parameter_units`, `admittance_units`, `power_units`); match it
    against that same column's value on the row you're reading.
 3. **Read the matched row's `unit`.** If it is `pu`, resolve it against the base column on
    the *same row* — `base_power` for power/impedance quantities, `base_voltage` for voltage
    quantities — never a system-wide table.
 
 *Worked example:* `transmission_lines.r` has two `unit_conventions` rows, discriminated by
-`unit_basis`: `COMPONENT_BASE` → `unit = pu`, `NATURAL_UNITS` → `unit = ohm`. A row with
-`unit_basis = 'COMPONENT_BASE'`, `r = 0.02`, `base_power = 100` reads as 0.02 pu on a
-100 MVA base; the same line with `unit_basis = 'NATURAL_UNITS'` would carry `r` directly
+`parameter_units`: `COMPONENT_BASE` → `unit = pu`, `NATURAL_UNITS` → `unit = ohm`. A row with
+`parameter_units = 'COMPONENT_BASE'`, `r = 0.02`, `base_power = 100` reads as 0.02 pu on a
+100 MVA base; the same line with `parameter_units = 'NATURAL_UNITS'` would carry `r` directly
 in ohm. A column with only one `unit_conventions` row (e.g.
 `transmission_lines.continuous_rating` → `MVA`) skips step 2: that unit applies to every
 row, unconditionally.

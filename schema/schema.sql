@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 14; -- bump on every schema or registry change
+PRAGMA user_version = 15; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -171,13 +171,13 @@ CREATE TABLE arcs (
     FOREIGN KEY (to_id) REFERENCES entities (id) ON DELETE CASCADE
 ) strict;
 
--- r/x/b/g follow unit_basis: COMPONENT_BASE is per-unit on base_power;
+-- r/x/b/g follow parameter_units: COMPONENT_BASE is per-unit on base_power;
 -- NATURAL_UNITS is ohm (r/x) or siemens (b/g). All four share one row's basis
 -- (PSY writes COMPONENT_BASE; a matpower import is NATURAL_UNITS). b/g are
 -- JSON {"from": ..., "to": ...}; base_power is expected equal across every
 -- COMPONENT_BASE row, though that is not trigger-enforced.
--- power_units is independent of unit_basis: it governs only the power-family
--- columns (ratings, limits, ramp rates). unit_basis's DEFAULT is a DB
+-- power_units is independent of parameter_units: it governs only the power-family
+-- columns (ratings, limits, ramp rates). parameter_units's DEFAULT is a DB
 -- convenience; the wire schema requires the field with no default.
 CREATE TABLE transmission_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -191,7 +191,7 @@ CREATE TABLE transmission_lines (
     x REAL NOT NULL,
     b TEXT NULL CHECK (b IS NULL OR json_valid(b)),
     g TEXT NULL DEFAULT '{"from": 0.0, "to": 0.0}' CHECK (g IS NULL OR json_valid(g)),
-    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     FOREIGN KEY (arc_id) REFERENCES arcs (id) ON DELETE CASCADE
@@ -219,7 +219,7 @@ CREATE TABLE discrete_controlled_ac_branches (
 ) strict;
 
 -- One modeled arc of a transformer (PSY TransformerCircuit); unnamed
--- subcomponents, so no name column. r/x follow unit_basis (COMPONENT_BASE ->
+-- subcomponents, so no name column. r/x follow parameter_units (COMPONENT_BASE ->
 -- pu on base_power/base_voltage_primary; NATURAL_UNITS -> ohm). The MinMax
 -- band columns' units follow control_objective; see unit_conventions.
 CREATE TABLE transformer_circuits (
@@ -231,12 +231,12 @@ CREATE TABLE transformer_circuits (
     -- Normalized tap position, 1 centered at nominal voltage:
     tap REAL NOT NULL DEFAULT 1.0 CHECK (tap >= 0 AND tap <= 2), -- Units: 1
     alpha REAL NOT NULL DEFAULT 0.0, -- Units: rad
-    r REAL NOT NULL DEFAULT 0.0, -- Units: per unit_basis
+    r REAL NOT NULL DEFAULT 0.0, -- Units: per parameter_units
     -- Star-leg equivalent reactance of a three-winding transformer may be
     -- negative, so no sign CHECK on r/x:
-    x REAL NOT NULL DEFAULT 0.0, -- Units: per unit_basis
-    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
-        CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    x REAL NOT NULL DEFAULT 0.0, -- Units: per parameter_units
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     control_objective TEXT NOT NULL DEFAULT 'UNDEFINED'
         CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED',
             'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED',
@@ -286,17 +286,17 @@ CREATE TABLE three_winding_transformers (
     secondary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
     tertiary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
     star_bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    r_12 REAL NULL, -- Units: per unit_basis
-    x_12 REAL NULL, -- Units: per unit_basis
-    r_23 REAL NULL, -- Units: per unit_basis
-    x_23 REAL NULL, -- Units: per unit_basis
-    r_31 REAL NULL, -- Units: per unit_basis
-    x_31 REAL NULL, -- Units: per unit_basis
-    -- Pairwise measured r/x follow unit_basis: COMPONENT_BASE is pu on
+    r_12 REAL NULL, -- Units: per parameter_units
+    x_12 REAL NULL, -- Units: per parameter_units
+    r_23 REAL NULL, -- Units: per parameter_units
+    x_23 REAL NULL, -- Units: per parameter_units
+    r_31 REAL NULL, -- Units: per parameter_units
+    x_31 REAL NULL, -- Units: per parameter_units
+    -- Pairwise measured r/x follow parameter_units: COMPONENT_BASE is pu on
     -- base_power_12/_23/_31, all three referred to the primary winding's
     -- voltage base per PSSE convention; NATURAL_UNITS is ohm.
-    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
-        CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power_12 REAL NULL CHECK (base_power_12 > 0), -- Units: MVA
     base_power_23 REAL NULL CHECK (base_power_23 > 0), -- Units: MVA
     base_power_31 REAL NULL CHECK (base_power_31 > 0), -- Units: MVA
@@ -799,12 +799,12 @@ CREATE TABLE synchronous_condensers (
     active_power_losses REAL NOT NULL DEFAULT 0.0 CHECK (active_power_losses >= 0) -- Units: per power_units
 ) strict;
 
--- Thevenin equivalent source (PSY Source). r_th/x_th follow unit_basis: pu on
+-- Thevenin equivalent source (PSY Source). r_th/x_th follow parameter_units: pu on
 -- base_power, or natural-units ohm; COMPONENT_BASE is the default since PSY
 -- has no native external representation for this component. Column names are
 -- lowercase (the schemas spell R_th/X_th) -- a naming difference only, see
 -- sql_codegen_map.json. Power-family columns follow power_units instead,
--- independent of unit_basis.
+-- independent of parameter_units.
 CREATE TABLE sources (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -825,8 +825,8 @@ CREATE TABLE sources (
     internal_angle REAL NOT NULL DEFAULT 0.0, -- Units: rad
     r_th REAL NOT NULL,
     x_th REAL NOT NULL,
-    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
-        CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- The schemas' ImportExportCost (Core/common.json). The default carries no
     -- offer curves and the schema's default weekly energy limits.
     operation_cost TEXT NOT NULL
@@ -935,13 +935,17 @@ CREATE TABLE tmodel_hvdc_lines (
     name TEXT NOT NULL UNIQUE,
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     r REAL NOT NULL,
-    unit_basis TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
-        CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    base_power REAL NOT NULL CHECK (base_power > 0) -- Units: MVA
+    parameter_units TEXT NOT NULL DEFAULT 'NATURAL_UNITS'
+        CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    -- The one exception to the per-row base_power rule: a DC line's per-unit
+    -- fields resolve against a current base, not a power base, because the DC
+    -- line current is the value that is actually known. Upstream
+    -- TModelHVDCLine carries base_current and no base_power at all.
+    base_current REAL NOT NULL CHECK (base_current > 0) -- Units: A
 ) strict;
 
 -- FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly
--- per unit_basis (COMPONENT_BASE: pu on bus base_voltage, the native external form;
+-- per parameter_units (COMPONENT_BASE: pu on bus base_voltage, the native external form;
 -- NATURAL_UNITS: kV). power_units is a second, independent discriminator governing
 -- max_reactive_power (COMPONENT_BASE: pu; NATURAL_UNITS: MVAr).
 CREATE TABLE facts_control_devices (
@@ -949,8 +953,8 @@ CREATE TABLE facts_control_devices (
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     voltage_setpoint REAL NOT NULL,
-    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
-        CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Independent max reactive power ceiling (non-binding sentinel default):
@@ -964,7 +968,7 @@ CREATE TABLE facts_control_devices (
 -- Interconnecting power converter (PSY InterconnectingConverter), an AC<->DC
 -- bus converter. dc_setpoint/ac_setpoint are mode-multiplexed by
 -- dc_control/ac_control; their voltage-mode values (DC_VOLTAGE,
--- DC_VOLTAGE_DROOP, AC_VOLTAGE) are further discriminated by unit_basis
+-- DC_VOLTAGE_DROOP, AC_VOLTAGE) are further discriminated by parameter_units
 -- (pu/kV) via the registry's second discriminator column.
 CREATE TABLE interconnecting_converters (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -978,7 +982,7 @@ CREATE TABLE interconnecting_converters (
     dc_control TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
     ac_setpoint REAL NOT NULL DEFAULT 1.0,
     ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
-    unit_basis TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Remote-bus voltage control, droop, and power-factor weighting:

@@ -356,7 +356,7 @@ def test_tmodel_hvdc_line_requires_dc_buses(fresh_db):
 def test_tmodel_hvdc_line_accepts_dc_buses(fresh_db):
     make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
     fresh_db.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_power) "
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_current) "
         "VALUES (99, 'dc', ?, 0.1, 100.0)",
         (_dc_arc(fresh_db),),
     )
@@ -386,7 +386,7 @@ def test_arc_domain_trigger_fires_on_update(fresh_db):
     """Re-pointing an existing row's arc is checked too, not just the insert."""
     make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
     fresh_db.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_power) "
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_current) "
         "VALUES (99, 'dc', ?, 0.1, 100.0)",
         (_dc_arc(fresh_db),),
     )

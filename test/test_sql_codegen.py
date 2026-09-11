@@ -85,7 +85,7 @@ def test_attribute_channel_properties_not_columns(generated_db):
 
 def test_branch_parameters_are_first_class_columns(fresh_db):
     """r/x/b/g are first-class transmission_lines columns, each stored flexibly in
-    per-unit (component base) OR natural units, recorded per row by unit_basis.
+    per-unit (component base) OR natural units, recorded per row by parameter_units.
     Under STRICT, r/x are REAL and b/g are TEXT (json_valid-checked FromTo halves)."""
     cols = {
         row[1]: row[2]
@@ -101,7 +101,7 @@ def test_branch_parameters_are_first_class_columns(fresh_db):
             "SELECT column_name, discriminator_value, quantity_type, unit "
             "FROM unit_conventions WHERE table_name = 'transmission_lines' "
             "AND column_name IN ('r', 'x', 'b', 'g') "
-            "AND discriminator_column = 'unit_basis'"
+            "AND discriminator_column = 'parameter_units'"
         ).fetchall()
     )
     assert registered == {
@@ -267,7 +267,7 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
 
 def test_transformer_circuits_columns_and_units(fresh_db):
     """Circuit r/x are first-class impedance columns stored flexibly in pu on the
-    component base OR natural-units ohm, recorded per row by unit_basis exactly
+    component base OR natural-units ohm, recorded per row by parameter_units exactly
     as transmission_lines does it, and the two MinMax control bands are
     registered per control_objective value."""
     cols = {
@@ -280,7 +280,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
     assert cols["alpha"] == "REAL"
     assert cols["control_limits"] == "TEXT"
     assert cols["controlled_quantity_limits"] == "TEXT"
-    assert cols["unit_basis"] == "TEXT"
+    assert cols["parameter_units"] == "TEXT"
     assert "name" not in cols  # circuits are unnamed subcomponents
 
     registered = set(
@@ -290,7 +290,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
             "AND discriminator_column IS NULL"
         ).fetchall()
     )
-    # r/x are absent here on purpose: they carry a unit_basis discriminator,
+    # r/x are absent here on purpose: they carry a parameter_units discriminator,
     # asserted separately below. rating/rating_b/rating_c/active_power_flow/
     # reactive_power_flow are likewise absent: they carry a power_units
     # discriminator, also asserted separately below.
@@ -307,7 +307,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         for col, disc, qt, unit in fresh_db.execute(
             "SELECT column_name, discriminator_value, quantity_type, unit "
             "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
-            "AND discriminator_column = 'unit_basis'"
+            "AND discriminator_column = 'parameter_units'"
         )
     } == {
         ("r", "COMPONENT_BASE"): ("Resistance", "pu"),
@@ -409,13 +409,13 @@ def test_units_comment_flat_x_units_unchanged():
 def test_units_comment_discriminator_renamed():
     """The table's renames apply to the discriminator name in the comment: the
     discriminator names a sibling column, so a renamed column (parameter_units ->
-    unit_basis) must not leave the comment pointing at the upstream name."""
+    parameter_units) must not leave the comment pointing at the upstream name."""
     prop = {
         "x-unit-discriminator": "parameter_units",
         "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"},
     }
-    renames = {"parameter_units": "unit_basis"}
-    assert units_comment(prop, renames) == " -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)"
+    renames = {"parameter_units": "parameter_units"}
+    assert units_comment(prop, renames) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)"
 
 
 def test_units_comment_nested_x_units():

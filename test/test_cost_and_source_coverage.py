@@ -272,7 +272,7 @@ def test_every_source_schema_field_has_a_column(db):
     props = set(load_schemas_json("Operations/StaticInjection/Source.json")["properties"])
     columns = {r[1] for r in db.execute("PRAGMA table_info(sources)")}
     columns |= {"R_th", "X_th"}  # stored lowercase; a rename, not a gap
-    columns |= {"parameter_units"}  # Source's schema name for this DB's unit_basis column
+    columns |= {"parameter_units"}  # Source's schema name for this DB's parameter_units column
     missing = props - SOURCE_SKIPPED - columns
     assert not missing, f"Source fields with no column: {sorted(missing)}"
 
@@ -300,7 +300,7 @@ def test_source_defaults_match_psy(fresh_db):
     )
     row = fresh_db.execute(
         """SELECT available, base_power, internal_voltage, internal_angle,
-                  base_voltage, unit_basis, operation_cost
+                  base_voltage, parameter_units, operation_cost
            FROM sources WHERE id = 2"""
     ).fetchone()
     assert row[0] == 1

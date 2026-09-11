@@ -185,17 +185,17 @@ CREATE TABLE transmission_lines (
     active_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     reactive_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
-    r REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    x REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    r REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    x REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     base_power REAL NOT NULL, -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    b JSON NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: S)
+    parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    b JSON NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: S)
     continuous_rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     rating_b REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     rating_c REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     angle_limits JSON NOT NULL, -- Units: rad
-    g JSON NULL DEFAULT '{"from":0.0,"to":0.0}', -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: S)
+    g JSON NULL DEFAULT '{"from":0.0,"to":0.0}', -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: S)
     flow_limits JSON NULL -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
 );
 
@@ -234,9 +234,9 @@ CREATE TABLE transformer_circuits (
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     tap REAL NULL DEFAULT 1.0, -- Units: 1
     alpha REAL NULL DEFAULT 0.0, -- Units: rad
-    unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    r REAL NULL DEFAULT 0.0, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    x REAL NULL DEFAULT 0.0, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    r REAL NULL DEFAULT 0.0, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    x REAL NULL DEFAULT 0.0, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     control_objective TEXT NULL DEFAULT 'UNDEFINED' CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED', 'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED', 'CONTROL_OF_DC_LINE_DISABLED', 'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE', 'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE', 'ASYMMETRIC_ACTIVE_POWER_FLOW')),
     regulated_bus_number INTEGER NULL DEFAULT 0,
     control_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: rad, ACTIVE_POWER_FLOW_DISABLED: rad, ASYMMETRIC_ACTIVE_POWER_FLOW: rad, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: rad, CONTROL_OF_DC_LINE: 1, CONTROL_OF_DC_LINE_DISABLED: 1, FIXED: 1, REACTIVE_POWER_FLOW: 1, REACTIVE_POWER_FLOW_DISABLED: 1, UNDEFINED: 1, VOLTAGE: 1, VOLTAGE_DISABLED: 1)
@@ -270,13 +270,13 @@ CREATE TABLE three_winding_transformers (
     secondary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
     tertiary_circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
     star_bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    r_12 REAL NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    x_12 REAL NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    r_23 REAL NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    x_23 REAL NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    r_31 REAL NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    x_31 REAL NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    r_12 REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    x_12 REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    r_23 REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    x_23 REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    r_31 REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    x_31 REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     base_power_12 REAL NULL, -- Units: MVA
     base_power_23 REAL NULL, -- Units: MVA
     base_power_31 REAL NULL, -- Units: MVA
@@ -308,9 +308,9 @@ CREATE TABLE tmodel_hvdc_lines (
     available BOOLEAN NOT NULL,
     active_power_flow REAL NOT NULL, -- Units: MW
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
-    unit_basis TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    parameter_units TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     base_current REAL NOT NULL, -- Units: A
-    r REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    r REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     l REAL NOT NULL, -- Units: pu
     c REAL NOT NULL, -- Units: pu
     active_power_limits_from JSON NOT NULL, -- Units: MW
@@ -368,9 +368,9 @@ CREATE TABLE sources (
     reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     active_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     reactive_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    r_th REAL NULL DEFAULT 0.0, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    x_th REAL NULL DEFAULT 0.0, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    r_th REAL NULL DEFAULT 0.0, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
+    x_th REAL NULL DEFAULT 0.0, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     internal_voltage REAL NULL DEFAULT 1.0, -- Units: pu
     internal_angle REAL NULL DEFAULT 0.0, -- Units: rad
     base_voltage REAL NULL, -- Units: kV
@@ -397,9 +397,9 @@ CREATE TABLE interconnecting_converters (
     loss_function JSON NULL,
     dc_control TEXT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
     ac_control TEXT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_REACTIVE_POWER', 'AC_VOLTAGE')),
-    unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    dc_setpoint REAL NULL DEFAULT 0.0, -- Units: per dc_control (DC_POWER: MW; DC_VOLTAGE: per unit_basis [COMPONENT_BASE: pu, NATURAL_UNITS: kV]; DC_VOLTAGE_DROOP: per unit_basis [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
-    ac_setpoint REAL NULL DEFAULT 1.0, -- Units: per ac_control (AC_REACTIVE_POWER: 1; AC_VOLTAGE: per unit_basis [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
+    parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    dc_setpoint REAL NULL DEFAULT 0.0, -- Units: per dc_control (DC_POWER: MW; DC_VOLTAGE: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV]; DC_VOLTAGE_DROOP: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
+    ac_setpoint REAL NULL DEFAULT 1.0, -- Units: per ac_control (AC_REACTIVE_POWER: 1; AC_VOLTAGE: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
     dc_voltage_droop REAL NULL DEFAULT 0.0, -- Units: pu
     remote_bus_control INTEGER NULL,
     rmpct REAL NULL DEFAULT 100.0, -- Units: 1
@@ -415,8 +415,8 @@ CREATE TABLE facts_control_devices (
     available BOOLEAN NOT NULL,
     bus INTEGER NOT NULL,
     control_mode TEXT NULL CHECK (control_mode IN ('OOS', 'NML', 'BYP')),
-    unit_basis TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (unit_basis IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    voltage_setpoint REAL NOT NULL, -- Units: per unit_basis (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
+    parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    voltage_setpoint REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     max_shunt_current REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     reactive_power_required REAL NOT NULL, -- Units: 1
     max_reactive_power REAL NULL DEFAULT 9999.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)

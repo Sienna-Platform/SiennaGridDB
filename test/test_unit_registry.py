@@ -526,8 +526,8 @@ def test_hydro_level_data_type_volume_rejected(fresh_db):
         _insert_reservoir(fresh_db, eid, "VOLUME")
 
 
-# Transmission-line unit_basis discriminator + STRICT
-def _insert_line(conn, entity_id, r=0.1, x=0.2, unit_basis=None):
+# Transmission-line parameter_units discriminator + STRICT
+def _insert_line(conn, entity_id, r=0.1, x=0.2, parameter_units=None):
     # transmission_lines.arc_id (NOT NULL) -> arcs -> entities; provision an
     # arc with two distinct endpoint entities so the FK/NOT NULL are satisfied.
     arc_eid, from_eid, to_eid = entity_id * 100 + 1, entity_id * 100 + 2, entity_id * 100 + 3
@@ -546,9 +546,9 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, unit_basis=None):
     )
     cols = ["id", "name", "arc_id", "continuous_rating", "r", "x", "power_units", "base_power"]
     vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x, "COMPONENT_BASE", 100.0]
-    if unit_basis is not None:
-        cols.append("unit_basis")
-        vals.append(unit_basis)
+    if parameter_units is not None:
+        cols.append("parameter_units")
+        vals.append(parameter_units)
     placeholders = ", ".join("?" for _ in cols)
     conn.execute(
         f"INSERT INTO transmission_lines({', '.join(cols)}) VALUES ({placeholders})",
@@ -556,29 +556,29 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, unit_basis=None):
     )
 
 
-def test_transmission_line_unit_basis_default_component_base(fresh_db):
+def test_transmission_line_parameter_units_default_component_base(fresh_db):
     eid = make_entity(fresh_db, 1, entity_table="transmission_lines")
     _insert_line(fresh_db, eid)
     (basis,) = fresh_db.execute(
-        "SELECT unit_basis FROM transmission_lines WHERE id = ?", (eid,)
+        "SELECT parameter_units FROM transmission_lines WHERE id = ?", (eid,)
     ).fetchone()
     assert basis == "COMPONENT_BASE"
 
 
-@pytest.mark.parametrize("unit_basis", ["COMPONENT_BASE", "NATURAL_UNITS"])
-def test_transmission_line_unit_basis_valid_accepted(fresh_db, unit_basis):
+@pytest.mark.parametrize("parameter_units", ["COMPONENT_BASE", "NATURAL_UNITS"])
+def test_transmission_line_parameter_units_valid_accepted(fresh_db, parameter_units):
     eid = make_entity(fresh_db, 1, entity_table="transmission_lines")
-    _insert_line(fresh_db, eid, unit_basis=unit_basis)
+    _insert_line(fresh_db, eid, parameter_units=parameter_units)
     (stored,) = fresh_db.execute(
-        "SELECT unit_basis FROM transmission_lines WHERE id = ?", (eid,)
+        "SELECT parameter_units FROM transmission_lines WHERE id = ?", (eid,)
     ).fetchone()
-    assert stored == unit_basis
+    assert stored == parameter_units
 
 
-def test_transmission_line_unit_basis_bad_value_rejected(fresh_db):
+def test_transmission_line_parameter_units_bad_value_rejected(fresh_db):
     eid = make_entity(fresh_db, 1, entity_table="transmission_lines")
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-        _insert_line(fresh_db, eid, unit_basis="VOLUME")
+        _insert_line(fresh_db, eid, parameter_units="VOLUME")
 
 
 def test_transmission_line_r_text_rejected_under_strict(fresh_db):
@@ -593,7 +593,7 @@ def test_transmission_line_discriminated_registry_rows(db):
         "SELECT column_name, discriminator_value, quantity_type, unit "
         "FROM unit_conventions WHERE table_name = 'transmission_lines' "
         "AND column_name IN ('r', 'x', 'b', 'g') "
-        "AND discriminator_column = 'unit_basis' "
+        "AND discriminator_column = 'parameter_units' "
         "ORDER BY column_name, discriminator_value"
     ).fetchall()
     expected = [
@@ -1171,7 +1171,7 @@ def test_emissions_enum_lists_match_schema(db, action):
 # Flexible unit-basis columns
 def test_flexible_basis_columns_registered(db):
     """Every discriminated externally-sourced column has exactly the
-    expected set of unit_basis discriminator values in unit_conventions -- no missing
+    expected set of parameter_units discriminator values in unit_conventions -- no missing
     or extra basis. This only checks the DISTINCT discriminator_value set (two values,
     COMPONENT_BASE/NATURAL_UNITS, everywhere)."""
     expected = {
@@ -1179,7 +1179,7 @@ def test_flexible_basis_columns_registered(db):
         ("sources", "x_th"): {"COMPONENT_BASE", "NATURAL_UNITS"},
         ("facts_control_devices", "voltage_setpoint"): {"COMPONENT_BASE", "NATURAL_UNITS"},
         # Transformer circuits mirror transmission_lines: pu on the component base
-        # or natural-units ohm, per the row's unit_basis.
+        # or natural-units ohm, per the row's parameter_units.
         ("transformer_circuits", "r"): {"COMPONENT_BASE", "NATURAL_UNITS"},
         ("transformer_circuits", "x"): {"COMPONENT_BASE", "NATURAL_UNITS"},
     }
@@ -1326,7 +1326,7 @@ def test_attribute_start_time_limits_wrong_unit_rejected(fresh_db):
 def test_interconnecting_converter_setpoints_two_discriminator(db):
     """InterconnectingConverter dc_setpoint/ac_setpoint are mode-multiplexed by
     dc_control/ac_control, the same enums used by TwoTerminalVSCLine; their
-    voltage-mode rows carry a second discriminator (unit_basis) so pu vs kV is
+    voltage-mode rows carry a second discriminator (parameter_units) so pu vs kV is
     also explicit."""
     rows = set(db.execute(
         "SELECT column_name, discriminator_value, discriminator_value_2, quantity_type, unit "
@@ -1338,10 +1338,10 @@ def test_interconnecting_converter_setpoints_two_discriminator(db):
     assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
 
 
-# unit_basis CHECK constraint, on every table that carries the column (derived
+# parameter_units CHECK constraint, on every table that carries the column (derived
 # from a scratch build of the live schema, not hardcoded, so a newly added
 # table is covered automatically).
-def _discover_unit_basis_tables():
+def _discover_parameter_units_tables():
     conn = sqlite3.connect(":memory:")
     conn.execute("PRAGMA foreign_keys = ON")
     for sql_file in (
@@ -1356,7 +1356,7 @@ def _discover_unit_basis_tables():
         for row in conn.execute(
             "SELECT DISTINCT m.name FROM sqlite_master m "
             "JOIN pragma_table_info(m.name) p "
-            "WHERE m.type = 'table' AND p.name = 'unit_basis' "
+            "WHERE m.type = 'table' AND p.name = 'parameter_units' "
             "ORDER BY 1"
         )
     ]
@@ -1364,7 +1364,7 @@ def _discover_unit_basis_tables():
     return tables
 
 
-UNIT_BASIS_TABLES = _discover_unit_basis_tables()
+UNIT_BASIS_TABLES = _discover_parameter_units_tables()
 
 
 def _provision_bus(conn, bus_id, is_dc=0):
@@ -1388,31 +1388,31 @@ def _provision_arc(conn, arc_id, is_dc=0):
     return arc_id
 
 
-def _build_transmission_line(conn, base_id, unit_basis):
+def _build_transmission_line(conn, base_id, parameter_units):
     arc = _provision_arc(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="transmission_lines", entity_type="Line")
     conn.execute(
         "INSERT INTO transmission_lines"
-        "(id, name, arc_id, continuous_rating, r, x, unit_basis, power_units, base_power) "
+        "(id, name, arc_id, continuous_rating, r, x, parameter_units, power_units, base_power) "
         "VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, f"line_{base_id}", arc, unit_basis),
+        (base_id, f"line_{base_id}", arc, parameter_units),
     )
 
 
-def _build_transformer_circuit(conn, base_id, unit_basis):
+def _build_transformer_circuit(conn, base_id, parameter_units):
     arc = _provision_arc(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="transformer_circuits", entity_type="Circuit")
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, unit_basis, power_units, base_power) "
+        "INSERT INTO transformer_circuits(id, arc_id, parameter_units, power_units, base_power) "
         "VALUES (?, ?, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, arc, unit_basis),
+        (base_id, arc, parameter_units),
     )
 
 
-def _build_three_winding_transformer(conn, base_id, unit_basis):
+def _build_three_winding_transformer(conn, base_id, parameter_units):
     circuits = [base_id * (i + 1) * 100 for i in range(3)]
     for circuit in circuits:
-        _build_transformer_circuit(conn, circuit, unit_basis)
+        _build_transformer_circuit(conn, circuit, parameter_units)
     star_bus = _provision_bus(conn, base_id * 400)
     make_entity(
         conn, base_id, entity_table="three_winding_transformers",
@@ -1420,9 +1420,9 @@ def _build_three_winding_transformer(conn, base_id, unit_basis):
     )
     conn.execute(
         "INSERT INTO three_winding_transformers("
-        "id, name, primary_circuit, secondary_circuit, tertiary_circuit, star_bus, unit_basis"
+        "id, name, primary_circuit, secondary_circuit, tertiary_circuit, star_bus, parameter_units"
         ") VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (base_id, f"twt_{base_id}", *circuits, star_bus, unit_basis),
+        (base_id, f"twt_{base_id}", *circuits, star_bus, parameter_units),
     )
 
 
@@ -1446,38 +1446,38 @@ def _build_switched_admittance(conn, base_id, admittance_units):
     )
 
 
-def _build_source(conn, base_id, unit_basis):
+def _build_source(conn, base_id, parameter_units):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="sources", entity_type="Source")
     conn.execute(
-        "INSERT INTO sources(id, name, bus, r_th, x_th, unit_basis, power_units, base_power) "
+        "INSERT INTO sources(id, name, bus, r_th, x_th, parameter_units, power_units, base_power) "
         "VALUES (?, ?, ?, 0.0, 0.0, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, f"src_{base_id}", bus, unit_basis),
+        (base_id, f"src_{base_id}", bus, parameter_units),
     )
 
 
-def _build_tmodel_hvdc_line(conn, base_id, unit_basis):
+def _build_tmodel_hvdc_line(conn, base_id, parameter_units):
     arc = _provision_arc(conn, base_id * 100, is_dc=1)
     make_entity(conn, base_id, entity_table="tmodel_hvdc_lines", entity_type="TModelHVDCLine")
     conn.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, unit_basis, base_power) "
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, parameter_units, base_current) "
         "VALUES (?, ?, ?, 0.01, ?, 100.0)",
-        (base_id, f"tm_{base_id}", arc, unit_basis),
+        (base_id, f"tm_{base_id}", arc, parameter_units),
     )
 
 
-def _build_facts_control_device(conn, base_id, unit_basis):
+def _build_facts_control_device(conn, base_id, parameter_units):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="facts_control_devices", entity_type="FACTSControlDevice")
     conn.execute(
         "INSERT INTO facts_control_devices"
-        "(id, name, bus, voltage_setpoint, unit_basis, power_units, base_power) "
+        "(id, name, bus, voltage_setpoint, parameter_units, power_units, base_power) "
         "VALUES (?, ?, ?, 1.0, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, f"facts_{base_id}", bus, unit_basis),
+        (base_id, f"facts_{base_id}", bus, parameter_units),
     )
 
 
-def _build_interconnecting_converter(conn, base_id, unit_basis):
+def _build_interconnecting_converter(conn, base_id, parameter_units):
     ac_bus = _provision_bus(conn, base_id * 100, is_dc=0)
     dc_bus = _provision_bus(conn, base_id * 100 + 1, is_dc=1)
     make_entity(
@@ -1486,9 +1486,9 @@ def _build_interconnecting_converter(conn, base_id, unit_basis):
     )
     conn.execute(
         "INSERT INTO interconnecting_converters"
-        "(id, name, bus, dc_bus, unit_basis, power_units, base_power) "
+        "(id, name, bus, dc_bus, parameter_units, power_units, base_power) "
         "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, f"conv_{base_id}", ac_bus, dc_bus, unit_basis),
+        (base_id, f"conv_{base_id}", ac_bus, dc_bus, parameter_units),
     )
 
 
@@ -1503,24 +1503,24 @@ UNIT_BASIS_BUILDERS = {
 }
 
 
-def test_unit_basis_tables_have_fixture_builders():
-    """Guard: every table carrying unit_basis (discovered from the live schema)
+def test_parameter_units_tables_have_fixture_builders():
+    """Guard: every table carrying parameter_units (discovered from the live schema)
     must have a builder above, so a newly added table gets real CHECK coverage
     below instead of silently falling through the parametrize."""
     missing = [t for t in UNIT_BASIS_TABLES if t not in UNIT_BASIS_BUILDERS]
-    assert missing == [], f"tables with unit_basis but no test fixture builder: {missing}"
+    assert missing == [], f"tables with parameter_units but no test fixture builder: {missing}"
 
 
 @pytest.mark.parametrize("table", UNIT_BASIS_TABLES)
 @pytest.mark.parametrize("value", ["COMPONENT_BASE", "NATURAL_UNITS"])
-def test_unit_basis_accepts_both_legal_values(fresh_db, table, value):
+def test_parameter_units_accepts_both_legal_values(fresh_db, table, value):
     UNIT_BASIS_BUILDERS[table](fresh_db, 1, value)
-    (stored,) = fresh_db.execute(f"SELECT unit_basis FROM {table} LIMIT 1").fetchone()
+    (stored,) = fresh_db.execute(f"SELECT parameter_units FROM {table} LIMIT 1").fetchone()
     assert stored == value
 
 
 @pytest.mark.parametrize("table", UNIT_BASIS_TABLES)
-def test_unit_basis_rejects_a_third_value(fresh_db, table):
+def test_parameter_units_rejects_a_third_value(fresh_db, table):
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
         UNIT_BASIS_BUILDERS[table](fresh_db, 1, "BOGUS_BASIS")
 
