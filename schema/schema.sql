@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 16; -- bump on every schema or registry change
+PRAGMA user_version = 17; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
