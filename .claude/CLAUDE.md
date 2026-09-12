@@ -88,7 +88,7 @@ python3 -c "import json;print(sorted({e['column'] for e in json.load(open('schem
 ## Warnings / stale bits
 
 - **`schema/schema.sql` DROPs all tables** — test-only; never apply to a live dataset.
-- Stale scaffolding, do not build on it: the root `openapi.json` is a leftover stub referencing a nonexistent `schemas/` dir; `scripts/check-schema-sync.sh` expects a `SiennaOpenAPIModels.jl/src/dbinterface/` package that doesn't exist (the planned Julia DB-interface layer).
+- `schema/coverage_decisions.json` is a decision record, not a gate: nothing reads it, and the generated-DDL drift report prints coverage gaps without failing on them. Expect it to drift from `sql_codegen_map.json`.
 - No table records **which devices contribute to which service**. Service/reserve membership has no association table here and no schema upstream, unlike `supplemental_attribute_associations`. If reserve participation needs to round-trip, that gap is the blocker.
 
 <tone_preference>

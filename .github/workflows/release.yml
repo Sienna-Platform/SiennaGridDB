@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: extractions/setup-just@v3
+
+      - name: Assert the tag matches pyproject's version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pyver=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$tag" != "$pyver" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match pyproject version $pyver" >&2
+            exit 1
+          fi
+
+      # The artifact is the SQL. Build a database from it first, so a tag can
+      # never ship a schema that does not apply.
+      - name: Build a database from the tagged schema
+        run: just new-db
+
+      - name: Verify the unit registry seal
+        run: python3 scripts/verify_unit_registry.py griddb-example.sqlite
+
+      # Staged into a named directory first: a tarball whose members unpack into
+      # the current directory is unusable by any consumer that extracts into a
+      # shared path.
+      - name: Package
+        run: |
+          name="sienna-griddb-${GITHUB_REF_NAME}"
+          mkdir -p "dist/$name"
+          cp -r schema scripts README.md LICENSE .justfile "dist/$name/"
+          tar -czf "$name.tar.gz" -C dist "$name"
+          tar -tzf "$name.tar.gz" | head -5
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sienna-griddb-${{ github.ref_name }}.tar.gz
+          generate_release_notes: true
