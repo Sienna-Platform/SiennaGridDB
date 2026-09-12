@@ -98,7 +98,7 @@ def test_branch_parameters_are_first_class_columns(fresh_db):
 
     registered = set(
         fresh_db.execute(
-            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "SELECT column_name, discriminator_value, quantity_kind, unit "
             "FROM unit_conventions WHERE table_name = 'transmission_lines' "
             "AND column_name IN ('r', 'x', 'b', 'g') "
             "AND discriminator_column = 'parameter_units'"
@@ -120,7 +120,7 @@ def test_branch_parameter_pu_pairs_in_vocabulary(fresh_db):
     """The pu pairs seeded from units.json exist in allowed_units."""
     pairs = set(
         fresh_db.execute(
-            "SELECT quantity_type, unit FROM allowed_units WHERE unit IN ('pu', 'pu/min')"
+            "SELECT quantity_kind, unit FROM allowed_units WHERE unit IN ('pu', 'pu/min')"
         ).fetchall()
     )
     assert pairs == {
@@ -203,7 +203,7 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
 
     registered = set(
         fresh_db.execute(
-            "SELECT column_name, quantity_type, unit FROM unit_conventions "
+            "SELECT column_name, quantity_kind, unit FROM unit_conventions "
             "WHERE table_name = 'discrete_controlled_ac_branches' "
             "AND discriminator_column IS NULL"
         ).fetchall()
@@ -217,7 +217,7 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     assert {
         (col, disc): (qt, unit)
         for col, disc, qt, unit in fresh_db.execute(
-            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "SELECT column_name, discriminator_value, quantity_kind, unit "
             "FROM unit_conventions WHERE table_name = 'discrete_controlled_ac_branches' "
             "AND discriminator_column = 'power_units'"
         )
@@ -285,7 +285,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
 
     registered = set(
         fresh_db.execute(
-            "SELECT column_name, quantity_type, unit FROM unit_conventions "
+            "SELECT column_name, quantity_kind, unit FROM unit_conventions "
             "WHERE table_name = 'transformer_circuits' "
             "AND discriminator_column IS NULL"
         ).fetchall()
@@ -305,7 +305,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
     assert {
         (col, disc): (qt, unit)
         for col, disc, qt, unit in fresh_db.execute(
-            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "SELECT column_name, discriminator_value, quantity_kind, unit "
             "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
             "AND discriminator_column = 'parameter_units'"
         )
@@ -319,7 +319,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
     assert {
         (col, disc): (qt, unit)
         for col, disc, qt, unit in fresh_db.execute(
-            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "SELECT column_name, discriminator_value, quantity_kind, unit "
             "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
             "AND discriminator_column = 'power_units'"
         )
@@ -339,7 +339,7 @@ def test_transformer_circuits_columns_and_units(fresh_db):
     control_bands = {
         (col, disc): (qt, unit)
         for col, disc, qt, unit in fresh_db.execute(
-            "SELECT column_name, discriminator_value, quantity_type, unit "
+            "SELECT column_name, discriminator_value, quantity_kind, unit "
             "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
             "AND discriminator_column = 'control_objective'"
         )
@@ -380,7 +380,7 @@ def test_transformer_tables_magnetizing_shunt_units(fresh_db):
         }
         assert cols["magnetizing_shunt"] == "TEXT"
         registered = fresh_db.execute(
-            "SELECT column_name, quantity_type, unit FROM unit_conventions "
+            "SELECT column_name, quantity_kind, unit FROM unit_conventions "
             "WHERE table_name = ? AND column_name LIKE 'magnetizing_shunt%' "
             "ORDER BY column_name",
             (table,),
@@ -408,14 +408,16 @@ def test_units_comment_flat_x_units_unchanged():
 
 def test_units_comment_discriminator_renamed():
     """The table's renames apply to the discriminator name in the comment: the
-    discriminator names a sibling column, so a renamed column (parameter_units ->
-    parameter_units) must not leave the comment pointing at the upstream name."""
+    discriminator names a sibling column, so a renamed column
+    (voltage_setpoint_units -> parameter_units, as interconnecting_converters and
+    facts_control_devices do) must not leave the comment pointing at the upstream
+    name."""
     prop = {
-        "x-unit-discriminator": "parameter_units",
-        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"},
+        "x-unit-discriminator": "voltage_setpoint_units",
+        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
     }
-    renames = {"parameter_units": "parameter_units"}
-    assert units_comment(prop, renames) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)"
+    renames = {"voltage_setpoint_units": "parameter_units"}
+    assert units_comment(prop, renames) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)"
 
 
 def test_units_comment_nested_x_units():

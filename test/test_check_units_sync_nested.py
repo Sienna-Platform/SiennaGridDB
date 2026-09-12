@@ -58,29 +58,29 @@ def _matching_registry_rows():
     NATURAL_UNITS), so the registry fixture mirrors the schema map key-for-key.
     """
     return [
-        {"discriminator_value": "DC_POWER", "quantity_type": "ActivePower", "unit": "MW"},
+        {"discriminator_value": "DC_POWER", "quantity_kind": "ActivePower", "unit": "MW"},
         {
             "discriminator_value": "DC_VOLTAGE",
             "discriminator_value_2": "COMPONENT_BASE",
-            "quantity_type": "Voltage",
+            "quantity_kind": "Voltage",
             "unit": "pu",
         },
         {
             "discriminator_value": "DC_VOLTAGE",
             "discriminator_value_2": "NATURAL_UNITS",
-            "quantity_type": "Voltage",
+            "quantity_kind": "Voltage",
             "unit": "kV",
         },
         {
             "discriminator_value": "DC_VOLTAGE_DROOP",
             "discriminator_value_2": "COMPONENT_BASE",
-            "quantity_type": "Voltage",
+            "quantity_kind": "Voltage",
             "unit": "pu",
         },
         {
             "discriminator_value": "DC_VOLTAGE_DROOP",
             "discriminator_value_2": "NATURAL_UNITS",
-            "quantity_type": "Voltage",
+            "quantity_kind": "Voltage",
             "unit": "kV",
         },
     ]
@@ -177,8 +177,8 @@ def test_l1_flat_x_unit_with_registry_superset_warns():
     that hid the Line r/x/b/g natural-units arm."""
     ann = schema_property_annotation({"type": "number", "x-unit": "pu"})
     rows = [
-        {"discriminator_value": "COMPONENT_BASE", "quantity_type": "Resistance", "unit": "pu"},
-        {"discriminator_value": "NATURAL_UNITS", "quantity_type": "Resistance", "unit": "ohm"},
+        {"discriminator_value": "COMPONENT_BASE", "quantity_kind": "Resistance", "unit": "pu"},
+        {"discriminator_value": "NATURAL_UNITS", "quantity_kind": "Resistance", "unit": "ohm"},
     ]
     report = Report()
     warns = _l1_discriminated(
@@ -197,7 +197,7 @@ def test_l1_flat_x_unit_exact_registry_match_is_silent():
     """A flat schema x-unit whose unit is the registry's only arm is fully clean."""
     ann = schema_property_annotation({"type": "number", "x-unit": "pu"})
     rows = [
-        {"discriminator_value": "COMPONENT_BASE", "quantity_type": "Resistance", "unit": "pu"},
+        {"discriminator_value": "COMPONENT_BASE", "quantity_kind": "Resistance", "unit": "pu"},
     ]
     report = Report()
     warns = _l1_discriminated(

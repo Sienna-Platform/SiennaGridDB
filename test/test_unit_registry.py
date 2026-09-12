@@ -1,7 +1,7 @@
 """Unit-registry test suite.
 
 Covers, positively and negatively: the build (row counts, FK integrity, seal
-presence, verify tool), seal honesty (tamper detection incl. quantity_types),
+presence, verify tool), seal honesty (tamper detection incl. quantity_kinds),
 seal enforcement (protected tables + no-op rerun), attribute unit validation
 (incl. the polymorphic NOT EXISTS regression), series-level time series, the
 hydro ``level_data_type`` CHECK, cost-payload power-units, and completeness
@@ -30,7 +30,7 @@ REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
 
 # Registry tables sealed against ad-hoc edits after the checksum row exists.
 SEALED_TABLES = [
-    "quantity_types",
+    "quantity_kinds",
     "allowed_units",
     "unit_conventions",
     "unit_management_metadata",
@@ -58,11 +58,11 @@ COMPLETENESS_ALLOWLIST = {
 
 
 # Helpers
-def insert_attribute(conn, entity_id, name, value, unit=None, quantity_type=None):
+def insert_attribute(conn, entity_id, name, value, unit=None, quantity_kind=None):
     conn.execute(
-        "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_type) "
+        "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_kind) "
         "VALUES (?, 'test', ?, ?, ?, ?)",
-        (entity_id, name, value, unit, quantity_type),
+        (entity_id, name, value, unit, quantity_kind),
     )
 
 
@@ -87,7 +87,7 @@ def run_verify(db_path):
 @pytest.mark.parametrize(
     "table, expected",
     [
-        ("quantity_types", EXPECTED_QUANTITY_TYPES),
+        ("quantity_kinds", EXPECTED_QUANTITY_TYPES),
         ("allowed_units", EXPECTED_ALLOWED_UNITS),
         ("unit_conventions", EXPECTED_UNIT_CONVENTIONS),
     ],
@@ -122,10 +122,10 @@ def test_verify_tool_passes_on_clean_db(built_db_path):
 
 
 # Seal honesty (tamper detection)
-def test_verify_detects_quantity_types_tamper(fresh_db, fresh_db_path):
+def test_verify_detects_quantity_kinds_tamper(fresh_db, fresh_db_path):
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
-        "UPDATE quantity_types SET default_unit = 'bogus' WHERE name = 'ActivePower'"
+        "UPDATE quantity_kinds SET default_unit = 'bogus' WHERE name = 'ActivePower'"
     )
     fresh_db.commit()
     fresh_db.close()
@@ -136,7 +136,7 @@ def test_verify_detects_quantity_types_tamper(fresh_db, fresh_db_path):
 
 def test_verify_detects_allowed_units_tamper(fresh_db, fresh_db_path):
     drop_seal_triggers(fresh_db)
-    fresh_db.execute("DELETE FROM allowed_units WHERE quantity_type = 'Angle'")
+    fresh_db.execute("DELETE FROM allowed_units WHERE quantity_kind = 'Angle'")
     fresh_db.commit()
     fresh_db.close()
     result = run_verify(fresh_db_path)
@@ -176,10 +176,10 @@ def test_seal_blocks_delete(fresh_db, table):
         fresh_db.execute(f"DELETE FROM {table}")
 
 
-def test_seal_blocks_update_quantity_types(fresh_db):
+def test_seal_blocks_update_quantity_kinds(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "UPDATE quantity_types SET default_unit = 'x' WHERE name = 'ActivePower'"
+            "UPDATE quantity_kinds SET default_unit = 'x' WHERE name = 'ActivePower'"
         )
 
 
@@ -201,10 +201,10 @@ def test_seal_blocks_update_metadata(fresh_db):
         )
 
 
-def test_seal_blocks_insert_quantity_types(fresh_db):
+def test_seal_blocks_insert_quantity_kinds(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT INTO quantity_types(name, default_unit, dimension) "
+            "INSERT INTO quantity_kinds(name, default_unit, dimension) "
             "VALUES ('Bogus', 'x', 'x')"
         )
 
@@ -212,14 +212,14 @@ def test_seal_blocks_insert_quantity_types(fresh_db):
 def test_seal_blocks_insert_allowed_units(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT INTO allowed_units(quantity_type, unit) VALUES ('ActivePower', 'GW')"
+            "INSERT INTO allowed_units(quantity_kind, unit) VALUES ('ActivePower', 'GW')"
         )
 
 
 def test_seal_blocks_insert_unit_conventions(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT INTO unit_conventions(table_name, column_name, quantity_type, unit) "
+            "INSERT INTO unit_conventions(table_name, column_name, quantity_kind, unit) "
             "VALUES ('loads', 'bogus', 'ActivePower', 'MW')"
         )
 
@@ -239,10 +239,10 @@ def test_seal_blocks_insert_or_replace_metadata(fresh_db):
         )
 
 
-def test_seal_blocks_insert_or_replace_quantity_types(fresh_db):
+def test_seal_blocks_insert_or_replace_quantity_kinds(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT OR REPLACE INTO quantity_types(name, default_unit, dimension) "
+            "INSERT OR REPLACE INTO quantity_kinds(name, default_unit, dimension) "
             "VALUES ('ActivePower', 'x', 'x')"
         )
 
@@ -299,7 +299,7 @@ def test_attribute_known_name_case_insensitive_accepted(fresh_db):
 def test_attribute_unknown_name_bad_pair_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
-        sqlite3.IntegrityError, match="vocabulary-valid unit and quantity_type"
+        sqlite3.IntegrityError, match="vocabulary-valid unit and quantity_kind"
     ):
         insert_attribute(fresh_db, 1, "mystery", "7.0", "bananas", "ActivePower")
 
@@ -323,7 +323,7 @@ def test_attribute_unknown_name_valid_pair_accepted(fresh_db):
     ],
 )
 def test_attribute_nonphysical_values_pass_without_units(fresh_db, value):
-    """text / bool / null values require no unit or quantity_type."""
+    """text / bool / null values require no unit or quantity_kind."""
     make_entity(fresh_db, 1)
     insert_attribute(fresh_db, 1, "some_flag", value, None, None)
     (count,) = fresh_db.execute(
@@ -336,14 +336,14 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
     """Regression for the scalar-subquery -> NOT EXISTS rewrite.
 
     A name with two discriminated registry rows must accept BOTH registered
-    (quantity_type, unit) pairs and reject a cross pair. No such name exists in
+    (quantity_kind, unit) pairs and reject a cross pair. No such name exists in
     the seed, so we synthesise one on an unsealed copy: register poly_attr under
     Duration/h and Duration/min (both are real allowed_units pairs).
     """
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
         "INSERT INTO unit_conventions"
-        "(table_name, column_name, quantity_type, unit, "
+        "(table_name, column_name, quantity_kind, unit, "
         " discriminator_column, discriminator_value) "
         "VALUES ('attributes', 'poly_attr', 'Duration', 'h', 'mode', 'A'), "
         "       ('attributes', 'poly_attr', 'Duration', 'min', 'mode', 'B')"
@@ -459,7 +459,7 @@ def test_association_registered_quantity_kind_bad_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="registered .quantity_type, unit. pair",
+        match="registered .quantity_kind, unit. pair",
     ):
         _insert_association(fresh_db, 1, units="bananas", quantity_kind="ActivePower")
 
@@ -468,7 +468,7 @@ def test_association_registered_quantity_kind_missing_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="registered .quantity_type, unit. pair",
+        match="registered .quantity_kind, unit. pair",
     ):
         _insert_association(fresh_db, 1, units=None, quantity_kind="ActivePower")
 
@@ -690,7 +690,7 @@ def test_transmission_line_r_text_rejected_under_strict(fresh_db):
 def test_transmission_line_discriminated_registry_rows(db):
     """r/x/b/g each carry two discriminated rows (COMPONENT_BASE + NATURAL_UNITS)."""
     rows = db.execute(
-        "SELECT column_name, discriminator_value, quantity_type, unit "
+        "SELECT column_name, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'transmission_lines' "
         "AND column_name IN ('r', 'x', 'b', 'g') "
         "AND discriminator_column = 'parameter_units' "
@@ -1016,7 +1016,7 @@ def test_completeness_all_physical_columns_registered_or_allowlisted(db):
     # Registry/metadata/view internals excluded from the physical-column scan.
     registry_internals = {
         "unit_conventions",
-        "quantity_types",
+        "quantity_kinds",
         "allowed_units",
         "unit_management_metadata",
         "sqlite_sequence",
@@ -1297,7 +1297,7 @@ def test_merged_hvdc_columns_registered(db):
     variant-specific fields live in attributes instead."""
     rows = dict(
         db.execute(
-            "SELECT column_name, quantity_type || '/' || unit FROM unit_conventions "
+            "SELECT column_name, quantity_kind || '/' || unit FROM unit_conventions "
             "WHERE table_name='two_terminal_hvdc_lines'"
         ).fetchall()
     )
@@ -1349,7 +1349,7 @@ def test_merged_hvdc_columns_registered(db):
         # Unit depends on a basis choice or a sibling control mode. A convention's
         # discriminator_column names a sibling *column*, which an attributes row
         # does not have, so these stay unregistered and each row carries its own
-        # unit/quantity_type (validated against allowed_units by the insert trigger).
+        # unit/quantity_kind (validated against allowed_units by the insert trigger).
         ("r", None),
         ("rectifier_rc", None),
         ("scheduled_dc_voltage", None),
@@ -1365,7 +1365,7 @@ def test_merged_hvdc_columns_registered(db):
 )
 def test_demoted_hvdc_attribute_conventions(db, name, expected):
     rows = db.execute(
-        "SELECT quantity_type || '/' || unit FROM unit_conventions "
+        "SELECT quantity_kind || '/' || unit FROM unit_conventions "
         "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
         (name,),
     ).fetchall()
@@ -1390,7 +1390,7 @@ def test_demoted_hvdc_attribute_conventions(db, name, expected):
 )
 def test_thermal_multistart_attribute_conventions(db, name, expected):
     rows = db.execute(
-        "SELECT quantity_type || '/' || unit FROM unit_conventions "
+        "SELECT quantity_kind || '/' || unit FROM unit_conventions "
         "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
         (name,),
     ).fetchall()
@@ -1429,7 +1429,7 @@ def test_interconnecting_converter_setpoints_two_discriminator(db):
     voltage-mode rows carry a second discriminator (parameter_units) so pu vs kV is
     also explicit."""
     rows = set(db.execute(
-        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_type, unit "
+        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name='interconnecting_converters' "
         "AND column_name IN ('dc_setpoint','ac_setpoint')"
     ).fetchall())
@@ -1502,19 +1502,19 @@ def _resolves_ref(conn, table, ref):
 def test_pu_conventions_have_resolvable_basis(db):
     """THE resolvability invariant. For every unit='pu' convention (excluding
     the two documented attributes exemptions): (a) a unit_basis_rules row
-    exists for its quantity_type, (b) it names at least one base ref, and (c)
+    exists for its quantity_kind, (b) it names at least one base ref, and (c)
     every base_power_ref/base_voltage_ref it declares resolves."""
     rows = db.execute(
-        "SELECT table_name, column_name, quantity_type, base_power_ref, base_voltage_ref "
+        "SELECT table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref "
         "FROM unit_conventions WHERE unit = 'pu'"
     ).fetchall()
     assert rows, "no pu conventions found -- fixture/schema regression"
 
-    rule_types = {r[0] for r in db.execute("SELECT quantity_type FROM unit_basis_rules")}
+    rule_types = {r[0] for r in db.execute("SELECT quantity_kind FROM unit_basis_rules")}
 
     exempt_seen = set()
     failures = []
-    for table_name, column_name, quantity_type, base_power_ref, base_voltage_ref in rows:
+    for table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref in rows:
         key = (table_name, column_name)
         if table_name == "attributes":
             exempt_seen.add(key)
@@ -1525,10 +1525,10 @@ def test_pu_conventions_have_resolvable_basis(db):
                 )
             continue
 
-        if quantity_type not in rule_types:
+        if quantity_kind not in rule_types:
             failures.append(
                 f"{table_name}.{column_name}: no unit_basis_rules row for "
-                f"quantity_type={quantity_type}"
+                f"quantity_kind={quantity_kind}"
             )
 
         if base_power_ref is None and base_voltage_ref is None:
@@ -1746,7 +1746,7 @@ def test_parameter_units_rejects_a_third_value(fresh_db, table):
 # admittance_units value, no per-unit option.
 def test_fixed_admittance_admittance_units_conventions(db):
     rows = db.execute(
-        "SELECT column_name, discriminator_column, discriminator_value, quantity_type, unit "
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'fixed_admittance' "
         "AND column_name IN ('y_g', 'y_b')"
     ).fetchall()
@@ -1775,7 +1775,7 @@ def test_fixed_admittance_rejects_non_shunt_basis(fresh_db, value):
 # arm per admittance_units value, across Y_increase/solved_admittance/admittance_limits.
 def test_switched_admittance_admittance_units_conventions(db):
     rows = db.execute(
-        "SELECT column_name, discriminator_column, discriminator_value, quantity_type, unit "
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'switched_admittance' "
         "AND column_name IN ('Y_increase', 'solved_admittance', 'admittance_limits')"
     ).fetchall()
@@ -1820,14 +1820,14 @@ def test_switched_admittance_step_fields_round_trip(fresh_db):
 def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(fresh_db):
     """The generic attributes unit-validation trigger, exercised with the exact
     y_b/y_g two-arm SHAPE (same discriminator_value, differing only by
-    quantity_type) rather than a generic stand-in: no attributes name in the
+    quantity_kind) rather than a generic stand-in: no attributes name in the
     real seed has two arms (y_b/y_g are physical columns, not attributes
     rows), so register a synthetic one with that exact shape and confirm both
     arms are accepted and a cross pair is rejected."""
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
         "INSERT INTO unit_conventions"
-        "(table_name, column_name, quantity_type, unit, "
+        "(table_name, column_name, quantity_kind, unit, "
         " discriminator_column, discriminator_value) "
         "VALUES ('attributes', 'shunt_susceptance_arm', 'Susceptance', 'S', 'mode', 'NATURAL'), "
         "       ('attributes', 'shunt_susceptance_arm', 'ReactivePower', 'MVAr', 'mode', 'NATURAL')"
@@ -1869,19 +1869,19 @@ def test_association_unit_system_round_trips_lowercase(fresh_db):
 def test_unit_basis_rules_update_blocked(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
         fresh_db.execute(
-            "UPDATE unit_basis_rules SET base_expression = 'bogus' WHERE quantity_type = 'Voltage'"
+            "UPDATE unit_basis_rules SET base_expression = 'bogus' WHERE quantity_kind = 'Voltage'"
         )
 
 
 def test_unit_basis_rules_delete_blocked(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
-        fresh_db.execute("DELETE FROM unit_basis_rules WHERE quantity_type = 'Voltage'")
+        fresh_db.execute("DELETE FROM unit_basis_rules WHERE quantity_kind = 'Voltage'")
 
 
 def test_unit_basis_rules_post_seal_insert_blocked(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
         fresh_db.execute(
-            "INSERT INTO unit_basis_rules(quantity_type, base_expression) "
+            "INSERT INTO unit_basis_rules(quantity_kind, base_expression) "
             "VALUES ('ActivePower', 'base_power')"
         )
 
@@ -1900,21 +1900,21 @@ def test_column_units_view_row_count_matches_unit_conventions(db):
     assert view_count == conv_count == EXPECTED_UNIT_CONVENTIONS
 
 
-def test_parameter_units_arms_share_quantity_type(db):
+def test_parameter_units_arms_share_quantity_kind(db):
     """For any column discriminated by parameter_units (whether as the primary
     discriminator_column, or as discriminator_column_2 on a column already
     multiplexed by a sibling like dc_control), the COMPONENT_BASE (pu) arm's
-    quantity_type must be one of the NATURAL_UNITS arm(s)' quantity_types.
+    quantity_kind must be one of the NATURAL_UNITS arm(s)' quantity_kinds.
 
-    Nothing else stops a pu arm's quantity_type from silently diverging from
+    Nothing else stops a pu arm's quantity_kind from silently diverging from
     its physical meaning (e.g.
     Resistance -> Voltage on transmission_lines.r), because (Voltage, pu) is
     independently a legal vocabulary pair -- changing ONLY the pu arm's
-    quantity_type, leaving its NATURAL_UNITS sibling as Resistance/ohm, is
+    quantity_kind, leaving its NATURAL_UNITS sibling as Resistance/ohm, is
     exactly the cross-arm mismatch this test catches, entirely from the DB
     (no hardcoded column-name list). A subset check (not equality) is
     deliberate: fixed_admittance/switched_admittance's y_b/y_g legitimately
-    carry TWO NATURAL_UNITS quantity_types for one COMPONENT_BASE quantity
+    carry TWO NATURAL_UNITS quantity_kinds for one COMPONENT_BASE quantity
     (the two-arm regression -- Susceptance/S AND ReactivePower/MVAr both
     represent the same COMPONENT_BASE Susceptance arm), which equality would
     wrongly flag.
@@ -1924,18 +1924,18 @@ def test_parameter_units_arms_share_quantity_type(db):
     discriminator at all (three_winding_transformers.r_12 and its pairwise
     siblings, two_winding_transformers.magnetizing_shunt.*) since there is no
     sibling arm to compare against. Closing that residual would need either a
-    maintained name->quantity_type map -- the brittle list this project wants
+    maintained name->quantity_kind map -- the brittle list this project wants
     to avoid -- or a schema-level dimensional annotation that does not exist
     today.
     """
     rows = db.execute(
         "SELECT table_name, column_name, discriminator_column, discriminator_value, "
-        "discriminator_column_2, discriminator_value_2, quantity_type "
+        "discriminator_column_2, discriminator_value_2, quantity_kind "
         "FROM unit_conventions "
         "WHERE discriminator_column = 'parameter_units' OR discriminator_column_2 = 'parameter_units'"
     ).fetchall()
     by_group = {}
-    for table_name, column_name, disc_col, disc_val, _disc_col2, disc_val2, quantity_type in rows:
+    for table_name, column_name, disc_col, disc_val, _disc_col2, disc_val2, quantity_kind in rows:
         if disc_col == "parameter_units":
             key, basis = (table_name, column_name), disc_val
         else:
@@ -1944,7 +1944,7 @@ def test_parameter_units_arms_share_quantity_type(db):
             # DC_POWER and DC_VOLTAGE are legitimately different quantities.
             key, basis = (table_name, column_name, disc_val), disc_val2
         by_group.setdefault(key, {"COMPONENT_BASE": set(), "NATURAL_UNITS": set()})
-        by_group[key][basis].add(quantity_type)
+        by_group[key][basis].add(quantity_kind)
 
     assert by_group, "no parameter_units-discriminated columns found -- fixture regression"
     mismatched = {
@@ -1953,7 +1953,7 @@ def test_parameter_units_arms_share_quantity_type(db):
         if bases["COMPONENT_BASE"] and bases["NATURAL_UNITS"]
         and not bases["COMPONENT_BASE"] <= bases["NATURAL_UNITS"]
     }
-    assert mismatched == {}, f"parameter_units arms disagree on quantity_type: {mismatched}"
+    assert mismatched == {}, f"parameter_units arms disagree on quantity_kind: {mismatched}"
 
 
 def test_association_array_shape_round_trips(fresh_db):

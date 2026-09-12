@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 17; -- bump on every schema or registry change
+PRAGMA user_version = 19; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -102,10 +102,15 @@ DROP TABLE IF EXISTS unit_conventions;
 
 DROP TABLE IF EXISTS unit_basis_rules;
 
-DROP TABLE IF EXISTS quantity_types;
+DROP TABLE IF EXISTS quantity_kinds;
 
 DROP TABLE IF EXISTS unit_management_metadata;
 
+-- PER-CONNECTION, AND NOT PERSISTED IN THE FILE. SQLite defaults this OFF on
+-- every new connection, so this line governs the build only: it does not travel
+-- with the database. Every consumer must issue `PRAGMA foreign_keys = ON` on
+-- each connection it opens, or all 86 foreign keys in this schema are inert.
+-- There is no file-level setting that changes this -- see README "Foreign keys".
 PRAGMA foreign_keys = ON;
 
 -- Populated automatically; do not insert or update rows directly.
@@ -611,7 +616,7 @@ CREATE TABLE attributes (
     name TEXT NOT NULL,
     value JSON NOT NULL,
     unit TEXT NULL,
-    quantity_type TEXT NULL REFERENCES quantity_types (name),
+    quantity_kind TEXT NULL REFERENCES quantity_kinds (name),
     json_type TEXT generated always AS (json_type(value)) virtual,
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE(entity_id, name)
@@ -628,6 +633,10 @@ CREATE TABLE attribute_identifiers (
     description TEXT NULL,
     PRIMARY KEY (TYPE, name)
 ) strict;
+
+-- Matches the LOWER(TYPE)/LOWER(name) predicate in the attributes unit triggers.
+CREATE INDEX ix_attribute_identifiers_lower
+    ON attribute_identifiers (LOWER(TYPE), LOWER(name));
 
 INSERT INTO
     attribute_identifiers (TYPE, name, description)
@@ -1172,27 +1181,27 @@ CREATE TABLE unit_management_metadata (
     description TEXT NULL
 ) strict;
 
-CREATE TABLE quantity_types (
+CREATE TABLE quantity_kinds (
     name TEXT PRIMARY KEY NOT NULL,
     default_unit TEXT NOT NULL,
     dimension TEXT NOT NULL,
     description TEXT NULL
 ) strict;
 
--- Vocabulary of valid (quantity_type, unit) pairs. Seeded from units.json and
+-- Vocabulary of valid (quantity_kind, unit) pairs. Seeded from units.json and
 -- sealed like the other registry tables; unit-string writes are validated
 -- against it.
 CREATE TABLE allowed_units (
-    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    quantity_kind TEXT NOT NULL REFERENCES quantity_kinds (name),
     unit TEXT NOT NULL,
-    PRIMARY KEY (quantity_type, unit)
+    PRIMARY KEY (quantity_kind, unit)
 ) strict;
 
 CREATE TABLE unit_conventions (
     id INTEGER PRIMARY KEY,
     table_name TEXT NOT NULL,
     column_name TEXT NOT NULL,
-    quantity_type TEXT NOT NULL REFERENCES quantity_types (name),
+    quantity_kind TEXT NOT NULL REFERENCES quantity_kinds (name),
     unit TEXT NOT NULL,
     -- Polymorphic units: when a column's unit depends on a sibling column's
     -- value (e.g. hydro_reservoirs.level_data_type), one row is registered
@@ -1210,24 +1219,31 @@ CREATE TABLE unit_conventions (
     base_power_ref TEXT NULL,
     base_voltage_ref TEXT NULL,
     description TEXT NULL,
-    -- Distinct units per discriminator value (and quantity_type, for columns
+    -- Distinct units per discriminator value (and quantity_kind, for columns
     -- like admittance whose NATURAL_UNITS value is disambiguated by quantity)
     -- for a polymorphic column.
-    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2, quantity_type)
+    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2, quantity_kind)
 ) strict;
 
 -- For non-polymorphic columns (no discriminator) enforce one row per column.
 -- A table-level UNIQUE can't do this because SQLite treats each NULL
 -- discriminator_value as distinct, so guard those rows with a partial index.
 CREATE UNIQUE INDEX uq_unit_conventions_no_discriminator
-    ON unit_conventions (table_name, column_name, quantity_type)
+    ON unit_conventions (table_name, column_name, quantity_kind)
     WHERE discriminator_value IS NULL;
+
+-- The attributes unit triggers match on LOWER(column_name) / LOWER(TYPE),
+-- which the plain UNIQUE constraints above cannot serve -- without these the
+-- lookup degrades to a scan of every 'attributes' convention on every
+-- attributes insert, the highest-volume write path in the schema.
+CREATE INDEX ix_unit_conventions_table_lower_column
+    ON unit_conventions (table_name, LOWER(column_name));
 
 -- Per-quantity-type pu resolution rule: how to divide a COMPONENT_BASE value
 -- down to a physical quantity, in terms of base_power/base_voltage (or a
 -- unit_conventions base_power_ref/base_voltage_ref override).
 CREATE TABLE unit_basis_rules (
-    quantity_type TEXT PRIMARY KEY REFERENCES quantity_types (name),
+    quantity_kind TEXT PRIMARY KEY REFERENCES quantity_kinds (name),
     base_expression TEXT NOT NULL,
     description TEXT NULL
 ) strict;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify a built database's unit registry against its stored seal.
 
-Recomputes the canonical sha256 from the LIVE contents of quantity_types,
+Recomputes the canonical sha256 from the LIVE contents of quantity_kinds,
 allowed_units, unit_conventions and unit_basis_rules, and compares it to the
 stored unit_management_metadata.unit_conventions_checksum row. Builds the
 canonical representation via _common.repr_from_rows, the same helper
@@ -23,7 +23,7 @@ def fetch_repr(conn):
     cur = conn.cursor()
 
     cur.execute(
-        "SELECT name, default_unit, dimension, description FROM quantity_types"
+        "SELECT name, default_unit, dimension, description FROM quantity_kinds"
     )
     qt_rows = (
         (
@@ -35,11 +35,11 @@ def fetch_repr(conn):
         for row in cur.fetchall()
     )
 
-    cur.execute("SELECT quantity_type, unit FROM allowed_units")
+    cur.execute("SELECT quantity_kind, unit FROM allowed_units")
     au_rows = ((row[0], row[1]) for row in cur.fetchall())
 
     cur.execute(
-        "SELECT table_name, column_name, quantity_type, unit, "
+        "SELECT table_name, column_name, quantity_kind, unit, "
         "discriminator_column, discriminator_value, "
         "discriminator_column_2, discriminator_value_2, "
         "base_power_ref, base_voltage_ref, description "
@@ -63,7 +63,7 @@ def fetch_repr(conn):
     )
 
     cur.execute(
-        "SELECT quantity_type, base_expression, description FROM unit_basis_rules"
+        "SELECT quantity_kind, base_expression, description FROM unit_basis_rules"
     )
     ub_rows = (
         (
