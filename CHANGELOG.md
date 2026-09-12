@@ -8,7 +8,11 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [0.1.0] - 2026-09-11
 
-First release. `PRAGMA user_version = 19`.
+First release. `PRAGMA user_version = 1`.
+
+The schema version restarts at 1 for the first public release; the 14-19 ladder that
+ran through the development stack was internal history and carries no meaning for a
+consumer. Every later schema or registry change bumps it from here.
 
 ### Schema
 

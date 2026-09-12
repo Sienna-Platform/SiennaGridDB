@@ -17,11 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # TODO after the SiennaSchemas 0.1 release: pin the release tarball instead of main.
+      # Pinned to the SiennaSchemas release this schema was generated against.
+      # Bump deliberately, together with a registry regeneration -- tracking main
+      # would let an upstream vocabulary change break CI on an unrelated PR.
       - name: Checkout SiennaSchemas
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/SiennaSchemas
+          ref: v0.1.0
           path: SiennaSchemas
 
       # TODO after psy6 merges to PowerSystems main: drop `ref`.
