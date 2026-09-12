@@ -1453,6 +1453,50 @@ SELECT
 
 END;
 
+-- unit_basis_rules (registry-linked): UPDATE and DELETE are blocked
+-- unconditionally; INSERT is blocked only after the registry is sealed.
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_update BEFORE
+UPDATE
+    ON unit_basis_rules
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_delete BEFORE DELETE ON unit_basis_rules
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_insert BEFORE
+INSERT
+    ON unit_basis_rules
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            unit_management_metadata
+        WHERE
+            KEY = 'unit_conventions_checksum'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
 -- =============================================================================
 -- Time Series Metadata Unit Validation Triggers
 -- Each row's (quantity_type, unit) pair must be a registered entry in allowed_units.
