@@ -18,33 +18,12 @@ Validation: every (quantity_type, unit) pair used in column_conventions.json
 must exist in units.json allowed_units. If any do not, the generator exits with
 a non-zero status and lists the offenders -- it never invents vocabulary.
 
---------------------------------------------------------------------------------
-CANONICAL CHECKSUM REPRESENTATION (must match verify_unit_registry.py exactly)
---------------------------------------------------------------------------------
-The seal row `unit_management_metadata.unit_conventions_checksum` stores the
-sha256 hex digest of a canonical byte representation built from the LIVE content
-of three tables: quantity_types, allowed_units, unit_conventions.
-
-Field / row / table separators (ASCII control chars, chosen so they cannot
-appear in any legitimate field value):
-    US  = '\x1f'  (unit separator)  -- between fields within a row
-    RS  = '\x1e'  (record separator) -- between rows within a table
-    GS  = '\x1d'  (group separator)  -- between the three table blocks
-
-Per-table row field order (NULLs rendered as the empty string):
-    quantity_types    : name, default_unit, dimension, description
-                        (dimension is the canonical compact JSON of the exponent
-                         map: json.dumps(map, sort_keys=True, separators=(",",":")))
-    allowed_units     : quantity_type, unit
-    unit_conventions  : table_name, column_name, quantity_type, unit,
-                        discriminator_column, discriminator_value,
-                        discriminator_column_2, discriminator_value_2, description
-
-Rows within each table are sorted (ascending, Python default string sort) by the
-tuple of their fields in the order listed above. Field values are joined with US,
-rows joined with RS. The three table blocks (quantity_types, allowed_units,
-unit_conventions -- in that fixed order) are joined with GS. The result is
-UTF-8 encoded and hashed with hashlib.sha256; the hex digest is the seal.
+The seal row (unit_management_metadata.unit_conventions_checksum) is a sha256
+over a canonical byte representation of quantity_types, allowed_units and
+unit_conventions; verify_unit_registry.py recomputes it from a live database
+and must match. See _common.py's module docstring for the exact representation
+(separators, field order, sort order) -- both this generator and the verifier
+build it via _common.repr_from_rows so it cannot drift between them.
 """
 
 import argparse

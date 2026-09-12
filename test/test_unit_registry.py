@@ -1,4 +1,4 @@
-"""Unit-registry test suite (UIP section 6.1).
+"""Unit-registry test suite.
 
 Covers, positively and negatively: the build (row counts, FK integrity, seal
 presence, verify tool), seal honesty (tamper detection incl. quantity_types),
@@ -21,19 +21,9 @@ import pytest
 from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
-# Temperature (degC) removed: unused by any schema component.
-EXPECTED_QUANTITY_TYPES = 38
-# +1 MJ for ElectricalEnergy (RealEnergy rename), +1 Mt/MWh for EmissionRate (carbon caps),
-# -1 Temperature/degC (unused, removed)
-EXPECTED_ALLOWED_UNITS = 55
-# +3 for discrete_controlled_ac_branches.{r,x,rating}
-# +49 for the transformer tables: transformer_circuits (36: tap, alpha, r, x,
-# 12 control_limits + 12 controlled_quantity_limits discriminated by
-# control_objective, ratings, flows, base power/voltages),
-# three_winding_transformers (11: pairwise r/x, pairwise base powers,
-# magnetizing_shunt.real/.imag), two_winding_transformers (2:
-# magnetizing_shunt.real/.imag)
-EXPECTED_UNIT_CONVENTIONS = 276
+EXPECTED_QUANTITY_TYPES = 41
+EXPECTED_ALLOWED_UNITS = 66
+EXPECTED_UNIT_CONVENTIONS = 405
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -65,9 +55,7 @@ COMPLETENESS_ALLOWLIST = {
 }
 
 
-# --------------------------------------------------------------------------- #
 # Helpers
-# --------------------------------------------------------------------------- #
 def insert_attribute(conn, entity_id, name, value, unit=None, quantity_type=None):
     conn.execute(
         "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_type) "
@@ -93,9 +81,7 @@ def run_verify(db_path):
     )
 
 
-# --------------------------------------------------------------------------- #
 # Build
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     "table, expected",
     [
@@ -133,11 +119,8 @@ def test_verify_tool_passes_on_clean_db(built_db_path):
     assert "MATCH" in result.stdout
 
 
-# --------------------------------------------------------------------------- #
 # Seal honesty (tamper detection)
-# --------------------------------------------------------------------------- #
 def test_verify_detects_quantity_types_tamper(fresh_db, fresh_db_path):
-    """quantity_types tampering is the blind spot the old checksum flunked."""
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
         "UPDATE quantity_types SET default_unit = 'bogus' WHERE name = 'ActivePower'"
@@ -184,34 +167,32 @@ def test_verify_fails_when_seal_row_missing(fresh_db, fresh_db_path):
     assert "unsealed" in result.stderr
 
 
-# --------------------------------------------------------------------------- #
 # Seal enforcement (protected registry tables)
-# --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("table", SEALED_TABLES)
 def test_seal_blocks_delete(fresh_db, table):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(f"DELETE FROM {table}")
 
 
 def test_seal_blocks_update_quantity_types(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "UPDATE quantity_types SET default_unit = 'x' WHERE name = 'ActivePower'"
         )
 
 
 def test_seal_blocks_update_allowed_units(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute("UPDATE allowed_units SET unit = 'x' WHERE unit = 'MW'")
 
 
 def test_seal_blocks_update_unit_conventions(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute("UPDATE unit_conventions SET unit = 'x' WHERE id = 1")
 
 
 def test_seal_blocks_update_metadata(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "UPDATE unit_management_metadata SET value = 'x' "
             "WHERE key = 'unit_conventions_checksum'"
@@ -219,7 +200,7 @@ def test_seal_blocks_update_metadata(fresh_db):
 
 
 def test_seal_blocks_insert_quantity_types(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO quantity_types(name, default_unit, dimension) "
             "VALUES ('Bogus', 'x', 'x')"
@@ -227,14 +208,14 @@ def test_seal_blocks_insert_quantity_types(fresh_db):
 
 
 def test_seal_blocks_insert_allowed_units(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO allowed_units(quantity_type, unit) VALUES ('ActivePower', 'GW')"
         )
 
 
 def test_seal_blocks_insert_unit_conventions(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO unit_conventions(table_name, column_name, quantity_type, unit) "
             "VALUES ('loads', 'bogus', 'ActivePower', 'MW')"
@@ -242,15 +223,14 @@ def test_seal_blocks_insert_unit_conventions(fresh_db):
 
 
 def test_seal_blocks_insert_metadata(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO unit_management_metadata(key, value) VALUES ('k', 'v')"
         )
 
 
 def test_seal_blocks_insert_or_replace_metadata(fresh_db):
-    """INSERT OR REPLACE on the seal key must not slip past the guard."""
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT OR REPLACE INTO unit_management_metadata(key, value) "
             "VALUES ('unit_conventions_checksum', 'forged')"
@@ -258,7 +238,7 @@ def test_seal_blocks_insert_or_replace_metadata(fresh_db):
 
 
 def test_seal_blocks_insert_or_replace_quantity_types(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT OR REPLACE INTO quantity_types(name, default_unit, dimension) "
             "VALUES ('ActivePower', 'x', 'x')"
@@ -275,7 +255,7 @@ def test_registry_rerun_is_noop_failure_not_corruption(fresh_db, fresh_db_path):
 
     conn = sqlite3.connect(str(fresh_db_path))
     conn.execute("PRAGMA foreign_keys = ON")
-    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         conn.executescript(REGISTRY_SQL.read_text())
     # BEFORE trigger aborts on first INSERT; counts stay stable without rollback
     after = {
@@ -286,13 +266,11 @@ def test_registry_rerun_is_noop_failure_not_corruption(fresh_db, fresh_db_path):
     assert after == before
 
 
-# --------------------------------------------------------------------------- #
 # Attributes
-# --------------------------------------------------------------------------- #
 def test_attribute_known_name_wrong_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
-        sqlite3.IntegrityError, match="Known attribute must use the registered unit"
+        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(fresh_db, 1, "ramp_limits", "1.0", "MW", "ActivePower")
 
@@ -382,7 +360,7 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
     # A cross pair (valid vocabulary Duration/s, but not registered for this name).
     make_entity(fresh_db, 3)
     with pytest.raises(
-        sqlite3.IntegrityError, match="Known attribute must use the registered unit"
+        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(fresh_db, 3, "poly_attr", "3.0", "s", "Duration")
 
@@ -519,7 +497,6 @@ def test_association_units_non_null_no_metadata_accepted(fresh_db):
 
 # --------------------------------------------------------------------------- #
 # Hydro level_data_type CHECK
-# --------------------------------------------------------------------------- #
 HYDRO_ENUM_VALUES = ["USABLE_VOLUME", "TOTAL_VOLUME", "HEAD", "ENERGY"]
 
 
@@ -549,9 +526,7 @@ def test_hydro_level_data_type_volume_rejected(fresh_db):
         _insert_reservoir(fresh_db, eid, "VOLUME")
 
 
-# --------------------------------------------------------------------------- #
 # Transmission-line parameter_units discriminator + STRICT
-# --------------------------------------------------------------------------- #
 def _insert_line(conn, entity_id, r=0.1, x=0.2, parameter_units=None):
     # transmission_lines.arc_id (NOT NULL) -> arcs -> entities; provision an
     # arc with two distinct endpoint entities so the FK/NOT NULL are satisfied.
@@ -569,8 +544,8 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, parameter_units=None):
         "INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)",
         (arc_eid, from_eid, to_eid),
     )
-    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x"]
-    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x]
+    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x", "power_units", "base_power"]
+    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x, "COMPONENT_BASE", 100.0]
     if parameter_units is not None:
         cols.append("parameter_units")
         vals.append(parameter_units)
@@ -581,16 +556,16 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, parameter_units=None):
     )
 
 
-def test_transmission_line_parameter_units_default_system_base(fresh_db):
+def test_transmission_line_parameter_units_default_component_base(fresh_db):
     eid = make_entity(fresh_db, 1, entity_table="transmission_lines")
     _insert_line(fresh_db, eid)
-    (pu,) = fresh_db.execute(
+    (basis,) = fresh_db.execute(
         "SELECT parameter_units FROM transmission_lines WHERE id = ?", (eid,)
     ).fetchone()
-    assert pu == "SYSTEM_BASE"
+    assert basis == "COMPONENT_BASE"
 
 
-@pytest.mark.parametrize("parameter_units", ["SYSTEM_BASE", "NATURAL_UNITS"])
+@pytest.mark.parametrize("parameter_units", ["COMPONENT_BASE", "NATURAL_UNITS"])
 def test_transmission_line_parameter_units_valid_accepted(fresh_db, parameter_units):
     eid = make_entity(fresh_db, 1, entity_table="transmission_lines")
     _insert_line(fresh_db, eid, parameter_units=parameter_units)
@@ -607,14 +582,13 @@ def test_transmission_line_parameter_units_bad_value_rejected(fresh_db):
 
 
 def test_transmission_line_r_text_rejected_under_strict(fresh_db):
-    """STRICT is restored: a TEXT value in the REAL column r is a datatype mismatch."""
     eid = make_entity(fresh_db, 1, entity_table="transmission_lines")
     with pytest.raises(sqlite3.IntegrityError, match="REAL column"):
         _insert_line(fresh_db, eid, r="not_a_number")
 
 
 def test_transmission_line_discriminated_registry_rows(db):
-    """r/x/b/g each carry two discriminated rows (SYSTEM_BASE + NATURAL_UNITS)."""
+    """r/x/b/g each carry two discriminated rows (COMPONENT_BASE + NATURAL_UNITS)."""
     rows = db.execute(
         "SELECT column_name, discriminator_value, quantity_type, unit "
         "FROM unit_conventions WHERE table_name = 'transmission_lines' "
@@ -623,27 +597,34 @@ def test_transmission_line_discriminated_registry_rows(db):
         "ORDER BY column_name, discriminator_value"
     ).fetchall()
     expected = [
+        ("b", "COMPONENT_BASE", "Susceptance", "pu"),
         ("b", "NATURAL_UNITS", "Susceptance", "S"),
-        ("b", "SYSTEM_BASE", "Susceptance", "pu"),
+        ("g", "COMPONENT_BASE", "Conductance", "pu"),
         ("g", "NATURAL_UNITS", "Conductance", "S"),
-        ("g", "SYSTEM_BASE", "Conductance", "pu"),
+        ("r", "COMPONENT_BASE", "Resistance", "pu"),
         ("r", "NATURAL_UNITS", "Resistance", "ohm"),
-        ("r", "SYSTEM_BASE", "Resistance", "pu"),
+        ("x", "COMPONENT_BASE", "Reactance", "pu"),
         ("x", "NATURAL_UNITS", "Reactance", "ohm"),
-        ("x", "SYSTEM_BASE", "Reactance", "pu"),
     ]
     assert [tuple(r) for r in rows] == expected
 
 
-# --------------------------------------------------------------------------- #
 # Cost payloads
-# --------------------------------------------------------------------------- #
-def _thermal_cost(power_units):
+def _thermal_production_cost(power_units):
+    """The production curve payload written through
+    operation_cost.variable_operation_cost; production_cost is a GENERATED
+    column derived from it, so this is never written directly."""
     return (
-        '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,'
-        '"variable":{"variable_cost_type":"COST","power_units":"' + power_units + '",'
+        '{"variable_cost_type":"COST","power_units":"' + power_units + '",'
         '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
-        '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}}'
+        '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}'
+    )
+
+
+def _thermal_operation_cost(variable_operation_cost):
+    return (
+        '{"cost_type":"THERMAL","fixed":0,"start_up":0,"shut_down":0,'
+        '"variable_operation_cost":' + variable_operation_cost + '}'
     )
 
 
@@ -654,60 +635,70 @@ def _setup_topology(conn, topo_id=1):
     return topo_id
 
 
-def _insert_thermal(conn, gen_id, topo_id, operation_cost):
+def _insert_thermal(conn, gen_id, topo_id, production_cost):
     conn.execute("INSERT INTO prime_mover_types(name) VALUES ('CT')")
     conn.execute("INSERT INTO fuels(name) VALUES ('OTHER')")
     make_entity(conn, gen_id, entity_table="thermal_generators")
     conn.execute(
         "INSERT INTO thermal_generators("
         "id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, "
-        "active_power_limits, operation_cost) "
-        "VALUES (?, 'tg', 'CT', 'OTHER', ?, 1.0, 1.0, '{\"min\":0,\"max\":1}', ?)",
-        (gen_id, topo_id, operation_cost),
+        "power_units, active_power_limits, status, operation_cost) "
+        "VALUES (?, 'tg', 'CT', 'OTHER', ?, 1.0, 1.0, 'COMPONENT_BASE', "
+        "'{\"min\":0,\"max\":1}', 'OFFLINE', ?)",
+        (gen_id, topo_id, _thermal_operation_cost(production_cost)),
     )
 
 
-@pytest.mark.parametrize("power_units", ["SYSTEM_BASE", "DEVICE_BASE"])
+@pytest.mark.parametrize("power_units", ["COMPONENT_BASE", "BOGUS_UNITS"])
 def test_cost_relative_base_variable_rejected(fresh_db, power_units):
     topo = _setup_topology(fresh_db)
     with pytest.raises(
         sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
     ):
-        _insert_thermal(fresh_db, 2, topo, _thermal_cost(power_units))
+        _insert_thermal(fresh_db, 2, topo, _thermal_production_cost(power_units))
 
 
 def test_cost_natural_units_variable_accepted(fresh_db):
     topo = _setup_topology(fresh_db)
-    _insert_thermal(fresh_db, 2, topo, _thermal_cost("NATURAL_UNITS"))
-    (count,) = fresh_db.execute(
-        "SELECT COUNT(*) FROM thermal_generators"
-    ).fetchone()
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
+    (count,) = fresh_db.execute("SELECT COUNT(*) FROM thermal_generators").fetchone()
     assert count == 1
 
 
 def test_cost_update_relative_base_rejected(fresh_db):
-    """UPDATE that changes operation_cost to a relative-base payload is rejected."""
+    """UPDATE that changes operation_cost's variable_operation_cost to a
+    relative-base payload is rejected; production_cost derives from it."""
     topo = _setup_topology(fresh_db)
-    _insert_thermal(fresh_db, 2, topo, _thermal_cost("NATURAL_UNITS"))
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
     with pytest.raises(
         sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
     ):
         fresh_db.execute(
             "UPDATE thermal_generators SET operation_cost = ? WHERE id = 2",
-            (_thermal_cost("SYSTEM_BASE"),),
+            (_thermal_operation_cost(_thermal_production_cost("COMPONENT_BASE")),),
         )
 
 
-def test_renewable_curtailment_cost_system_base_rejected(fresh_db):
+def test_production_cost_generated_column_rejects_direct_update(fresh_db):
+    """production_cost is GENERATED ALWAYS AS; SQLite itself refuses a direct
+    UPDATE, independent of any CHECK."""
+    topo = _setup_topology(fresh_db)
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
+    with pytest.raises(sqlite3.OperationalError, match="generated column"):
+        fresh_db.execute(
+            "UPDATE thermal_generators SET production_cost = ? WHERE id = 2",
+            (_thermal_production_cost("NATURAL_UNITS"),),
+        )
+
+
+def test_renewable_curtailment_cost_relative_base_rejected(fresh_db):
+    """curtailment_cost stays inside operation_cost, so it keeps its own guard."""
     topo = _setup_topology(fresh_db)
     make_entity(fresh_db, 2, entity_table="renewable_generators")
     fresh_db.execute("INSERT INTO prime_mover_types(name) VALUES ('PV')")
     curtailment_cost = (
         '{"cost_type":"RENEWABLE","fixed":0,'
-        '"variable":{"variable_cost_type":"COST","power_units":"NATURAL_UNITS",'
-        '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
-        '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}},'
-        '"curtailment_cost":{"variable_cost_type":"COST","power_units":"SYSTEM_BASE",'
+        '"curtailment_cost":{"variable_cost_type":"COST","power_units":"COMPONENT_BASE",'
         '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
         '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}}'
     )
@@ -745,10 +736,10 @@ def _insert_storage_unit(conn, unit_id, topo_id, operation_cost):
     conn.execute(
         "INSERT INTO storage_units("
         "id, name, prime_mover_type, storage_technology_type, balancing_topology, "
-        "rating, base_power, storage_capacity, storage_level_limits, "
+        "rating, base_power, power_units, storage_capacity, storage_level_limits, "
         "initial_storage_capacity_level, input_active_power_limits, "
         "output_active_power_limits, efficiency, operation_cost) "
-        "VALUES (?, 'su', 'BA', 'LI', ?, 1.0, 1.0, 1.0, "
+        "VALUES (?, 'su', 'BA', 'LI', ?, 1.0, 1.0, 'COMPONENT_BASE', 1.0, "
         "'{\"min\":0,\"max\":1}', 0.0, '{\"min\":0,\"max\":1}', "
         "'{\"min\":0,\"max\":1}', '{\"in\":0.9,\"out\":0.9}', ?)",
         (unit_id, topo_id, operation_cost),
@@ -770,14 +761,14 @@ def _insert_storage_technology(conn, tech_id, operation_costs):
 @pytest.mark.parametrize(
     "operation_cost",
     [
-        _storage_cost(charge_pu="SYSTEM_BASE"),
-        _storage_cost(discharge_pu="DEVICE_BASE"),
+        _storage_cost(charge_pu="COMPONENT_BASE"),
+        _storage_cost(discharge_pu="COMPONENT_BASE"),
     ],
 )
 def test_storage_unit_relative_base_cost_rejected(fresh_db, operation_cost):
-    """[2] StorageCost with a relative base on EITHER charge or discharge variable
-    cost must be rejected. The old guard probed $.variable.power_units, a key that
-    does not exist on StorageCost, so it was DEAD (never fired)."""
+    """A relative base (COMPONENT_BASE) on either charge_pu or discharge_pu must
+    be rejected. The trigger must check both keys directly -- StorageCost's JSON
+    has no top-level `variable` key to probe generically."""
     topo = _setup_topology(fresh_db)
     with pytest.raises(
         sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
@@ -797,12 +788,11 @@ def test_storage_unit_natural_units_cost_accepted(fresh_db):
 @pytest.mark.parametrize(
     "operation_costs",
     [
-        _storage_cost(charge_pu="SYSTEM_BASE"),
-        _storage_cost(discharge_pu="DEVICE_BASE"),
+        _storage_cost(charge_pu="COMPONENT_BASE"),
+        _storage_cost(discharge_pu="COMPONENT_BASE"),
     ],
 )
 def test_storage_technology_relative_base_cost_rejected(fresh_db, operation_costs):
-    """[2] storage_technologies.operation_costs StorageCost guard (charge/discharge)."""
     with pytest.raises(
         sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
     ):
@@ -848,11 +838,12 @@ def test_every_cost_bearing_table_has_both_cost_unit_triggers(db):
     assert missing == [], f"cost-bearing tables missing guard triggers: {missing}"
 
 
-# --------------------------------------------------------------------------- #
 # Completeness
-# --------------------------------------------------------------------------- #
 def _table_columns(conn, table):
-    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    """table_xinfo, not table_info: table_info hides GENERATED columns (e.g.
+    thermal_generators.production_cost), which are still real, registered
+    columns here."""
+    return {row[1] for row in conn.execute(f"PRAGMA table_xinfo({table})").fetchall()}
 
 
 def test_completeness_registered_columns_exist(db):
@@ -866,7 +857,7 @@ def test_completeness_registered_columns_exist(db):
         "SELECT table_name, column_name, discriminator_column FROM unit_conventions"
     ).fetchall()
     missing = []
-    for table_name, column_name, discriminator in rows:
+    for table_name, column_name, _ in rows:
         if table_name == "attributes":
             continue
         base_column = column_name.split(".")[0]
@@ -923,7 +914,7 @@ def test_completeness_all_physical_columns_registered_or_allowlisted(db):
     registered columns still participate in the check.
     """
     # Registry/metadata/view internals excluded from the physical-column scan.
-    REGISTRY_INTERNALS = {
+    registry_internals = {
         "unit_conventions",
         "quantity_types",
         "allowed_units",
@@ -936,7 +927,7 @@ def test_completeness_all_physical_columns_registered_or_allowlisted(db):
         for row in db.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         ).fetchall()
-        if row[0] not in REGISTRY_INTERNALS
+        if row[0] not in registry_internals
     ]
 
     registered = {}
@@ -962,9 +953,7 @@ def test_completeness_all_physical_columns_registered_or_allowlisted(db):
     )
 
 
-# --------------------------------------------------------------------------- #
 # EmissionsData supplemental-attribute payload guard
-# --------------------------------------------------------------------------- #
 EMISSIONS_OK = (
     '{"name": "co2_rate", "pollutant": "CO2", "basis": "FUEL_INPUT",'
     ' "energy_unit": "MMBTU", "mass_unit": "KG", "start_up_adder": 0.0,'
@@ -1057,9 +1046,10 @@ def test_emissions_optional_fields_absent_pass(fresh_db):
 
 
 def test_emissions_power_output_missing_energy_unit_rejected(fresh_db):
-    """[4] regression: basis=POWER_OUTPUT with energy_unit OMITTED must be
-    rejected. Previously the ``energy_unit <> 'MWH'`` term evaluated to NULL
-    (not TRUE) when energy_unit was absent, silently passing the insert."""
+    """basis=POWER_OUTPUT with energy_unit OMITTED must be rejected. SQL's
+    ``energy_unit <> 'MWH'`` evaluates to NULL, not TRUE, when energy_unit is
+    NULL, so the trigger must check IS NULL too or a missing value silently
+    passes."""
     make_supplemental_entity(fresh_db, 1)
     bad = (
         '{"name": "co2_rate", "pollutant": "CO2", "basis": "POWER_OUTPUT",'
@@ -1109,21 +1099,19 @@ def test_other_supplemental_types_unaffected(fresh_db):
     )
 
 
-# --------------------------------------------------------------------------- #
 # EmissionsData enum drift gate: the trigger hardcodes the pollutant / mass_unit
 # / energy_unit / basis enum members copied from EmissionsData.json's
 # properties (each a $ref into Core/common.json definitions). If someone edits
 # one of these enums in the schemas without updating the trigger, this test
 # FAILS. It does not change the trigger's values; it locks them to the schema
 # source of truth.
-# --------------------------------------------------------------------------- #
 import posixpath  # noqa: E402
 import re  # noqa: E402
 
 # EmissionsData.json property names carrying an enum the trigger probes.
 _EMISSIONS_ENUM_FIELDS = ["pollutant", "mass_unit", "energy_unit", "basis"]
 
-EMISSIONS_DATA_REL = "Operations/SupplementalAttributes/EmissionsData.json"
+EMISSIONS_DATA_REL = "Core/SupplementalAttributes/EmissionsData.json"
 
 
 def _schema_enum(prop, current_rel_file=EMISSIONS_DATA_REL):
@@ -1161,7 +1149,7 @@ def _extract_trigger_in_lists(trigger_sql):
 def test_emissions_enum_lists_match_schema(db, action):
     """DRIFT GATE: the hardcoded enum members in the EmissionsData guard trigger
     must exactly equal the enum arrays reachable from
-    SiennaSchemas/Operations/SupplementalAttributes/EmissionsData.json's
+    SiennaSchemas/Core/SupplementalAttributes/EmissionsData.json's
     properties (via their Core/common.json $refs). Editing an enum there
     without updating the trigger (or vice versa) fails here."""
     properties = load_schemas_json(EMISSIONS_DATA_REL)["properties"]
@@ -1180,25 +1168,20 @@ def test_emissions_enum_lists_match_schema(db, action):
         )
 
 
-# --------------------------------------------------------------------------- #
-# Flexible unit-basis columns (PSS/E-sourced fields, UIP Phase 2)
-# --------------------------------------------------------------------------- #
+# Flexible unit-basis columns
 def test_flexible_basis_columns_registered(db):
-    """Every discriminated PSS/E-sourced column added in Phase 2 has exactly the
-    expected set of basis rows in unit_conventions -- no missing or extra basis."""
+    """Every discriminated externally-sourced column has exactly the
+    expected set of parameter_units discriminator values in unit_conventions -- no missing
+    or extra basis. This only checks the DISTINCT discriminator_value set (two values,
+    COMPONENT_BASE/NATURAL_UNITS, everywhere)."""
     expected = {
-        ("fixed_admittance", "y_b"): {"SYSTEM_BASE", "NATURAL_UNITS", "DEVICE_MVAR"},
-        ("fixed_admittance", "y_g"): {"SYSTEM_BASE", "NATURAL_UNITS", "DEVICE_MVAR"},
-        ("sources", "r_th"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("sources", "x_th"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("two_terminal_lcc_lines", "r"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("two_terminal_lcc_lines", "scheduled_dc_voltage"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("two_terminal_lcc_lines", "switch_mode_voltage"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("two_terminal_lcc_lines", "min_compounding_voltage"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("two_terminal_vsc_lines", "g"): {"SYSTEM_BASE", "NATURAL_UNITS", "DEVICE_MVAR"},
-        ("two_terminal_vsc_lines", "voltage_limits_from"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("two_terminal_vsc_lines", "voltage_limits_to"): {"SYSTEM_BASE", "NATURAL_UNITS"},
-        ("facts_control_devices", "voltage_setpoint"): {"SYSTEM_BASE", "NATURAL_UNITS"},
+        ("sources", "r_th"): {"COMPONENT_BASE", "NATURAL_UNITS"},
+        ("sources", "x_th"): {"COMPONENT_BASE", "NATURAL_UNITS"},
+        ("facts_control_devices", "voltage_setpoint"): {"COMPONENT_BASE", "NATURAL_UNITS"},
+        # Transformer circuits mirror transmission_lines: pu on the component base
+        # or natural-units ohm, per the row's parameter_units.
+        ("transformer_circuits", "r"): {"COMPONENT_BASE", "NATURAL_UNITS"},
+        ("transformer_circuits", "x"): {"COMPONENT_BASE", "NATURAL_UNITS"},
     }
     for (table, col), bases in expected.items():
         rows = db.execute(
@@ -1209,32 +1192,440 @@ def test_flexible_basis_columns_registered(db):
         assert got == bases, f"{table}.{col}: {got} != {bases}"
 
 
-def test_vsc_setpoints_two_discriminator(db):
-    """VSC dc_setpoint_from/ac_setpoint_from are mode-multiplexed by
-    dc_control_from/ac_control_from; their voltage-mode rows carry a second
-    discriminator (voltage_units) so pu vs kV is also explicit."""
-    rows = set(db.execute(
-        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_type, unit "
-        "FROM unit_conventions WHERE table_name='two_terminal_vsc_lines' "
-        "AND column_name IN ('dc_setpoint_from','ac_setpoint_from')"
-    ).fetchall())
-    assert ('dc_setpoint_from','DC_POWER',None,'ActivePower','MW') in rows
-    assert ('dc_setpoint_from','DC_VOLTAGE','SYSTEM_BASE','Voltage','pu') in rows
-    assert ('dc_setpoint_from','DC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
-    assert ('ac_setpoint_from','AC_VOLTAGE','SYSTEM_BASE','Voltage','pu') in rows
-    assert ('ac_setpoint_from','AC_REACTIVE_POWER',None,'PowerFactor','1') in rows
+def test_merged_hvdc_columns_registered(db):
+    """The consolidated two_terminal_hvdc_lines registers its own columns; the
+    variant-specific fields live in attributes instead."""
+    rows = dict(
+        db.execute(
+            "SELECT column_name, quantity_type || '/' || unit FROM unit_conventions "
+            "WHERE table_name='two_terminal_hvdc_lines'"
+        ).fetchall()
+    )
+    assert rows == {
+        "active_power_flow": "ActivePower/MW",
+        "active_power_limits_from": "ActivePower/MW",
+        "active_power_limits_to": "ActivePower/MW",
+        "base_power": "ApparentPower/MVA",
+        "reactive_power_limits_from": "ReactivePower/MVAr",
+        "reactive_power_limits_to": "ReactivePower/MVAr",
+    }
+    for gone in ("two_terminal_lcc_lines", "two_terminal_vsc_lines"):
+        assert not db.execute(
+            "SELECT 1 FROM unit_conventions WHERE table_name=?", (gone,)
+        ).fetchone(), f"{gone} conventions outlived the table"
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # Physical quantities registered on attributes.
+        ("magnitude", "Voltage/pu"),
+        ("base_voltage", "Voltage/kV"),
+        ("angle", "Angle/rad"),
+        ("angle_limits", "Angle/rad"),
+        ("active_power_flow", "ActivePower/MW"),
+        ("reactive_power_flow", "ReactivePower/MVAr"),
+        ("max_active_power", "ActivePower/MW"),
+        ("time_at_status", "OperationalDuration/min"),
+        ("load_response", "PowerPerFrequency/MW/Hz"),
+        ("voltage", "Voltage/kV"),
+        ("value_of_lost_load", "CostPerEnergy/USD/MWh"),
+        ("start_fuel_mmbtu_per_mw", "StartFuelPerCapacity/MMBtu/MW"),
+        # A per-length impedance: Core/units.json has no ohm/km or pu/km, so no
+        # valid pair exists to register and each row must state its own unit.
+        ("resistance", None),
+        ("reactance", None),
+        # Curve blobs whose numeric leaves carry different dimensions.
+        ("unserved_demand_curve", None),
+        # Unambiguous unit -> registered, so a writer cannot get it wrong.
+        ("rectifier_delay_angle", "Angle/deg"),
+        ("inverter_extinction_angle_limits", "Angle/deg"),
+        ("rectifier_bridges", "Dimensionless/1"),
+        ("inverter_base_voltage", "Voltage/kV"),
+        ("dc_current", "CurrentFlow/A"),
+        ("rating_from", "ApparentPower/MVA"),
+        ("reactive_power_to", "ReactivePower/MVAr"),
+        ("rmpct_from", "Fraction/1"),
+        # Unit depends on a basis choice or a sibling control mode. A convention's
+        # discriminator_column names a sibling *column*, which an attributes row
+        # does not have, so these stay unregistered and each row carries its own
+        # unit/quantity_type (validated against allowed_units by the insert trigger).
+        ("r", None),
+        ("rectifier_rc", None),
+        ("scheduled_dc_voltage", None),
+        ("g", None),
+        ("voltage_limits_from", None),
+        ("dc_setpoint_from", None),
+        ("ac_setpoint_to", None),
+        ("transfer_setpoint", None),
+        ("dc_voltage_droop_from", None),
+        ("loss", None),
+        ("converter_loss_from", None),
+    ],
+)
+def test_demoted_hvdc_attribute_conventions(db, name, expected):
+    rows = db.execute(
+        "SELECT quantity_type || '/' || unit FROM unit_conventions "
+        "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
+        (name,),
+    ).fetchall()
+    if expected is None:
+        assert rows == [], f"attributes.{name} should stay unregistered, got {rows}"
+    else:
+        assert [r[0] for r in rows] == [expected]
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # ThermalMultiStart fields routed through attribute_channel (C8):
+        # unambiguous units get a fixed convention, same as time_at_status.
+        ("start_time_limits", "OperationalDuration/min"),
+        ("start_types", "Dimensionless/1"),
+        # power_units-discriminated, same reason r/dc_setpoint_* stay unregistered
+        # above: the discriminator column lives on thermal_generators, not on the
+        # attributes row itself.
+        ("power_trajectory", None),
+    ],
+)
+def test_thermal_multistart_attribute_conventions(db, name, expected):
+    rows = db.execute(
+        "SELECT quantity_type || '/' || unit FROM unit_conventions "
+        "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
+        (name,),
+    ).fetchall()
+    if expected is None:
+        assert rows == [], f"attributes.{name} should stay unregistered, got {rows}"
+    else:
+        assert [r[0] for r in rows] == [expected]
+
+
+def test_attribute_start_time_limits_registered_unit_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    insert_attribute(
+        fresh_db, 1, "start_time_limits", '{"hot": 30, "warm": 120, "cold": 300}',
+        "min", "OperationalDuration",
+    )
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM attributes WHERE name = 'start_time_limits'"
+    ).fetchone()
+    assert count == 1
+
+
+def test_attribute_start_time_limits_wrong_unit_rejected(fresh_db):
+    make_entity(fresh_db, 1)
+    with pytest.raises(
+        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
+    ):
+        insert_attribute(
+            fresh_db, 1, "start_time_limits", '{"hot": 0.5, "warm": 2, "cold": 5}',
+            "h", "OperationalDuration",
+        )
 
 
 def test_interconnecting_converter_setpoints_two_discriminator(db):
     """InterconnectingConverter dc_setpoint/ac_setpoint are mode-multiplexed by
     dc_control/ac_control, the same enums used by TwoTerminalVSCLine; their
-    voltage-mode rows carry a second discriminator (voltage_setpoint_units) so
-    pu vs kV is also explicit."""
+    voltage-mode rows carry a second discriminator (parameter_units) so pu vs kV is
+    also explicit."""
     rows = set(db.execute(
         "SELECT column_name, discriminator_value, discriminator_value_2, quantity_type, unit "
         "FROM unit_conventions WHERE table_name='interconnecting_converters' "
         "AND column_name IN ('dc_setpoint','ac_setpoint')"
     ).fetchall())
     assert ('dc_setpoint','DC_POWER',None,'ActivePower','MW') in rows
-    assert ('dc_setpoint','DC_VOLTAGE','SYSTEM_BASE','Voltage','pu') in rows
+    assert ('dc_setpoint','DC_VOLTAGE','COMPONENT_BASE','Voltage','pu') in rows
     assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
+
+
+# parameter_units CHECK constraint, on every table that carries the column (derived
+# from a scratch build of the live schema, not hardcoded, so a newly added
+# table is covered automatically).
+def _discover_parameter_units_tables():
+    conn = sqlite3.connect(":memory:")
+    conn.execute("PRAGMA foreign_keys = ON")
+    for sql_file in (
+        SCHEMA_DIR / "schema.sql",
+        SCHEMA_DIR / "triggers.sql",
+        SCHEMA_DIR / "unit_registry.sql",
+        SCHEMA_DIR / "views.sql",
+    ):
+        conn.executescript(sql_file.read_text())
+    tables = [
+        row[0]
+        for row in conn.execute(
+            "SELECT DISTINCT m.name FROM sqlite_master m "
+            "JOIN pragma_table_info(m.name) p "
+            "WHERE m.type = 'table' AND p.name = 'parameter_units' "
+            "ORDER BY 1"
+        )
+    ]
+    conn.close()
+    return tables
+
+
+UNIT_BASIS_TABLES = _discover_parameter_units_tables()
+
+
+def _provision_bus(conn, bus_id, is_dc=0):
+    entity_type = "DCBus" if is_dc else "ACBus"
+    make_entity(
+        conn, bus_id, entity_table="balancing_topologies", entity_type=entity_type,
+        is_topology=1, is_dc=is_dc,
+    )
+    conn.execute(
+        "INSERT INTO balancing_topologies(id, name) VALUES (?, ?)", (bus_id, f"bus_{bus_id}")
+    )
+    return bus_id
+
+
+def _provision_arc(conn, arc_id, is_dc=0):
+    make_entity(conn, arc_id, entity_table="arcs")
+    from_id, to_id = arc_id + 1, arc_id + 2
+    _provision_bus(conn, from_id, is_dc=is_dc)
+    _provision_bus(conn, to_id, is_dc=is_dc)
+    conn.execute("INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)", (arc_id, from_id, to_id))
+    return arc_id
+
+
+def _build_transmission_line(conn, base_id, parameter_units):
+    arc = _provision_arc(conn, base_id * 100)
+    make_entity(conn, base_id, entity_table="transmission_lines", entity_type="Line")
+    conn.execute(
+        "INSERT INTO transmission_lines"
+        "(id, name, arc_id, continuous_rating, r, x, parameter_units, power_units, base_power) "
+        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?, 'COMPONENT_BASE', 100.0)",
+        (base_id, f"line_{base_id}", arc, parameter_units),
+    )
+
+
+def _build_transformer_circuit(conn, base_id, parameter_units):
+    arc = _provision_arc(conn, base_id * 100)
+    make_entity(conn, base_id, entity_table="transformer_circuits", entity_type="Circuit")
+    conn.execute(
+        "INSERT INTO transformer_circuits(id, arc_id, parameter_units, power_units, base_power) "
+        "VALUES (?, ?, ?, 'COMPONENT_BASE', 100.0)",
+        (base_id, arc, parameter_units),
+    )
+
+
+def _build_three_winding_transformer(conn, base_id, parameter_units):
+    circuits = [base_id * (i + 1) * 100 for i in range(3)]
+    for circuit in circuits:
+        _build_transformer_circuit(conn, circuit, parameter_units)
+    star_bus = _provision_bus(conn, base_id * 400)
+    make_entity(
+        conn, base_id, entity_table="three_winding_transformers",
+        entity_type="ThreeWindingTransformer",
+    )
+    conn.execute(
+        "INSERT INTO three_winding_transformers("
+        "id, name, primary_circuit, secondary_circuit, tertiary_circuit, star_bus, parameter_units"
+        ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (base_id, f"twt_{base_id}", *circuits, star_bus, parameter_units),
+    )
+
+
+def _build_fixed_admittance(conn, base_id, admittance_units):
+    bus = _provision_bus(conn, base_id * 100)
+    make_entity(conn, base_id, entity_table="fixed_admittance", entity_type="FixedAdmittance")
+    conn.execute(
+        "INSERT INTO fixed_admittance(id, name, bus, admittance_units, base_power) "
+        "VALUES (?, ?, ?, ?, 100.0)",
+        (base_id, f"fa_{base_id}", bus, admittance_units),
+    )
+
+
+def _build_switched_admittance(conn, base_id, admittance_units):
+    bus = _provision_bus(conn, base_id * 100)
+    make_entity(conn, base_id, entity_table="switched_admittance", entity_type="SwitchedAdmittance")
+    conn.execute(
+        "INSERT INTO switched_admittance(id, name, bus, admittance_units) "
+        "VALUES (?, ?, ?, ?)",
+        (base_id, f"sa_{base_id}", bus, admittance_units),
+    )
+
+
+def _build_source(conn, base_id, parameter_units):
+    bus = _provision_bus(conn, base_id * 100)
+    make_entity(conn, base_id, entity_table="sources", entity_type="Source")
+    conn.execute(
+        "INSERT INTO sources(id, name, bus, r_th, x_th, parameter_units, power_units, base_power) "
+        "VALUES (?, ?, ?, 0.0, 0.0, ?, 'COMPONENT_BASE', 100.0)",
+        (base_id, f"src_{base_id}", bus, parameter_units),
+    )
+
+
+def _build_tmodel_hvdc_line(conn, base_id, parameter_units):
+    arc = _provision_arc(conn, base_id * 100, is_dc=1)
+    make_entity(conn, base_id, entity_table="tmodel_hvdc_lines", entity_type="TModelHVDCLine")
+    conn.execute(
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, parameter_units, base_current) "
+        "VALUES (?, ?, ?, 0.01, ?, 100.0)",
+        (base_id, f"tm_{base_id}", arc, parameter_units),
+    )
+
+
+def _build_facts_control_device(conn, base_id, parameter_units):
+    bus = _provision_bus(conn, base_id * 100)
+    make_entity(conn, base_id, entity_table="facts_control_devices", entity_type="FACTSControlDevice")
+    conn.execute(
+        "INSERT INTO facts_control_devices"
+        "(id, name, bus, voltage_setpoint, parameter_units, power_units, base_power) "
+        "VALUES (?, ?, ?, 1.0, ?, 'COMPONENT_BASE', 100.0)",
+        (base_id, f"facts_{base_id}", bus, parameter_units),
+    )
+
+
+def _build_interconnecting_converter(conn, base_id, parameter_units):
+    ac_bus = _provision_bus(conn, base_id * 100, is_dc=0)
+    dc_bus = _provision_bus(conn, base_id * 100 + 1, is_dc=1)
+    make_entity(
+        conn, base_id, entity_table="interconnecting_converters",
+        entity_type="InterconnectingConverter",
+    )
+    conn.execute(
+        "INSERT INTO interconnecting_converters"
+        "(id, name, bus, dc_bus, parameter_units, power_units, base_power) "
+        "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE', 100.0)",
+        (base_id, f"conv_{base_id}", ac_bus, dc_bus, parameter_units),
+    )
+
+
+UNIT_BASIS_BUILDERS = {
+    "transmission_lines": _build_transmission_line,
+    "transformer_circuits": _build_transformer_circuit,
+    "three_winding_transformers": _build_three_winding_transformer,
+    "sources": _build_source,
+    "tmodel_hvdc_lines": _build_tmodel_hvdc_line,
+    "facts_control_devices": _build_facts_control_device,
+    "interconnecting_converters": _build_interconnecting_converter,
+}
+
+
+def test_parameter_units_tables_have_fixture_builders():
+    """Guard: every table carrying parameter_units (discovered from the live schema)
+    must have a builder above, so a newly added table gets real CHECK coverage
+    below instead of silently falling through the parametrize."""
+    missing = [t for t in UNIT_BASIS_TABLES if t not in UNIT_BASIS_BUILDERS]
+    assert missing == [], f"tables with parameter_units but no test fixture builder: {missing}"
+
+
+@pytest.mark.parametrize("table", UNIT_BASIS_TABLES)
+@pytest.mark.parametrize("value", ["COMPONENT_BASE", "NATURAL_UNITS"])
+def test_parameter_units_accepts_both_legal_values(fresh_db, table, value):
+    UNIT_BASIS_BUILDERS[table](fresh_db, 1, value)
+    (stored,) = fresh_db.execute(f"SELECT parameter_units FROM {table} LIMIT 1").fetchone()
+    assert stored == value
+
+
+@pytest.mark.parametrize("table", UNIT_BASIS_TABLES)
+def test_parameter_units_rejects_a_third_value(fresh_db, table):
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        UNIT_BASIS_BUILDERS[table](fresh_db, 1, "BOGUS_BASIS")
+
+
+# fixed_admittance follows the schemas' ShuntAdmittanceUnitBasis: one arm per
+# admittance_units value, no per-unit option.
+def test_fixed_admittance_admittance_units_conventions(db):
+    rows = db.execute(
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_type, unit "
+        "FROM unit_conventions WHERE table_name = 'fixed_admittance' "
+        "AND column_name IN ('y_g', 'y_b')"
+    ).fetchall()
+    assert set(rows) == {
+        ("y_g", "admittance_units", "NATURAL_UNITS", "Conductance", "S"),
+        ("y_g", "admittance_units", "COMPONENT_MVAR", "ActivePower", "MW"),
+        ("y_b", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
+        ("y_b", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
+    }
+
+
+@pytest.mark.parametrize("value", ["NATURAL_UNITS", "COMPONENT_MVAR"])
+def test_fixed_admittance_accepts_schema_admittance_units(fresh_db, value):
+    _build_fixed_admittance(fresh_db, 1, value)
+    (stored,) = fresh_db.execute("SELECT admittance_units FROM fixed_admittance").fetchone()
+    assert stored == value
+
+
+@pytest.mark.parametrize("value", ["COMPONENT_BASE", "BOGUS_BASIS"])
+def test_fixed_admittance_rejects_non_shunt_basis(fresh_db, value):
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        _build_fixed_admittance(fresh_db, 1, value)
+
+
+# switched_admittance follows the schemas' ShuntAdmittanceUnitBasis too: one
+# arm per admittance_units value, across Y_increase/solved_admittance/admittance_limits.
+def test_switched_admittance_admittance_units_conventions(db):
+    rows = db.execute(
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_type, unit "
+        "FROM unit_conventions WHERE table_name = 'switched_admittance' "
+        "AND column_name IN ('Y_increase', 'solved_admittance', 'admittance_limits')"
+    ).fetchall()
+    assert set(rows) == {
+        ("Y_increase", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
+        ("Y_increase", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
+        ("solved_admittance", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
+        ("solved_admittance", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
+        ("admittance_limits", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
+        ("admittance_limits", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
+    }
+
+
+@pytest.mark.parametrize("value", ["NATURAL_UNITS", "COMPONENT_MVAR"])
+def test_switched_admittance_accepts_schema_admittance_units(fresh_db, value):
+    _build_switched_admittance(fresh_db, 1, value)
+    (stored,) = fresh_db.execute("SELECT admittance_units FROM switched_admittance").fetchone()
+    assert stored == value
+
+
+@pytest.mark.parametrize("value", ["COMPONENT_BASE", "BOGUS_BASIS"])
+def test_switched_admittance_rejects_non_shunt_basis(fresh_db, value):
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        _build_switched_admittance(fresh_db, 1, value)
+
+
+def test_switched_admittance_step_fields_round_trip(fresh_db):
+    bus = _provision_bus(fresh_db, 100)
+    make_entity(fresh_db, 1, entity_table="switched_admittance", entity_type="SwitchedAdmittance")
+    fresh_db.execute(
+        "INSERT INTO switched_admittance"
+        "(id, name, bus, admittance_units, Y_increase, number_engaged, number_of_steps) "
+        "VALUES (?, ?, ?, 'COMPONENT_MVAR', ?, ?, ?)",
+        (1, "sa_1", bus, '[{"real":0.0,"imag":0.05}]', "[1]", "[3]"),
+    )
+    row = fresh_db.execute(
+        "SELECT Y_increase, number_engaged, number_of_steps FROM switched_admittance"
+    ).fetchone()
+    assert row == ('[{"real":0.0,"imag":0.05}]', "[1]", "[3]")
+
+
+def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(fresh_db):
+    """The generic attributes unit-validation trigger, exercised with the exact
+    y_b/y_g two-arm SHAPE (same discriminator_value, differing only by
+    quantity_type) rather than a generic stand-in: no attributes name in the
+    real seed has two arms (y_b/y_g are physical columns, not attributes
+    rows), so register a synthetic one with that exact shape and confirm both
+    arms are accepted and a cross pair is rejected."""
+    drop_seal_triggers(fresh_db)
+    fresh_db.execute(
+        "INSERT INTO unit_conventions"
+        "(table_name, column_name, quantity_type, unit, "
+        " discriminator_column, discriminator_value) "
+        "VALUES ('attributes', 'shunt_susceptance_arm', 'Susceptance', 'S', 'mode', 'NATURAL'), "
+        "       ('attributes', 'shunt_susceptance_arm', 'ReactivePower', 'MVAr', 'mode', 'NATURAL')"
+    )
+    make_entity(fresh_db, 1)
+    insert_attribute(fresh_db, 1, "shunt_susceptance_arm", "0.01", "S", "Susceptance")
+    make_entity(fresh_db, 2)
+    insert_attribute(fresh_db, 2, "shunt_susceptance_arm", "1.5", "MVAr", "ReactivePower")
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM attributes WHERE name = 'shunt_susceptance_arm'"
+    ).fetchone()
+    assert count == 2
+
+    make_entity(fresh_db, 3)
+    with pytest.raises(
+        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
+    ):
+        insert_attribute(fresh_db, 3, "shunt_susceptance_arm", "0.01", "MW", "ActivePower")

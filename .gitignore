@@ -164,5 +164,8 @@ cython_debug/
 # OS generated files
 .DS_Store
 
-python_models
 griddb-example.sqlite
+
+# Design plans and agent scratch stay local
+.claude/plans/
+.superpowers/

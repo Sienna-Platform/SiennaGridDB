@@ -3,9 +3,7 @@
 Schema for the SQL database for Sienna Applications
 
 > [!IMPORTANT]
-> The griddb schema was designed using SQLite 3.45 to use some of the jsonb
-> functionality. We do not intend to provide backwards compatibility since when
-> we deisgined this 3.45 had already a year of being deployed.
+> This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
 
 ## How To(s)
 
@@ -19,33 +17,37 @@ Schema for the SQL database for Sienna Applications
 cargo install just
 ```
 
-### Create an example database and run some queries on it
+### Create a database with the schema
 
 ```console
-just test
+just new-db              # builds griddb-example.sqlite
+just new-db $DB_NAME     # or a database of your choosing
 ```
 
-### Run example queries on a griddb schema database
-
-To create a database with the schema use the following command:
+`new-db` runs the whole chain in order — schema, triggers, unit registry, views — then
+prints a row count. `just` is optional; the underlying commands are four `sqlite3` calls:
 
 ```console
-just queries $DB_NAME
+for f in schema.sql triggers.sql unit_registry.sql views.sql; do sqlite3 $DB_NAME < schema/$f; done
 ```
 
 ## Units
 
 The schema stores physical quantities in **natural units** — MW, MVAr, MVA, kV, and so
-on — with one deliberate exception: branch electrical parameters (`transmission_lines.r`,
-`x`, `b`, `g`) are **stored flexibly in per-unit on system base OR natural units**. A
-per-row discriminator column, `transmission_lines.parameter_units`
-(`SYSTEM_BASE` | `NATURAL_UNITS`), records which basis a row uses; all of `r`/`x`/`b`/`g`
-on a line share that one basis. The unit registry carries both options for each column
-(`SYSTEM_BASE` → `pu`; `NATURAL_UNITS` → `ohm` for `r`/`x`, `S` for `b`/`g`), matching the
-PowerSystems.jl data model and the schemas' `x-unit: "pu"` (system-base) annotation. `r`
-and `x` are scalar `REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as
-`json_valid`-checked text). Costs stay in natural currency units, and `operation_cost`
-JSON blobs must carry `NATURAL_UNITS`.
+on — with one deliberate exception: branch and device electrical parameters
+(`transmission_lines.r`/`x`/`b`/`g`, `transformer_circuits.r`/`x`, admittances, HVDC
+resistances, and similar) are **stored flexibly in per-unit on a component base OR
+natural units**. A per-row discriminator column, `parameter_units`
+(`COMPONENT_BASE` | `NATURAL_UNITS`), records which basis a row uses. `r`/`x` are scalar
+`REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as `json_valid`-checked text).
+Costs stay in natural currency units, and the cost JSON blobs must carry
+`NATURAL_UNITS`. The schemas' one `OperationalCost` object is stored verbatim in
+`operation_cost` on the generator tables, `variable_operation_cost` member included.
+`production_cost` is a `GENERATED ALWAYS AS` column deriving
+`json_extract(operation_cost, '$.variable_operation_cost')` -- a queryable column for
+the curve (the part that gets read, compared and repriced) with zero stored
+duplication. Cost objects without a single production curve (storage, sources) stay
+whole in `operation_cost`/`operation_costs`.
 
 ### The unit registry
 
@@ -59,15 +61,64 @@ them:
 | `unit_conventions` | The column→(quantity_type, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_types` to show table, column, unit, quantity, and dimension in one place. |
 
-Current registry: **39 quantity types, 46 allowed units, 133 conventions.**
+**Columns vs. `attributes`.** A table sourced from several upstream components keeps the
+fields common to all of them as columns. A field only some variants carry goes through
+`sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
+There it is registered as an `attributes.<name>` convention when its unit is unambiguous,
+validated against `allowed_units` on write — or left unregistered when its unit depends on
+a sibling attribute (a `discriminator_column` must name a sibling *column*, and a field
+inside `attributes` has no column sibling to name). `two_terminal_hvdc_lines` follows this
+for all three HVDC variants (LCC impedances, VSC setpoints); `thermal_generators` follows
+it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_trajectory` stays
+unregistered, basis-dependent on the attribute `power_units`, same as VSC's
+`dc_setpoint_*`).
 
-The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary
-in `Core/units.json`, so the registry can never drift from the source of truth.
+Current registry: **41 quantity types, 66 allowed units, 405 conventions.**
+
+The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary in
+`Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
+is the **sole vocabulary authority** — see SiennaSchemas'
+[Units](https://sienna-platform.github.io/SiennaSchemas/units/) page for how to read it, and
+[UNIT_ANNOTATIONS.md](https://github.com/Sienna-Platform/SiennaSchemas/blob/main/docs/UNIT_ANNOTATIONS.md)
+for how a new unit gets added there — and every table below is a generated,
+sha256-sealed **mirror** of it, never a second source.
+
+### Reading a value: where do I look?
+
+To resolve any column's unit:
+
+1. **Look up the column** in `unit_conventions` (or the joined `column_units` view) by
+   `table_name`/`column_name`.
+2. **If more than one row comes back**, the column is discriminated — each row names a
+   `discriminator_column` (e.g. `parameter_units`, `admittance_units`, `power_units`); match it
+   against that same column's value on the row you're reading.
+3. **Read the matched row's `unit`.** If it is `pu`, resolve it against the base column on
+   the *same row* — `base_power` for power/impedance quantities, `base_voltage` for voltage
+   quantities — never a system-wide table.
+
+*Worked example:* `transmission_lines.r` has two `unit_conventions` rows, discriminated by
+`parameter_units`: `COMPONENT_BASE` → `unit = pu`, `NATURAL_UNITS` → `unit = ohm`. A row with
+`parameter_units = 'COMPONENT_BASE'`, `r = 0.02`, `base_power = 100` reads as 0.02 pu on a
+100 MVA base; the same line with `parameter_units = 'NATURAL_UNITS'` would carry `r` directly
+in ohm. A column with only one `unit_conventions` row (e.g.
+`transmission_lines.continuous_rating` → `MVA`) skips step 2: that unit applies to every
+row, unconditionally.
+
+Two kinds of value sit outside `unit_conventions` entirely:
+
+- **Time-series values** — the unit lives on `time_series_metadata` (joined by `uuid`), not
+  on the row you're reading; see [Time-series units](#time-series-units) below.
+- **Cost JSON payloads** (`operation_cost` / `production_cost`) — carry their own embedded
+  `power_units` key. Triggers require it to be `NATURAL_UNITS`, since the DB stores no base
+  to resolve `COMPONENT_BASE` against.
 
 ### Time-series units
 
-`time_series_metadata` carries a `unit` column, so units are recorded **per series** rather
-than assumed schema-wide.
+`time_series_metadata` — one row per series, keyed by `uuid` — carries `unit` and
+`quantity_type`, so units are recorded **per series** rather than assumed schema-wide.
+`time_series_associations` also carries a `units` column, but it is **deprecated** in favor
+of `time_series_metadata.unit`. A trigger only checks the two agree when `units` is set —
+read `time_series_metadata` directly.
 
 ### Regenerate
 
@@ -118,8 +169,8 @@ Just as the OpenAPI specs generate the Python and Julia model packages, the JSON
 generate SQLite DDL here. `scripts/generate_sql_schema.py` projects the components mapped
 in `schema/schema_map.json` into `schema/generated_schema.sql`, applying the DB-specific
 config in `schema/sql_codegen_map.json` (column renames, foreign keys, and the
-attribute-channel property lists — e.g. branch `r`/`x`/`b`/`g` live in the `attributes`
-table, not as columns). The generated file is a **reference projection**: the production
+attribute-channel property lists — e.g. the `two_terminal_hvdc_lines` converter
+fields live in the `attributes` table, not as columns). The generated file is a **reference projection**: the production
 DDL remains the hand-written `schema/schema.sql`, and the two are compared mechanically:
 
 ```console
@@ -130,6 +181,60 @@ python3 scripts/generate_sql_schema.py --diff    # drift report vs schema.sql
 
 `--diff` fails only on type contradictions for same-named columns; coverage gaps
 (schema properties without DB columns, and vice versa) are reported as drift lines.
+
+## Code generation
+
+Two independent generators project SiennaSchemas into this repo. Neither is authoritative
+over the hand-written DDL — both are checked against it instead.
+
+| Generated from | Generator | Output | Authoritative? |
+|---|---|---|---|
+| SiennaSchemas JSON Schemas, via `schema/schema_map.json` × `schema/sql_codegen_map.json` | `scripts/generate_sql_schema.py` | `schema/generated_schema.sql` | No — a reference projection, diffed against `schema/schema.sql` |
+| SiennaSchemas `Core/units.json` × `schema/column_conventions.json` | `scripts/generate_unit_registry.py` | `schema/unit_registry.sql` (sha256-sealed) | Yes — loaded verbatim; see [The unit registry](#the-unit-registry) |
+
+Hand-written, not generated: `schema/schema.sql` (production DDL) and `schema/triggers.sql`
+(validation triggers). `schema.sql` does not consume `generated_schema.sql` at build time —
+`--diff` is a drift *report*, not a build dependency.
+
+### Mapping and config files
+
+- **`schema/schema_map.json`** — DB table → SiennaSchemas component(s). Consumed by
+  `generate_sql_schema.py` and `check_units_sync.py` to resolve a column back to its schema
+  property (and, via `is_psy`, to a PowerSystems.jl struct).
+- **`schema/sql_codegen_map.json`** — DB-specific codegen config: column renames,
+  foreign-key clauses, which properties live in the generic `attributes` table instead of a
+  dedicated column, which are intentionally not persisted, and which hand-written columns
+  have no schema property at all (so the drift gate doesn't flag them as missing).
+- **`schema/column_conventions.json`** — DB-owned column → `(quantity_type, unit)` map; the
+  input `generate_unit_registry.py` seeds `unit_conventions` from, alongside `Core/units.json`.
+- **`schema/coverage_decisions.json`** — a proposal (awaiting sign-off) recording, for every
+  schema property with no column in `schema.sql`, what should happen to it (new column,
+  `attributes` entry, rename, decomposed, or skip); intended to be enforced by
+  `scripts/check_coverage.py`, which does not exist in this checkout yet.
+
+### Sync gates, and when to run them
+
+Run these after touching `Core/units.json` upstream, `schema/schema.sql`, or any mapping file
+above — and always before opening a PR that touches any of them:
+
+```console
+python3 scripts/verify_unit_registry.py $DB_NAME                                        # registry content matches its own seal
+python3 scripts/generate_sql_schema.py --schemas-path ../SiennaSchemas --check --diff    # DDL staleness + drift vs schema.sql
+python3 scripts/check_units_sync.py --schemas-path ../SiennaSchemas --db $DB_NAME        # 3-layer unit consistency: schemas <-> registry <-> DB (add --psy-path for the PSY layer)
+```
+
+`generate_unit_registry.py` has no built-in `--check`; CI proves registry staleness the blunt
+way instead — regenerate, then `git diff --exit-code schema/unit_registry.sql`. All of the
+above run in CI
+([`.github/workflows/sqlite-schema-tests.yml`](.github/workflows/sqlite-schema-tests.yml))
+on every push and pull request.
+
+### Never hand-edit generated output
+
+`schema/generated_schema.sql` opens `-- GENERATED FILE -- DO NOT EDIT.`; `schema/unit_registry.sql`
+opens `-- Unit Registry Seed Data (GENERATED -- do not edit by hand)`. Change the source
+instead — a schema in SiennaSchemas, `Core/units.json`, or one of the mapping files above —
+then regenerate.
 
 ## Contributing
 
