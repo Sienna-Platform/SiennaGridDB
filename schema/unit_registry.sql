@@ -541,7 +541,7 @@ INSERT INTO unit_basis_rules (quantity_kind, base_expression, description) VALUE
 -- 5. Registry metadata (non-seal rows)
 INSERT INTO unit_management_metadata (key, value, description) VALUES
     ('convention', 'sienna-griddb-1.1', 'Schema unit convention version'),
-    ('units_artifact', 'sienna-units-1.0', 'SiennaSchemas Core/units.json vocabulary convention this registry derives from');
+    ('units_artifact', 'sienna-units-0.1.0', 'SiennaSchemas Core/units.json vocabulary convention this registry derives from');
 
 -- 6. Seal row -- sha256 over canonical repr of the registry.
 -- Inserting this row activates the immutability triggers. See the
