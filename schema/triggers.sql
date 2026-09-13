@@ -1326,31 +1326,31 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_update BEFORE
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_kinds_update BEFORE
 UPDATE
-    ON quantity_types
+    ON quantity_kinds
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
+        'quantity_kinds is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_delete BEFORE DELETE ON quantity_types
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_kinds_delete BEFORE DELETE ON quantity_kinds
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
+        'quantity_kinds is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_quantity_types_insert BEFORE
+CREATE TRIGGER IF NOT EXISTS prevent_quantity_kinds_insert BEFORE
 INSERT
-    ON quantity_types
+    ON quantity_kinds
     WHEN EXISTS (
         SELECT
             1
@@ -1363,7 +1363,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'quantity_types is immutable outside scripts/generate_unit_registry.py.'
+        'quantity_kinds is immutable outside scripts/generate_unit_registry.py.'
     );
 
 END;
@@ -1453,55 +1453,176 @@ SELECT
 
 END;
 
--- =============================================================================
--- Time Series Metadata Unit Validation Triggers
--- Each row's (quantity_type, unit) pair must be a registered entry in allowed_units.
--- =============================================================================
-CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_insert BEFORE
-INSERT
-    ON time_series_metadata
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            allowed_units au
-        WHERE
-            au.quantity_type = NEW.quantity_type
-            AND au.unit = NEW.unit
-    )
+-- unit_basis_rules (registry-linked): UPDATE and DELETE are blocked
+-- unconditionally; INSERT is blocked only after the registry is sealed.
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_update BEFORE
+UPDATE
+    ON unit_basis_rules
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS validate_time_series_metadata_update BEFORE
-UPDATE
-    ON time_series_metadata
-    WHEN NOT EXISTS (
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_delete BEFORE DELETE ON unit_basis_rules
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_unit_basis_rules_insert BEFORE
+INSERT
+    ON unit_basis_rules
+    WHEN EXISTS (
         SELECT
             1
         FROM
-            allowed_units au
+            unit_management_metadata
         WHERE
-            au.quantity_type = NEW.quantity_type
-            AND au.unit = NEW.unit
+            KEY = 'unit_conventions_checksum'
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_metadata (quantity_type, unit) must be a registered pair in allowed_units.'
+        'unit_basis_rules is protected against ad-hoc edits. Regenerate the registry via scripts/generate_unit_registry.py and rebuild the database.'
+    );
+
+END;
+
+-- =============================================================================
+-- Time Series Association Unit Validation Triggers (registry-linked)
+-- quantity_kind is deliberately free-form (mirroring infrastore's catalog):
+-- composite economic quantities ($/MWh, MMBtu/MWh) must not require a schema
+-- migration. But a row that uses a REGISTERED quantity-type name must pair it
+-- with a registered unit -- a typo'd or contradictory unit on a known quantity
+-- is a defect, not a new vocabulary.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NEW.quantity_kind IS NOT NULL
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            quantity_kinds
+        WHERE
+            name = NEW.quantity_kind
+    )
+    AND (
+        NEW.units IS NULL
+        OR NOT EXISTS (
+            SELECT
+                1
+            FROM
+                allowed_units au
+            WHERE
+                au.quantity_kind = NEW.quantity_kind
+                AND au.unit = NEW.units
+        )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_kind, unit) pair in allowed_units.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_update BEFORE
+UPDATE
+    ON time_series_associations
+    WHEN NEW.quantity_kind IS NOT NULL
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            quantity_kinds
+        WHERE
+            name = NEW.quantity_kind
+    )
+    AND (
+        NEW.units IS NULL
+        OR NOT EXISTS (
+            SELECT
+                1
+            FROM
+                allowed_units au
+            WHERE
+                au.quantity_kind = NEW.quantity_kind
+                AND au.unit = NEW.units
+        )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_kind, unit) pair in allowed_units.'
+    );
+
+END;
+
+-- =============================================================================
+-- Time Series Association Owner-Domain Triggers
+-- owner_id references entities (both categories share the entities id-space
+-- here, unlike infrastore's independent streams), but a 'SupplementalAttribute'
+-- owner must actually be a supplemental attribute.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NEW.owner_category = 'SupplementalAttribute'
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.owner_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = ''SupplementalAttribute''.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain_update BEFORE
+UPDATE
+    OF owner_id,
+    owner_category ON time_series_associations
+    WHEN NEW.owner_category = 'SupplementalAttribute'
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.owner_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = ''SupplementalAttribute''.'
     );
 
 END;
 
 -- =============================================================================
 -- Attribute Unit Validation Triggers
--- A known attribute name must use its registered unit and quantity_type from
+-- A known attribute name must use its registered unit and quantity_kind from
 -- unit_conventions. An unknown attribute with a numeric or structured value
 -- needs a vocabulary-valid pair from allowed_units, unless attribute_identifiers
 -- lists it as a non-physical identifier. Boolean, text, and null values are exempt.
@@ -1524,7 +1645,7 @@ SELECT
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
@@ -1534,11 +1655,11 @@ SELECT
                     uc.table_name = 'attributes'
                     AND LOWER(uc.column_name) = LOWER(NEW.name)
                     AND uc.unit = NEW.unit
-                    AND uc.quantity_type = NEW.quantity_type
+                    AND uc.quantity_kind = NEW.quantity_kind
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is a known name and must use its registered unit and quantity_type.'
+            'attributes.name is a known name and must use its registered unit and quantity_kind.'
         )
         -- A numeric identifier (e.g. a bus number) isn't a physical quantity;
         -- attribute_identifiers exempts it from needing a unit.
@@ -1563,19 +1684,19 @@ SELECT
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
+            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_kind from allowed_units (use unit=1, quantity_kind=Dimensionless when none applies).'
         )
         -- An exempt identifier does not have to carry a unit, but if it carries
         -- one anyway the pair is still held to the vocabulary: exemption relieves
@@ -1600,23 +1721,23 @@ SELECT
         )
         AND (
             NEW.unit IS NOT NULL
-            OR NEW.quantity_type IS NOT NULL
+            OR NEW.quantity_kind IS NOT NULL
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_type must still be a registered allowed_units pair.'
+            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_kind must still be a registered allowed_units pair.'
         )
     END;
 
@@ -1640,7 +1761,7 @@ SELECT
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
@@ -1650,11 +1771,11 @@ SELECT
                     uc.table_name = 'attributes'
                     AND LOWER(uc.column_name) = LOWER(NEW.name)
                     AND uc.unit = NEW.unit
-                    AND uc.quantity_type = NEW.quantity_type
+                    AND uc.quantity_kind = NEW.quantity_kind
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is a known name and must use its registered unit and quantity_type.'
+            'attributes.name is a known name and must use its registered unit and quantity_kind.'
         )
         -- A numeric identifier (e.g. a bus number) isn't a physical quantity;
         -- attribute_identifiers exempts it from needing a unit.
@@ -1679,19 +1800,19 @@ SELECT
         AND json_type(NEW.value) NOT IN ('true', 'false', 'null', 'text')
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_type from allowed_units (use unit=1, quantity_type=Dimensionless when none applies).'
+            'attributes.value, when numeric or structured, needs a vocabulary-valid unit and quantity_kind from allowed_units (use unit=1, quantity_kind=Dimensionless when none applies).'
         )
         -- An exempt identifier does not have to carry a unit, but if it carries
         -- one anyway the pair is still held to the vocabulary: exemption relieves
@@ -1716,23 +1837,23 @@ SELECT
         )
         AND (
             NEW.unit IS NOT NULL
-            OR NEW.quantity_type IS NOT NULL
+            OR NEW.quantity_kind IS NOT NULL
         )
         AND (
             NEW.unit IS NULL
-            OR NEW.quantity_type IS NULL
+            OR NEW.quantity_kind IS NULL
             OR NOT EXISTS (
                 SELECT
                     1
                 FROM
                     allowed_units au
                 WHERE
-                    au.quantity_type = NEW.quantity_type
+                    au.quantity_kind = NEW.quantity_kind
                     AND au.unit = NEW.unit
             )
         ) THEN RAISE(
             ABORT,
-            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_type must still be a registered allowed_units pair.'
+            'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_kind must still be a registered allowed_units pair.'
         )
     END;
 
@@ -1740,110 +1861,47 @@ END;
 
 -- =============================================================================
 -- Time Series Data Validation Triggers
--- time_series_metadata holds one unit per uuid, so a series can't carry mixed
--- units. Each static_time_series row must reference an existing metadata row.
+-- Dense values are located by uri: each static_time_series row must belong to
+-- an array some association row declares via uri. Ingest order is therefore
+-- association first, values second -- an orphan array is a loader bug surfaced
+-- loudly, not data to keep.
 -- =============================================================================
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists BEFORE
 INSERT
     ON static_time_series
     WHEN NOT EXISTS (
         SELECT
             1
         FROM
-            time_series_metadata
+            time_series_associations
         WHERE
-            uuid = NEW.uuid
+            uri = NEW.uri
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata.'
+        'static_time_series.uri must exist in time_series_associations before insertion.'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_metadata_exists_update BEFORE
+CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists_update BEFORE
 UPDATE
-    OF uuid ON static_time_series
+    OF uri ON static_time_series
     WHEN NOT EXISTS (
         SELECT
             1
         FROM
-            time_series_metadata
+            time_series_associations
         WHERE
-            uuid = NEW.uuid
+            uri = NEW.uri
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'static_time_series.uuid must exist in time_series_metadata.'
-    );
-
-END;
-
--- =============================================================================
--- Deprecated time_series_associations.units guard
--- time_series_metadata.unit is the source of truth; a non-null
--- time_series_associations.units for the same uuid must match it.
--- =============================================================================
-CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
-INSERT
-    ON time_series_associations
-    WHEN NEW.units IS NOT NULL
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-    )
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-            AND m.unit = NEW.units
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid.'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_update BEFORE
-UPDATE
-    ON time_series_associations
-    WHEN NEW.units IS NOT NULL
-    AND EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-    )
-    AND NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_metadata m
-        WHERE
-            m.uuid = NEW.time_series_uuid
-            AND m.unit = NEW.units
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'time_series_associations.units must equal time_series_metadata.unit for the same time_series_uuid.'
+        'static_time_series.uri must exist in time_series_associations before insertion.'
     );
 
 END;

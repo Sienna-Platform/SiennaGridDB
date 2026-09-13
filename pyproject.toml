@@ -2,41 +2,49 @@
 requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# SiennaGridDB ships SQL, not a Python package. There is no importable module
+# here: schema/*.sql is the product, scripts/*.py is the tooling that generates
+# and verifies it. This [project] table exists so `pip install -e ".[dev]"` sets
+# up the test environment and so the linters have a home -- it is deliberately
+# NOT a publishable distribution, and `packages = []` below stops setuptools
+# auto-discovering schema/ and shipping it as a top-level `schema` package.
+# The release artifact is the tarball built by .github/workflows/release.yml.
 [project]
 name = "sienna-griddb"
-dynamic = ["version"]
-description = ''
+version = "0.1.0"
+description = "The canonical SQLite schema and sealed unit registry for Sienna applications."
 readme = "README.md"
-requires-python = ">=3.8"
-keywords = []
+requires-python = ">=3.9"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+keywords = ["sienna", "power-systems", "sqlite", "schema", "units"]
 authors = [{ name = "Joseph McKinsey", email = "joseph.mckinsey@nrel.gov" }]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Database",
+  "Topic :: Scientific/Engineering",
 ]
-dependencies = ["pydantic>=2,<3", "sqlalchemy>=2,<3"]
+# No runtime dependencies: nothing here is imported at run time. pydantic is a
+# test-only dep, pulled in by test/test_load_models.py via power-openapi-models.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Sienna-Platform/SiennaGridDB"
+Repository = "https://github.com/Sienna-Platform/SiennaGridDB"
+Issues = "https://github.com/Sienna-Platform/SiennaGridDB/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.2.1", "pytest-cov", "ruff", "pre-commit"]
+dev = ["pytest>=7.2.1", "pytest-cov", "ruff", "pre-commit", "pydantic>=2"]
 docs = ["sphinx>=7", "myst-parser", "sphinx_math_dollar", "nbsphinx"]
 
-# Setuptools configuration
 [tool.setuptools]
-include-package-data = true
-
-# Setuptools configuration
-[tool.setuptools.dynamic]
-readme = { file = ["README.md"], content-type = "text/markdown" }
-
-[tool.setuptools.package-data]
-"*" = ["*.json", "*.csv", "*.sql"]
+packages = []
 
 # Linter + formatter configuration
 [tool.ruff]

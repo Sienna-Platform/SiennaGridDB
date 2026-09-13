@@ -5,6 +5,39 @@ Schema for the SQL database for Sienna Applications
 > [!IMPORTANT]
 > This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
 
+## What this repository ships
+
+The product is **SQL**, not a Python package. `schema/` holds the four files that build a
+database — `schema.sql` (tables), `triggers.sql` (integrity), `unit_registry.sql`
+(the generated, sha256-sealed unit vocabulary) and `views.sql` — and `scripts/` holds the
+Python tooling that generates and verifies them. Nothing here is importable; the
+`pyproject.toml` exists to set up the dev environment and host the linter config.
+
+A release is a tarball attached to a `v*` GitHub Release, containing `schema/`,
+`scripts/`, `README.md`, `LICENSE` and `.justfile` under a single top-level directory:
+
+```console
+tar -xzf sienna-griddb-v0.1.0.tar.gz
+cd sienna-griddb-v0.1.0
+just new-db                     # or the four sqlite3 calls below
+```
+
+### Scope of 0.1
+
+Read this before building on it:
+
+- **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
+  table, so it builds a new database and must never be applied to one holding data.
+  `PRAGMA user_version` is bumped on every schema change but nothing reads it.
+- **Roughly half the data model is typed.** 44 of 96 upstream components have a table.
+  Dynamics has none; services/reserves and the investment policy layer have none. See the
+  open coverage issue.
+- **No converter.** Nothing loads a PowerSystems `System` into these tables or back. The
+  bridge is deliberately out of scope for 0.1.
+- **The unit registry is the load-bearing deliverable** — 405 column conventions, sealed
+  and tamper-guarded, readable through the `column_units` view as an authoritative
+  `(table, column) -> (quantity_kind, unit, basis rule)` map.
+
 ## How To(s)
 
 ### How to install `just`
@@ -31,6 +64,27 @@ prints a row count. `just` is optional; the underlying commands are four `sqlite
 for f in schema.sql triggers.sql unit_registry.sql views.sql; do sqlite3 $DB_NAME < schema/$f; done
 ```
 
+## Foreign keys
+
+**Every connection must set `PRAGMA foreign_keys = ON`.** SQLite defaults it OFF
+per connection and does not store it in the file, so a database built by
+`just new-db` reports `foreign_keys = 0` when you next open it, and all 86
+foreign keys in this schema are inert until you turn them on:
+
+```sh
+sqlite3 griddb-example.sqlite "PRAGMA foreign_keys = ON; ..."
+```
+
+```python
+conn = sqlite3.connect("griddb-example.sqlite")
+conn.execute("PRAGMA foreign_keys = ON")   # required, every connection
+```
+
+The `PRAGMA foreign_keys = ON` at the top of `schema/schema.sql` governs the
+build connection only. There is no file-level equivalent. `ON DELETE CASCADE`
+also does nothing without it, so deleting a parent row silently orphans its
+children rather than removing them.
+
 ## Units
 
 The schema stores physical quantities in **natural units** — MW, MVAr, MVA, kV, and so
@@ -48,6 +102,8 @@ Costs stay in natural currency units, and the cost JSON blobs must carry
 the curve (the part that gets read, compared and repriced) with zero stored
 duplication. Cost objects without a single production curve (storage, sources) stay
 whole in `operation_cost`/`operation_costs`.
+See `docs/units-architecture.md` §5 for the full two-axis design, including how a
+`COMPONENT_BASE` row resolves its base without leaving the database.
 
 ### The unit registry
 
@@ -56,10 +112,11 @@ them:
 
 | Table | Role |
 |---|---|
-| `quantity_types` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
-| `allowed_units` | The units permitted for each quantity type (e.g. `MW` for `ActivePower`). |
-| `unit_conventions` | The column→(quantity_type, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
-| `column_units` (view) | Joins `unit_conventions` with `quantity_types` to show table, column, unit, quantity, and dimension in one place. |
+| `quantity_kinds` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
+| `allowed_units` | The units permitted for each quantity kind (e.g. `MW` for `ActivePower`). |
+| `unit_conventions` | The column→(quantity_kind, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
+| `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
+| `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
 **Columns vs. `attributes`.** A table sourced from several upstream components keeps the
 fields common to all of them as columns. A field only some variants carry goes through
@@ -73,9 +130,9 @@ it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_traject
 unregistered, basis-dependent on the attribute `power_units`, same as VSC's
 `dc_setpoint_*`).
 
-Current registry: **41 quantity types, 66 allowed units, 405 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 405 conventions.**
 
-The generator refuses any `(quantity_type, unit)` pair absent from the shared vocabulary in
+The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
 is the **sole vocabulary authority** — see SiennaSchemas'
 [Units](https://sienna-platform.github.io/SiennaSchemas/units/) page for how to read it, and
@@ -114,11 +171,13 @@ Two kinds of value sit outside `unit_conventions` entirely:
 
 ### Time-series units
 
-`time_series_metadata` — one row per series, keyed by `uuid` — carries `unit` and
-`quantity_type`, so units are recorded **per series** rather than assumed schema-wide.
-`time_series_associations` also carries a `units` column, but it is **deprecated** in favor
-of `time_series_metadata.unit`. A trigger only checks the two agree when `units` is set —
-read `time_series_metadata` directly.
+`time_series_associations` carries `units`/`quantity_kind`/`unit_system` per association row,
+mirroring infrastore's catalog so rows deserialize straight into a store, and `id` — the
+store-minted id, carried verbatim, that a time-series-backed cost payload names its series by
+under its wire spelling, `association_id`. `quantity_kind` is free-form (composite economic
+quantities must not require a vocabulary change), but a row using a registered quantity-type
+name is trigger-checked against `allowed_units` — see `docs/units-architecture.md` §4–6 for
+the full contract.
 
 ### Regenerate
 
@@ -182,6 +241,135 @@ python3 scripts/generate_sql_schema.py --diff    # drift report vs schema.sql
 `--diff` fails only on type contradictions for same-named columns; coverage gaps
 (schema properties without DB columns, and vice versa) are reported as drift lines.
 
+## Association tables
+
+A component's own table can hold a foreign key for a many-to-one relationship (a
+generator's `bus` column, say), but a relationship where either side can have several
+of the other — or where the link itself carries data, or where the "other side" spans
+several different component tables — has no single column to hold it. `schema/schema.sql`
+handles each of these cases with a dedicated association table: a row per link rather
+than a column on either side. Five exist:
+
+| Table | Links | Why it needs its own table |
+|---|---|---|
+| `supplemental_attribute_associations` | a component ↔ a supplemental attribute | a component can carry several attributes (geolocation, outage data, …), and the linked component can be any of the many concrete component tables — a single `component_id` column resolved through `entities` covers all of them without a dedicated FK per component type |
+| `plant_associations` | a plant ↔ its member entities | a plant groups multiple generating units of varying concrete types, and the link carries a payload (`group_index`) that doesn't belong on the generic `entities` row or on any one device table |
+| `combined_cycle_associations` | a plant ↔ the CT/CA units feeding into or receiving from its HRSGs | stated directly in the table's own comment: "a CT or CA can feed multiple HRSGs and an HRSG can have multiple CTs/CAs" — genuinely many-to-many, which is why it is a separate table from `plant_associations` rather than another row shape in it (`plant_associations` enforces one row per `(plant, entity)`, which this relationship violates) |
+| `time_series_associations` | a time series ↔ the entity that owns it | one entity can own several time series (different resolutions, different features), and the association row is what makes a stored series queryable by owner without touching the series data itself |
+| `trading_hub_associations` | a trading hub ↔ its member entities | a hub aggregates several settlement points and an entity can belong to more than one hub, so neither side can hold the link; `UNIQUE (trading_hub_id, entity_id)` keeps one row per membership |
+
+Two of the five (`supplemental_attribute_associations`, `time_series_associations`)
+resolve one side of the link through `entities` — the supertype table every component
+row also has a row in (`id`, `entity_table`, `entity_type`) — so a single
+`component_id`/`owner_id` column can point at a generator, a bus, or any other component
+type without a separate FK per possible target. `plant_associations`, `combined_cycle_associations` and
+`trading_hub_associations` reference `entities` the same way for their non-owning
+side (`entity_id`); their owning side (`plant_id`) always points at `plants`, since that
+side is never ambiguous. All five declare their FKs `ON DELETE CASCADE`, so a deleted
+component or attribute takes its association rows with it rather than leaving orphans.
+
+`hydro_reservoir_connections` is association-shaped too, but it is listed with the hydro
+topology rather than here: it links two reservoirs to each other, not a component to a
+grouping, and its integrity is enforced by the hydro-topology triggers.
+
+### Two ways to identify a row
+
+An association table needs something to name one specific row by — for a caller to hold
+onto, or for another table to reference. Which kind of identifier a table uses depends on
+where the row's identity actually comes from.
+
+**Mirror table with a store id** — `time_series_associations` — mirrors the catalog of an
+external store: each row corresponds to an association the store already knows about and
+already gave an id to. Carrying that id, rather than minting a competing one, is the whole
+point — a caller working from the store's own reference needs to land on the same row here.
+The table's `id INTEGER PRIMARY KEY AUTOINCREMENT` **is** that store-minted id, carried
+verbatim, mirroring infrastore's own declaration column-for-column (confirmed against
+infrastore's `schema.rs`); `AUTOINCREMENT` is legal on this STRICT table (confirmed on this
+branch — see below) and stops SQLite from ever reissuing an id a delete freed, matching the
+guarantee infrastore relies on for the same column. `association_id` is only this column's
+*spelling on the wire* — the name SiennaSchemas payloads reference it by
+(`TimeSeriesLinearFunctionData.association_id` and its siblings) — never a second stored
+column. **The id is meaningful only against its origin store: resolve it against the source
+store, and re-mint on import when aggregating rows from more than one — exactly what
+infrastore's own `merge` does when copying series between stores (verified in
+`infrastore-cli/src/commands/manage.rs`: "a merge re-adds the source's rows, so the
+destination assigns them fresh ids from its own stream").**
+
+**Mirror table with no store id** — `supplemental_attribute_associations` — mirrors the same
+kind of external association, but infrastore's own wire row for it (`SaWireRow`) carries no
+id: nothing references an attachment, so there is nothing to preserve, and an import mints a
+fresh `id` every time. Identity here is the natural key, `(component_id, attribute_id)`
+(`uq_sa_assoc`); `id` is an ordinary rowid, unlike `time_series_associations`' AUTOINCREMENT
+column, because nothing outside GridDB ever holds a reference to it that a rowid reuse could
+break.
+
+**Native tables** — `plant_associations` and `combined_cycle_associations` — model a
+relationship that exists only inside GridDB; no external store has an opinion about it, so
+there is no borrowed id to carry. These mint their own instead: `id INTEGER PRIMARY KEY
+AUTOINCREMENT`. Unlike a bare rowid, `AUTOINCREMENT` never reissues an id a delete has
+freed — SQLite tracks the highest id a table has ever handed out and always allocates past
+it — so a stored reference to row 47 either still means row 47 or fails to resolve; it can
+never silently land on a different, unrelated row that later reused the same number. The
+natural key — `UNIQUE (plant_id, entity_id)` on `plant_associations`, `UNIQUE (plant_id,
+entity_id, hrsg_index)` on `combined_cycle_associations` — is kept alongside the surrogate,
+so minting the id changes nothing about what identifies the relationship; it only adds a
+stable handle for a row that already had an identity.
+
+The split comes down to who is responsible for the id: `time_series_associations` preserves
+the identifier its origin store already assigned; the other three mint their own, because
+either the store gave no id (`supplemental_attribute_associations`) or the relationship
+exists only inside GridDB with no external store to have an opinion (`plant_associations`,
+`combined_cycle_associations`) — GridDB is the only source of truth for those ids, which is
+exactly why it uses `AUTOINCREMENT` to guarantee them, the same guarantee infrastore's own
+declaration relies on for `time_series_associations.id`.
+
+Confirmed on this branch: `AUTOINCREMENT` is legal on a SQLite `STRICT` table, and deleting
+the row holding the current maximum `id` in `plant_associations` (and, separately,
+`time_series_associations`) and inserting a new row does not reuse the freed value — the new
+row's `id` lands one past the highest ever issued, not one past what happens to be present.
+
+### Payload columns
+
+Beyond the link itself, most of the four carry columns that answer "which one, in what
+order":
+
+| Column | Table | Meaning |
+|---|---|---|
+| `group_index` | `plant_associations` | which sub-group of the plant the member belongs to — a shaft, penstock, point-of-common-coupling, or exclusion group, depending on the parent plant's own type |
+| `role` | `combined_cycle_associations` | `'CT'` or `'CA'` — whether the linked unit feeds the HRSG (combustion turbine, an input) or receives from it (an output) |
+| `hrsg_index` | `combined_cycle_associations` | which HRSG the linked unit feeds or receives from; part of the table's `UNIQUE (plant_id, entity_id, hrsg_index)` key, which is why the same unit can appear more than once — once per HRSG it participates in |
+| `component_type`, `attribute_type` | `supplemental_attribute_associations` | denormalized labels for the component's and attribute's concrete tables, carried so a query can filter by kind without joining back to `entities`/`supplemental_attributes` |
+| `owner_type` | `time_series_associations` | the owning component's concrete table name, denormalized for the same reason as above |
+| `owner_category`, `time_series_type` | `time_series_associations` | `TEXT`, holding the wire spelling directly (`'Component'`/`'SupplementalAttribute'`; `'SingleTimeSeries'` through `'Scenarios'`) — compare against the string, no decoding needed |
+| `name`, `resolution`, `interval`, `features_hash` | `time_series_associations` | together with `owner_id` and `owner_category`, form the tuple that actually identifies "which series" (`uq_ts_assoc`) |
+
+### Querying them
+
+Reconstruct a plant's membership by joining `plant_associations` back to the plant and to
+`entities`:
+
+```sql
+SELECT p.name AS plant_name, e.entity_table, pa.entity_id, pa.group_index
+FROM plant_associations pa
+JOIN plants p ON p.id = pa.plant_id
+JOIN entities e ON e.id = pa.entity_id
+WHERE p.name = 'Plant A'
+ORDER BY pa.group_index, pa.entity_id;
+```
+
+Find every CT/CA feeding a specific HRSG of a plant:
+
+```sql
+SELECT cca.entity_id, cca.role
+FROM combined_cycle_associations cca
+JOIN plants p ON p.id = cca.plant_id
+WHERE p.name = 'Plant A' AND cca.hrsg_index = 0
+ORDER BY cca.entity_id;
+```
+
+Both were run against a database built from `schema/schema.sql` + `triggers.sql` +
+`unit_registry.sql` + `views.sql` on this branch.
+
 ## Code generation
 
 Two independent generators project SiennaSchemas into this repo. Neither is authoritative
@@ -205,7 +393,7 @@ Hand-written, not generated: `schema/schema.sql` (production DDL) and `schema/tr
   foreign-key clauses, which properties live in the generic `attributes` table instead of a
   dedicated column, which are intentionally not persisted, and which hand-written columns
   have no schema property at all (so the drift gate doesn't flag them as missing).
-- **`schema/column_conventions.json`** — DB-owned column → `(quantity_type, unit)` map; the
+- **`schema/column_conventions.json`** — DB-owned column → `(quantity_kind, unit)` map; the
   input `generate_unit_registry.py` seeds `unit_conventions` from, alongside `Core/units.json`.
 - **`schema/coverage_decisions.json`** — a proposal (awaiting sign-off) recording, for every
   schema property with no column in `schema.sql`, what should happen to it (new column,

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Verify a built database's unit registry against its stored seal.
 
-Recomputes the canonical sha256 from the LIVE contents of quantity_types,
-allowed_units and unit_conventions, and compares it to the stored
-unit_management_metadata.unit_conventions_checksum row. Builds the canonical
-representation via _common.repr_from_rows, the same helper generate_unit_registry.py
-uses, so the two cannot drift apart; see _common.py's module docstring for the spec.
+Recomputes the canonical sha256 from the LIVE contents of quantity_kinds,
+allowed_units, unit_conventions and unit_basis_rules, and compares it to the
+stored unit_management_metadata.unit_conventions_checksum row. Builds the
+canonical representation via _common.repr_from_rows, the same helper
+generate_unit_registry.py uses, so the two cannot drift apart; see _common.py's
+module docstring for the spec.
 
 Usage: verify_unit_registry.py <database-path>
 Exit 0 on match, 1 on mismatch or missing seal.
@@ -22,7 +23,7 @@ def fetch_repr(conn):
     cur = conn.cursor()
 
     cur.execute(
-        "SELECT name, default_unit, dimension, description FROM quantity_types"
+        "SELECT name, default_unit, dimension, description FROM quantity_kinds"
     )
     qt_rows = (
         (
@@ -34,13 +35,14 @@ def fetch_repr(conn):
         for row in cur.fetchall()
     )
 
-    cur.execute("SELECT quantity_type, unit FROM allowed_units")
+    cur.execute("SELECT quantity_kind, unit FROM allowed_units")
     au_rows = ((row[0], row[1]) for row in cur.fetchall())
 
     cur.execute(
-        "SELECT table_name, column_name, quantity_type, unit, "
+        "SELECT table_name, column_name, quantity_kind, unit, "
         "discriminator_column, discriminator_value, "
-        "discriminator_column_2, discriminator_value_2, description "
+        "discriminator_column_2, discriminator_value_2, "
+        "base_power_ref, base_voltage_ref, description "
         "FROM unit_conventions"
     )
     uc_rows = (
@@ -54,11 +56,25 @@ def fetch_repr(conn):
             none_to_empty(row[6]),
             none_to_empty(row[7]),
             none_to_empty(row[8]),
+            none_to_empty(row[9]),
+            none_to_empty(row[10]),
         )
         for row in cur.fetchall()
     )
 
-    return repr_from_rows(qt_rows, au_rows, uc_rows)
+    cur.execute(
+        "SELECT quantity_kind, base_expression, description FROM unit_basis_rules"
+    )
+    ub_rows = (
+        (
+            row[0],
+            row[1],
+            none_to_empty(row[2]),
+        )
+        for row in cur.fetchall()
+    )
+
+    return repr_from_rows(qt_rows, au_rows, uc_rows, ub_rows)
 
 
 def stored_seal(conn):

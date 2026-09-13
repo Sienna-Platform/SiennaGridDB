@@ -3,14 +3,18 @@ SELECT
     uc.table_name,
     uc.column_name,
     uc.unit,
-    uc.quantity_type,
+    uc.quantity_kind,
     qt.dimension,
     uc.discriminator_column,
     uc.discriminator_value,
-    uc.description
+    uc.description,
+    uc.base_power_ref,
+    uc.base_voltage_ref,
+    ubr.base_expression
 FROM
     unit_conventions uc
-    JOIN quantity_types qt ON uc.quantity_type = qt.name
+    JOIN quantity_kinds qt ON uc.quantity_kind = qt.name
+    LEFT JOIN unit_basis_rules ubr ON uc.quantity_kind = ubr.quantity_kind
 ORDER BY
     uc.table_name,
     uc.column_name;

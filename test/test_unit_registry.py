@@ -1,7 +1,7 @@
 """Unit-registry test suite.
 
 Covers, positively and negatively: the build (row counts, FK integrity, seal
-presence, verify tool), seal honesty (tamper detection incl. quantity_types),
+presence, verify tool), seal honesty (tamper detection incl. quantity_kinds),
 seal enforcement (protected tables + no-op rerun), attribute unit validation
 (incl. the polymorphic NOT EXISTS regression), series-level time series, the
 hydro ``level_data_type`` CHECK, cost-payload power-units, and completeness
@@ -30,7 +30,7 @@ REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
 
 # Registry tables sealed against ad-hoc edits after the checksum row exists.
 SEALED_TABLES = [
-    "quantity_types",
+    "quantity_kinds",
     "allowed_units",
     "unit_conventions",
     "unit_management_metadata",
@@ -43,12 +43,14 @@ SEALED_TABLES = [
 COMPLETENESS_ALLOWLIST = {
     ("storage_technologies", "region"),
     ("supply_technologies", "region"),
-    # structural value columns; units live in time_series_metadata for series data
+    # structural value columns; units live on time_series_associations for series data
     ("static_time_series", "value"),
     # structural value column; units live in attribute conventions for supplemental attrs
     ("supplemental_attributes", "value"),
     # structural TYPE+value JSON store (like supplemental_attributes); no fixed unit
     ("plants", "value"),
+    # typed feature-map value column (infrastore mirror); features carry no unit
+    ("feature_sets", "value_float"),
     # non-binding sentinel ceiling, not unit-converted on the PSY side (no x-unit
     # in the schema; see schema.sql's facts_control_devices comment)
     ("facts_control_devices", "max_reactive_power"),
@@ -56,11 +58,11 @@ COMPLETENESS_ALLOWLIST = {
 
 
 # Helpers
-def insert_attribute(conn, entity_id, name, value, unit=None, quantity_type=None):
+def insert_attribute(conn, entity_id, name, value, unit=None, quantity_kind=None):
     conn.execute(
-        "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_type) "
+        "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_kind) "
         "VALUES (?, 'test', ?, ?, ?, ?)",
-        (entity_id, name, value, unit, quantity_type),
+        (entity_id, name, value, unit, quantity_kind),
     )
 
 
@@ -85,7 +87,7 @@ def run_verify(db_path):
 @pytest.mark.parametrize(
     "table, expected",
     [
-        ("quantity_types", EXPECTED_QUANTITY_TYPES),
+        ("quantity_kinds", EXPECTED_QUANTITY_TYPES),
         ("allowed_units", EXPECTED_ALLOWED_UNITS),
         ("unit_conventions", EXPECTED_UNIT_CONVENTIONS),
     ],
@@ -120,10 +122,10 @@ def test_verify_tool_passes_on_clean_db(built_db_path):
 
 
 # Seal honesty (tamper detection)
-def test_verify_detects_quantity_types_tamper(fresh_db, fresh_db_path):
+def test_verify_detects_quantity_kinds_tamper(fresh_db, fresh_db_path):
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
-        "UPDATE quantity_types SET default_unit = 'bogus' WHERE name = 'ActivePower'"
+        "UPDATE quantity_kinds SET default_unit = 'bogus' WHERE name = 'ActivePower'"
     )
     fresh_db.commit()
     fresh_db.close()
@@ -134,7 +136,7 @@ def test_verify_detects_quantity_types_tamper(fresh_db, fresh_db_path):
 
 def test_verify_detects_allowed_units_tamper(fresh_db, fresh_db_path):
     drop_seal_triggers(fresh_db)
-    fresh_db.execute("DELETE FROM allowed_units WHERE quantity_type = 'Angle'")
+    fresh_db.execute("DELETE FROM allowed_units WHERE quantity_kind = 'Angle'")
     fresh_db.commit()
     fresh_db.close()
     result = run_verify(fresh_db_path)
@@ -174,10 +176,10 @@ def test_seal_blocks_delete(fresh_db, table):
         fresh_db.execute(f"DELETE FROM {table}")
 
 
-def test_seal_blocks_update_quantity_types(fresh_db):
+def test_seal_blocks_update_quantity_kinds(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "UPDATE quantity_types SET default_unit = 'x' WHERE name = 'ActivePower'"
+            "UPDATE quantity_kinds SET default_unit = 'x' WHERE name = 'ActivePower'"
         )
 
 
@@ -199,10 +201,10 @@ def test_seal_blocks_update_metadata(fresh_db):
         )
 
 
-def test_seal_blocks_insert_quantity_types(fresh_db):
+def test_seal_blocks_insert_quantity_kinds(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT INTO quantity_types(name, default_unit, dimension) "
+            "INSERT INTO quantity_kinds(name, default_unit, dimension) "
             "VALUES ('Bogus', 'x', 'x')"
         )
 
@@ -210,14 +212,14 @@ def test_seal_blocks_insert_quantity_types(fresh_db):
 def test_seal_blocks_insert_allowed_units(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT INTO allowed_units(quantity_type, unit) VALUES ('ActivePower', 'GW')"
+            "INSERT INTO allowed_units(quantity_kind, unit) VALUES ('ActivePower', 'GW')"
         )
 
 
 def test_seal_blocks_insert_unit_conventions(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT INTO unit_conventions(table_name, column_name, quantity_type, unit) "
+            "INSERT INTO unit_conventions(table_name, column_name, quantity_kind, unit) "
             "VALUES ('loads', 'bogus', 'ActivePower', 'MW')"
         )
 
@@ -237,10 +239,10 @@ def test_seal_blocks_insert_or_replace_metadata(fresh_db):
         )
 
 
-def test_seal_blocks_insert_or_replace_quantity_types(fresh_db):
+def test_seal_blocks_insert_or_replace_quantity_kinds(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
-            "INSERT OR REPLACE INTO quantity_types(name, default_unit, dimension) "
+            "INSERT OR REPLACE INTO quantity_kinds(name, default_unit, dimension) "
             "VALUES ('ActivePower', 'x', 'x')"
         )
 
@@ -297,7 +299,7 @@ def test_attribute_known_name_case_insensitive_accepted(fresh_db):
 def test_attribute_unknown_name_bad_pair_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
-        sqlite3.IntegrityError, match="vocabulary-valid unit and quantity_type"
+        sqlite3.IntegrityError, match="vocabulary-valid unit and quantity_kind"
     ):
         insert_attribute(fresh_db, 1, "mystery", "7.0", "bananas", "ActivePower")
 
@@ -321,7 +323,7 @@ def test_attribute_unknown_name_valid_pair_accepted(fresh_db):
     ],
 )
 def test_attribute_nonphysical_values_pass_without_units(fresh_db, value):
-    """text / bool / null values require no unit or quantity_type."""
+    """text / bool / null values require no unit or quantity_kind."""
     make_entity(fresh_db, 1)
     insert_attribute(fresh_db, 1, "some_flag", value, None, None)
     (count,) = fresh_db.execute(
@@ -334,14 +336,14 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
     """Regression for the scalar-subquery -> NOT EXISTS rewrite.
 
     A name with two discriminated registry rows must accept BOTH registered
-    (quantity_type, unit) pairs and reject a cross pair. No such name exists in
+    (quantity_kind, unit) pairs and reject a cross pair. No such name exists in
     the seed, so we synthesise one on an unsealed copy: register poly_attr under
     Duration/h and Duration/min (both are real allowed_units pairs).
     """
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
         "INSERT INTO unit_conventions"
-        "(table_name, column_name, quantity_type, unit, "
+        "(table_name, column_name, quantity_kind, unit, "
         " discriminator_column, discriminator_value) "
         "VALUES ('attributes', 'poly_attr', 'Duration', 'h', 'mode', 'A'), "
         "       ('attributes', 'poly_attr', 'Duration', 'min', 'mode', 'B')"
@@ -365,137 +367,235 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
         insert_attribute(fresh_db, 3, "poly_attr", "3.0", "s", "Duration")
 
 
-# --------------------------------------------------------------------------- #
-# Time series
-# --------------------------------------------------------------------------- #
-def test_static_time_series_without_metadata_rejected(fresh_db):
+# Time series (infrastore-mirror catalog)
+def _insert_association(
+    conn,
+    owner_id,
+    units=None,
+    quantity_kind=None,
+    uri="static:load-1",
+    owner_category="Component",
+    name="load",
+    assoc_id=None,
+):
+    # id is the store-minted id (AUTOINCREMENT); left to auto-assign unless a
+    # test needs a specific value (e.g. to force a collision).
+    columns = [
+        "owner_id", "owner_type", "owner_category", "time_series_type", "name",
+        "initial_timestamp", "resolution", "length", "units", "quantity_kind",
+        "uri", "data_hash", "features_hash",
+    ]
+    values = [
+        owner_id, "thing", owner_category, "SingleTimeSeries", name,
+        "2020-01-01T00:00:00", "PT1H", 24, units, quantity_kind,
+        uri, "01" * 32, "02" * 32,
+    ]
+    if assoc_id is not None:
+        columns.insert(0, "id")
+        values.insert(0, assoc_id)
+    placeholders = ", ".join(["?"] * len(values))
+    conn.execute(
+        f"INSERT INTO time_series_associations({', '.join(columns)}) "
+        f"VALUES ({placeholders})",
+        values,
+    )
+
+
+def test_static_time_series_without_association_rejected(fresh_db):
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="static_time_series.uuid must exist in time_series_metadata",
+        match=r"static_time_series\.uri must exist in time_series_associations",
     ):
         fresh_db.execute(
-            "INSERT INTO static_time_series(uuid, idx, value) VALUES ('u1', 0, 1.0)"
+            "INSERT INTO static_time_series(uri, timestep, value) "
+            "VALUES ('static:load-1', 0, 1.0)"
         )
 
 
-def test_static_time_series_with_metadata_accepted(fresh_db):
+def test_static_time_series_with_association_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('u1', 0, 1.0)"
+        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load-1', 0, 1.0)"
     )
     (count,) = fresh_db.execute(
-        "SELECT COUNT(*) FROM static_time_series WHERE uuid = 'u1'"
+        "SELECT COUNT(*) FROM static_time_series WHERE uri = 'static:load-1'"
     ).fetchone()
     assert count == 1
 
 
-def test_static_time_series_update_uuid_to_orphan_rejected(fresh_db):
+def test_static_time_series_update_uri_to_orphan_rejected(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uuid, idx, value) VALUES ('u1', 0, 1.0)"
+        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load-1', 0, 1.0)"
     )
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="static_time_series.uuid must exist in time_series_metadata",
+        match=r"static_time_series\.uri must exist in time_series_associations",
     ):
-        fresh_db.execute("UPDATE static_time_series SET uuid = 'orphan' WHERE uuid = 'u1'")
+        fresh_db.execute("UPDATE static_time_series SET uri = 'static:orphan'")
 
 
-def test_time_series_metadata_bad_pair_rejected(fresh_db):
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match="must be a registered pair in allowed_units",
-    ):
-        fresh_db.execute(
-            "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-            "VALUES ('u2', 'bananas', 'ActivePower')"
-        )
-
-
-def test_time_series_metadata_mixed_units_impossible(fresh_db):
-    """One metadata row per uuid (PRIMARY KEY): a second row for the same uuid
-    with a different unit cannot exist, so a series cannot carry mixed units."""
+def test_association_data_hash_optional(fresh_db):
+    """data_hash is the OPTIONAL integrity hash per the SiennaSchemas wire
+    form; uri is what locates the dense values."""
+    make_entity(fresh_db, 1)
     fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE|PRIMARY KEY"):
-        fresh_db.execute(
-            "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-            "VALUES ('u1', 'MVAr', 'ReactivePower')"
-        )
-
-
-def _insert_association(conn, uuid, units):
-    conn.execute(
         "INSERT INTO time_series_associations("
-        "time_series_uuid, time_series_type, initial_timestamp, resolution, "
-        "name, owner_id, owner_type, owner_category, features, metadata_uuid, units) "
-        "VALUES (?, 'Deterministic', '2020-01-01', 'PT1H', 'load', ?, 'thing', "
-        "'gen', '{}', 'm-uuid', ?)",
-        (uuid, 1, units),
+        "owner_id, owner_type, owner_category, time_series_type, name, "
+        "initial_timestamp, resolution, length, uri, features_hash) "
+        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'nohash', '2020-01-01T00:00:00', 'PT1H', 24, "
+        "'static:nohash', ?)",
+        ("02" * 32,),
     )
+    (stored,) = fresh_db.execute(
+        "SELECT data_hash FROM time_series_associations WHERE name = 'nohash'"
+    ).fetchone()
+    assert stored is None
 
 
-def test_association_units_contradiction_rejected(fresh_db):
+def test_association_registered_quantity_kind_bad_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="time_series_associations.units must equal time_series_metadata.unit",
+        match="registered .quantity_kind, unit. pair",
     ):
-        _insert_association(fresh_db, "u1", "MVAr")
+        _insert_association(fresh_db, 1, units="bananas", quantity_kind="ActivePower")
 
 
-def test_association_units_matching_accepted(fresh_db):
+def test_association_registered_quantity_kind_missing_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO time_series_metadata(uuid, unit, quantity_type) "
-        "VALUES ('u1', 'MW', 'ActivePower')"
-    )
-    _insert_association(fresh_db, "u1", "MW")
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="registered .quantity_kind, unit. pair",
+    ):
+        _insert_association(fresh_db, 1, units=None, quantity_kind="ActivePower")
+
+
+def test_association_registered_pair_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1, units="MW", quantity_kind="ActivePower")
     (count,) = fresh_db.execute(
         "SELECT COUNT(*) FROM time_series_associations WHERE units = 'MW'"
     ).fetchone()
     assert count == 1
 
 
-def test_association_units_null_accepted(fresh_db):
-    """NULL units skip the equality guard (column is deprecated/optional)."""
+def test_association_freeform_quantity_kind_accepted(fresh_db):
+    """quantity_kind is deliberately unconstrained (mirroring infrastore):
+    composite economic quantities pass with any unit spelling. Only a
+    REGISTERED quantity-type name pulls in the allowed_units guard."""
     make_entity(fresh_db, 1)
-    _insert_association(fresh_db, "u1", None)
+    _insert_association(fresh_db, 1, units="USD/MWh", quantity_kind="EnergyPrice2050")
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM time_series_associations WHERE quantity_kind = 'EnergyPrice2050'"
+    ).fetchone()
+    assert count == 1
+
+
+def test_association_null_units_and_kind_accepted(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
     (count,) = fresh_db.execute(
         "SELECT COUNT(*) FROM time_series_associations WHERE units IS NULL"
     ).fetchone()
     assert count == 1
 
 
-def test_association_units_non_null_no_metadata_accepted(fresh_db):
-    """Non-NULL units with NO metadata row for the uuid must be ACCEPTED.
-
-    Bulk loads insert the association before its time_series_metadata row, so a
-    missing metadata row is a valid transient state (the trigger's own message
-    says "or no time_series_metadata row exists" is acceptable). The guard only
-    fires when a metadata row EXISTS with a DIFFERENT unit.
-    """
+def test_association_uniqueness_null_resolution_enforced(fresh_db):
+    """The COALESCE index must reject a duplicate identity even when resolution
+    and interval are NULL (plain UNIQUE treats NULLs as distinct)."""
     make_entity(fresh_db, 1)
-    _insert_association(fresh_db, "no-such-uuid", "MW")
-    (count,) = fresh_db.execute(
-        "SELECT COUNT(*) FROM time_series_associations WHERE units = 'MW'"
+    fresh_db.execute(
+        "INSERT INTO time_series_associations("
+        "owner_id, owner_type, owner_category, time_series_type, name, "
+        "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:a', ?)",
+        ("04" * 32,),
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        fresh_db.execute(
+            "INSERT INTO time_series_associations("
+            "owner_id, owner_type, owner_category, time_series_type, name, "
+            "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:b', ?)",
+            ("04" * 32,),
+        )
+
+
+def test_association_owner_category_attribute_domain_enforced(fresh_db):
+    make_entity(fresh_db, 1)
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match=r"owner_id must exist in supplemental_attributes",
+    ):
+        _insert_association(fresh_db, 1, owner_category="SupplementalAttribute")
+    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    fresh_db.execute(
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
+    )
+    _insert_association(fresh_db, 2, owner_category="SupplementalAttribute")
+
+
+def test_association_categories_and_hashes_readable_directly(fresh_db):
+    """No decode view needed anymore: owner_category/time_series_type are
+    already wire-spelled TEXT, and the hash columns are already lowercase hex
+    TEXT, so a plain SELECT on the base table reads them as-is."""
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
+    row = fresh_db.execute(
+        "SELECT owner_category, time_series_type, data_hash, timestamps_hash "
+        "FROM time_series_associations"
     ).fetchone()
-    assert count == 1
+    assert row == ("Component", "SingleTimeSeries", "01" * 32, None)
 
 
-# --------------------------------------------------------------------------- #
+def test_association_id_round_trips(fresh_db):
+    """The store-minted id is what a cost payload references, spelled
+    `association_id` on the wire -- there is no second stored column or view
+    alias for it, just this one `id`."""
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1, assoc_id=4242)
+    (assoc_id,) = fresh_db.execute(
+        "SELECT id FROM time_series_associations"
+    ).fetchone()
+    assert assoc_id == 4242
+
+
+def test_association_id_uniqueness_enforced(fresh_db):
+    """Two associations cannot share an id: a cost payload referencing it must
+    resolve to exactly one series. `id` is the table's own PRIMARY KEY now, so
+    this is enforced there directly rather than by a separate index."""
+    make_entity(fresh_db, 1)
+    make_entity(fresh_db, 2)
+    _insert_association(fresh_db, 1, assoc_id=7, uri="static:a", name="a")
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        _insert_association(fresh_db, 2, assoc_id=7, uri="static:b", name="b")
+
+
+# test_association_id_is_required removed: the id is now the table's own
+# INTEGER PRIMARY KEY AUTOINCREMENT, so there is no longer an insert that
+# omits it -- SQLite always mints one. Nothing is left to reject.
+
+
+def test_scenarios_association_carries_scenario_count(fresh_db):
+    """Scenarios (time_series_type = 'Scenarios') requires scenario_count alongside count
+    per TimeSeries/Scenarios.json."""
+    make_entity(fresh_db, 1)
+    fresh_db.execute(
+        "INSERT INTO time_series_associations("
+        "owner_id, owner_type, owner_category, time_series_type, "
+        "name, initial_timestamp, resolution, horizon, interval, count, "
+        "scenario_count, uri, features_hash) "
+        "VALUES (1, 'thing', 'Component', 'Scenarios', 'scen', '2020-01-01T00:00:00', 'PT1H', "
+        "'PT24H', 'PT1H', 24, 10, 'static:scen', ?)",
+        ("06" * 32,),
+    )
+    row = fresh_db.execute(
+        "SELECT time_series_type, count, scenario_count FROM time_series_associations"
+    ).fetchone()
+    assert row == ("Scenarios", 24, 10)
+
+
 # Hydro level_data_type CHECK
 HYDRO_ENUM_VALUES = ["USABLE_VOLUME", "TOTAL_VOLUME", "HEAD", "ENERGY"]
 
@@ -590,7 +690,7 @@ def test_transmission_line_r_text_rejected_under_strict(fresh_db):
 def test_transmission_line_discriminated_registry_rows(db):
     """r/x/b/g each carry two discriminated rows (COMPONENT_BASE + NATURAL_UNITS)."""
     rows = db.execute(
-        "SELECT column_name, discriminator_value, quantity_type, unit "
+        "SELECT column_name, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'transmission_lines' "
         "AND column_name IN ('r', 'x', 'b', 'g') "
         "AND discriminator_column = 'parameter_units' "
@@ -916,7 +1016,7 @@ def test_completeness_all_physical_columns_registered_or_allowlisted(db):
     # Registry/metadata/view internals excluded from the physical-column scan.
     registry_internals = {
         "unit_conventions",
-        "quantity_types",
+        "quantity_kinds",
         "allowed_units",
         "unit_management_metadata",
         "sqlite_sequence",
@@ -1197,7 +1297,7 @@ def test_merged_hvdc_columns_registered(db):
     variant-specific fields live in attributes instead."""
     rows = dict(
         db.execute(
-            "SELECT column_name, quantity_type || '/' || unit FROM unit_conventions "
+            "SELECT column_name, quantity_kind || '/' || unit FROM unit_conventions "
             "WHERE table_name='two_terminal_hvdc_lines'"
         ).fetchall()
     )
@@ -1249,7 +1349,7 @@ def test_merged_hvdc_columns_registered(db):
         # Unit depends on a basis choice or a sibling control mode. A convention's
         # discriminator_column names a sibling *column*, which an attributes row
         # does not have, so these stay unregistered and each row carries its own
-        # unit/quantity_type (validated against allowed_units by the insert trigger).
+        # unit/quantity_kind (validated against allowed_units by the insert trigger).
         ("r", None),
         ("rectifier_rc", None),
         ("scheduled_dc_voltage", None),
@@ -1265,7 +1365,7 @@ def test_merged_hvdc_columns_registered(db):
 )
 def test_demoted_hvdc_attribute_conventions(db, name, expected):
     rows = db.execute(
-        "SELECT quantity_type || '/' || unit FROM unit_conventions "
+        "SELECT quantity_kind || '/' || unit FROM unit_conventions "
         "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
         (name,),
     ).fetchall()
@@ -1290,7 +1390,7 @@ def test_demoted_hvdc_attribute_conventions(db, name, expected):
 )
 def test_thermal_multistart_attribute_conventions(db, name, expected):
     rows = db.execute(
-        "SELECT quantity_type || '/' || unit FROM unit_conventions "
+        "SELECT quantity_kind || '/' || unit FROM unit_conventions "
         "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
         (name,),
     ).fetchall()
@@ -1329,13 +1429,130 @@ def test_interconnecting_converter_setpoints_two_discriminator(db):
     voltage-mode rows carry a second discriminator (parameter_units) so pu vs kV is
     also explicit."""
     rows = set(db.execute(
-        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_type, unit "
+        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name='interconnecting_converters' "
         "AND column_name IN ('dc_setpoint','ac_setpoint')"
     ).fetchall())
     assert ('dc_setpoint','DC_POWER',None,'ActivePower','MW') in rows
     assert ('dc_setpoint','DC_VOLTAGE','COMPONENT_BASE','Voltage','pu') in rows
     assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
+
+
+# Basis resolvability invariant: every pu convention names a unit_basis_rules
+# entry and every base ref resolves to a real, reachable column.
+# generate_unit_registry.py does not validate this, so this is the only check
+# that catches a typo'd ref or a new pu column with no rule.
+ATTRIBUTES_BASE_REF_EXEMPT = {("attributes", "magnitude"), ("attributes", "voltage_limits")}
+
+
+def _table_exists(conn, table):
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone() is not None
+
+
+def _is_entity_subtype(conn, table):
+    """True if table.id is itself an FK to entities(id) -- the table-per-type
+    pattern every concrete entity table follows."""
+    return any(
+        fk[2] == "entities" and fk[3] == "id" and fk[4] == "id"
+        for fk in conn.execute(f"PRAGMA foreign_key_list({table})")
+    )
+
+
+def _resolves_ref(conn, table, ref):
+    """Resolve a base_power_ref/base_voltage_ref path.
+
+    No '->': a same-row column, checked directly. With '->': a chain of FK
+    hops ``local_col->table.col[->table.col...]``; each hop's local column
+    must be a genuine FK on the current table, targeting either the named
+    table directly or ``entities`` when the named table is itself an
+    entities-subtype (id REFERENCES entities(id)) -- the table-per-type
+    pattern arcs.from_id/to_id use (they FK to entities; the concrete subtype
+    is resolved by entity_type/application convention, not a row-level FK to
+    the concrete table, e.g. arc endpoints are always balancing_topologies in
+    practice but the FK itself only promises "some entity"). The final
+    segment names the base column itself, which must exist as a real column
+    (no FK requirement) on the last table in the chain.
+    """
+    if "->" not in ref:
+        return ref in _table_columns(conn, table)
+    parts = ref.split("->")
+    current_table = table
+    local_col = parts[0]
+    for hop in parts[1:]:
+        target_table, target_col = hop.split(".", 1)
+        if not _table_exists(conn, target_table):
+            return False
+        fks = list(conn.execute(f"PRAGMA foreign_key_list({current_table})"))
+        matches = [fk for fk in fks if fk[3] == local_col]
+        if not matches:
+            return False
+        direct = any(fk[2] == target_table for fk in matches)
+        polymorphic = any(fk[2] == "entities" for fk in matches) and _is_entity_subtype(
+            conn, target_table
+        )
+        if not (direct or polymorphic):
+            return False
+        current_table = target_table
+        local_col = target_col
+    return target_col in _table_columns(conn, current_table)
+
+
+def test_pu_conventions_have_resolvable_basis(db):
+    """THE resolvability invariant. For every unit='pu' convention (excluding
+    the two documented attributes exemptions): (a) a unit_basis_rules row
+    exists for its quantity_kind, (b) it names at least one base ref, and (c)
+    every base_power_ref/base_voltage_ref it declares resolves."""
+    rows = db.execute(
+        "SELECT table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref "
+        "FROM unit_conventions WHERE unit = 'pu'"
+    ).fetchall()
+    assert rows, "no pu conventions found -- fixture/schema regression"
+
+    rule_types = {r[0] for r in db.execute("SELECT quantity_kind FROM unit_basis_rules")}
+
+    exempt_seen = set()
+    failures = []
+    for table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref in rows:
+        key = (table_name, column_name)
+        if table_name == "attributes":
+            exempt_seen.add(key)
+            if key not in ATTRIBUTES_BASE_REF_EXEMPT:
+                failures.append(
+                    f"{table_name}.{column_name}: pu attributes row not in the "
+                    "documented base-ref exemption allowlist"
+                )
+            continue
+
+        if quantity_kind not in rule_types:
+            failures.append(
+                f"{table_name}.{column_name}: no unit_basis_rules row for "
+                f"quantity_kind={quantity_kind}"
+            )
+
+        if base_power_ref is None and base_voltage_ref is None:
+            failures.append(
+                f"{table_name}.{column_name}: pu row carries neither "
+                "base_power_ref nor base_voltage_ref"
+            )
+
+        for label, ref in (
+            ("base_power_ref", base_power_ref),
+            ("base_voltage_ref", base_voltage_ref),
+        ):
+            if ref is None:
+                continue
+            if not _resolves_ref(db, table_name, ref):
+                failures.append(
+                    f"{table_name}.{column_name}.{label}={ref!r} does not resolve"
+                )
+
+    assert failures == [], "\n".join(failures)
+    assert exempt_seen == ATTRIBUTES_BASE_REF_EXEMPT, (
+        "attributes pu rows exempt from base refs must be EXACTLY "
+        f"{ATTRIBUTES_BASE_REF_EXEMPT}, got {exempt_seen}"
+    )
 
 
 # parameter_units CHECK constraint, on every table that carries the column (derived
@@ -1529,7 +1746,7 @@ def test_parameter_units_rejects_a_third_value(fresh_db, table):
 # admittance_units value, no per-unit option.
 def test_fixed_admittance_admittance_units_conventions(db):
     rows = db.execute(
-        "SELECT column_name, discriminator_column, discriminator_value, quantity_type, unit "
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'fixed_admittance' "
         "AND column_name IN ('y_g', 'y_b')"
     ).fetchall()
@@ -1558,7 +1775,7 @@ def test_fixed_admittance_rejects_non_shunt_basis(fresh_db, value):
 # arm per admittance_units value, across Y_increase/solved_admittance/admittance_limits.
 def test_switched_admittance_admittance_units_conventions(db):
     rows = db.execute(
-        "SELECT column_name, discriminator_column, discriminator_value, quantity_type, unit "
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'switched_admittance' "
         "AND column_name IN ('Y_increase', 'solved_admittance', 'admittance_limits')"
     ).fetchall()
@@ -1603,14 +1820,14 @@ def test_switched_admittance_step_fields_round_trip(fresh_db):
 def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(fresh_db):
     """The generic attributes unit-validation trigger, exercised with the exact
     y_b/y_g two-arm SHAPE (same discriminator_value, differing only by
-    quantity_type) rather than a generic stand-in: no attributes name in the
+    quantity_kind) rather than a generic stand-in: no attributes name in the
     real seed has two arms (y_b/y_g are physical columns, not attributes
     rows), so register a synthetic one with that exact shape and confirm both
     arms are accepted and a cross pair is rejected."""
     drop_seal_triggers(fresh_db)
     fresh_db.execute(
         "INSERT INTO unit_conventions"
-        "(table_name, column_name, quantity_type, unit, "
+        "(table_name, column_name, quantity_kind, unit, "
         " discriminator_column, discriminator_value) "
         "VALUES ('attributes', 'shunt_susceptance_arm', 'Susceptance', 'S', 'mode', 'NATURAL'), "
         "       ('attributes', 'shunt_susceptance_arm', 'ReactivePower', 'MVAr', 'mode', 'NATURAL')"
@@ -1629,3 +1846,152 @@ def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(
         sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(fresh_db, 3, "shunt_susceptance_arm", "0.01", "MW", "ActivePower")
+
+
+# time_series_associations unit_system (infrastore mirror: lowercase spellings,
+# deliberately no CHECK -- a third basis must not require a format bump)
+def test_association_unit_system_round_trips_lowercase(fresh_db):
+    make_entity(fresh_db, 1)
+    fresh_db.execute(
+        "INSERT INTO time_series_associations("
+        "owner_id, owner_type, owner_category, time_series_type, name, "
+        "unit_system, uri, features_hash) "
+        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'v', 'component_base', 'static:v', ?)",
+        ("07" * 32,),
+    )
+    (system,) = fresh_db.execute(
+        "SELECT unit_system FROM time_series_associations WHERE name = 'v'"
+    ).fetchone()
+    assert system == "component_base"
+
+
+# unit_basis_rules seal protection
+def test_unit_basis_rules_update_blocked(fresh_db):
+    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+        fresh_db.execute(
+            "UPDATE unit_basis_rules SET base_expression = 'bogus' WHERE quantity_kind = 'Voltage'"
+        )
+
+
+def test_unit_basis_rules_delete_blocked(fresh_db):
+    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+        fresh_db.execute("DELETE FROM unit_basis_rules WHERE quantity_kind = 'Voltage'")
+
+
+def test_unit_basis_rules_post_seal_insert_blocked(fresh_db):
+    with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
+        fresh_db.execute(
+            "INSERT INTO unit_basis_rules(quantity_kind, base_expression) "
+            "VALUES ('ActivePower', 'base_power')"
+        )
+
+
+# column_units view: base refs exposed + row-count parity with unit_conventions
+def test_column_units_view_exposes_base_ref_columns(db):
+    cols = [row[1] for row in db.execute("PRAGMA table_info(column_units)")]
+    assert {"base_power_ref", "base_voltage_ref", "base_expression"} <= set(cols)
+
+
+def test_column_units_view_row_count_matches_unit_conventions(db):
+    """The LEFT JOIN to unit_basis_rules must not drop NATURAL_UNITS (and other
+    non-pu) rows, which have no unit_basis_rules match."""
+    (view_count,) = db.execute("SELECT COUNT(*) FROM column_units").fetchone()
+    (conv_count,) = db.execute("SELECT COUNT(*) FROM unit_conventions").fetchone()
+    assert view_count == conv_count == EXPECTED_UNIT_CONVENTIONS
+
+
+def test_parameter_units_arms_share_quantity_kind(db):
+    """For any column discriminated by parameter_units (whether as the primary
+    discriminator_column, or as discriminator_column_2 on a column already
+    multiplexed by a sibling like dc_control), the COMPONENT_BASE (pu) arm's
+    quantity_kind must be one of the NATURAL_UNITS arm(s)' quantity_kinds.
+
+    Nothing else stops a pu arm's quantity_kind from silently diverging from
+    its physical meaning (e.g.
+    Resistance -> Voltage on transmission_lines.r), because (Voltage, pu) is
+    independently a legal vocabulary pair -- changing ONLY the pu arm's
+    quantity_kind, leaving its NATURAL_UNITS sibling as Resistance/ohm, is
+    exactly the cross-arm mismatch this test catches, entirely from the DB
+    (no hardcoded column-name list). A subset check (not equality) is
+    deliberate: fixed_admittance/switched_admittance's y_b/y_g legitimately
+    carry TWO NATURAL_UNITS quantity_kinds for one COMPONENT_BASE quantity
+    (the two-arm regression -- Susceptance/S AND ReactivePower/MVAr both
+    represent the same COMPONENT_BASE Susceptance arm), which equality would
+    wrongly flag.
+
+    Known scope limit: this cannot see (a) a mutation that changes BOTH arms
+    of a column consistently, or (b) a pu-only column with no parameter_units
+    discriminator at all (three_winding_transformers.r_12 and its pairwise
+    siblings, two_winding_transformers.magnetizing_shunt.*) since there is no
+    sibling arm to compare against. Closing that residual would need either a
+    maintained name->quantity_kind map -- the brittle list this project wants
+    to avoid -- or a schema-level dimensional annotation that does not exist
+    today.
+    """
+    rows = db.execute(
+        "SELECT table_name, column_name, discriminator_column, discriminator_value, "
+        "discriminator_column_2, discriminator_value_2, quantity_kind "
+        "FROM unit_conventions "
+        "WHERE discriminator_column = 'parameter_units' OR discriminator_column_2 = 'parameter_units'"
+    ).fetchall()
+    by_group = {}
+    for table_name, column_name, disc_col, disc_val, _disc_col2, disc_val2, quantity_kind in rows:
+        if disc_col == "parameter_units":
+            key, basis = (table_name, column_name), disc_val
+        else:
+            # parameter_units is the SECOND discriminator (interconnecting_converters
+            # dc_setpoint/ac_setpoint): group per primary discriminator value, since
+            # DC_POWER and DC_VOLTAGE are legitimately different quantities.
+            key, basis = (table_name, column_name, disc_val), disc_val2
+        by_group.setdefault(key, {"COMPONENT_BASE": set(), "NATURAL_UNITS": set()})
+        by_group[key][basis].add(quantity_kind)
+
+    assert by_group, "no parameter_units-discriminated columns found -- fixture regression"
+    mismatched = {
+        key: bases
+        for key, bases in by_group.items()
+        if bases["COMPONENT_BASE"] and bases["NATURAL_UNITS"]
+        and not bases["COMPONENT_BASE"] <= bases["NATURAL_UNITS"]
+    }
+    assert mismatched == {}, f"parameter_units arms disagree on quantity_kind: {mismatched}"
+
+
+def test_association_array_shape_round_trips(fresh_db):
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
+    fresh_db.execute(
+        "UPDATE time_series_associations SET array_shape = '[24, 3]' "
+        "WHERE id = 1"
+    )
+    (shape,) = fresh_db.execute(
+        "SELECT array_shape FROM time_series_associations WHERE id = 1"
+    ).fetchone()
+    assert shape == "[24, 3]"
+
+
+def test_association_array_shape_rejects_non_array(fresh_db):
+    """array_shape must be a JSON array; a bare number is malformed data,
+    not a shape."""
+    make_entity(fresh_db, 1)
+    _insert_association(fresh_db, 1)
+    with pytest.raises(sqlite3.IntegrityError):
+        fresh_db.execute(
+            "UPDATE time_series_associations SET array_shape = '24' "
+            "WHERE id = 1"
+        )
+
+
+def test_feature_set_rejects_reserved_key(fresh_db):
+    """The wire schemas reserve the catalog's own field names as feature keys;
+    the DB CHECK is the only enforcement at this layer."""
+    with pytest.raises(sqlite3.IntegrityError):
+        fresh_db.execute(
+            "INSERT INTO feature_sets(key, value_kind, value_str, features_hash) "
+            "VALUES ('association_id', 'str', 'x', ?)",
+            ("03" * 32,),
+        )
+    fresh_db.execute(
+        "INSERT INTO feature_sets(key, value_kind, value_str, features_hash) "
+        "VALUES ('scenario', 'str', 'high-load', ?)",
+        ("03" * 32,),
+    )
