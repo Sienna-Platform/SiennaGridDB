@@ -32,8 +32,6 @@ Read this before building on it:
 - **Roughly half the data model is typed.** 44 of 96 upstream components have a table.
   Dynamics has none; services/reserves and the investment policy layer have none. See the
   open coverage issue.
-- **No converter.** Nothing loads a PowerSystems `System` into these tables or back. The
-  bridge is deliberately out of scope for 0.1.
 - **The unit registry is the load-bearing deliverable** — 405 column conventions, sealed
   and tamper-guarded, readable through the `column_units` view as an authoritative
   `(table, column) -> (quantity_kind, unit, basis rule)` map.
