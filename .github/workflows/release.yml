@@ -39,9 +39,38 @@ jobs:
         run: |
           name="sienna-griddb-${GITHUB_REF_NAME}"
           mkdir -p "dist/$name"
-          cp -r schema scripts README.md LICENSE .justfile "dist/$name/"
+          # CHANGELOG ships too: it carries the schema version and the known
+          # limitations a consumer needs before building on this.
+          cp -r schema scripts README.md CHANGELOG.md LICENSE .justfile "dist/$name/"
           tar -czf "$name.tar.gz" -C dist "$name"
-          tar -tzf "$name.tar.gz" | head -5
+          echo "Top-level members:"
+          tar -tzf "$name.tar.gz" | awk -F/ '{print $1}' | sort -u
+
+      - name: Assert the tarball is consumable
+        # A tarball whose members unpack into the caller's working directory is
+        # unusable by anything extracting into a shared path, and shipping the
+        # repo's own tooling bloats the artifact with things no consumer runs.
+        # Both are defects SiennaSchemas' first release actually shipped.
+        run: |
+          name="sienna-griddb-${GITHUB_REF_NAME}"
+          roots=$(tar -tzf "$name.tar.gz" | awk -F/ '{print $1}' | sort -u)
+          if [ "$roots" != "$name" ]; then
+            echo "::error::tarball must unpack into a single top-level directory named $name, got: $roots" >&2
+            exit 1
+          fi
+          for internal in .claude .github test pyproject.toml; do
+            if tar -tzf "$name.tar.gz" | grep -q "^$name/$internal"; then
+              echo "::error::internal tooling $internal must not ship in the release tarball" >&2
+              exit 1
+            fi
+          done
+          # The documented entry point has to be in the artifact that documents it.
+          for required in schema/schema.sql schema/unit_registry.sql scripts/verify_unit_registry.py README.md CHANGELOG.md .justfile; do
+            if ! tar -tzf "$name.tar.gz" | grep -q "^$name/$required$"; then
+              echo "::error::$required missing from the release tarball" >&2
+              exit 1
+            fi
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
