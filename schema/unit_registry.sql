@@ -420,6 +420,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('thermal_generators', 'reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial reactive power setpoint in MVAr'),
     ('thermal_generators', 'reactive_power_limits', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'JSON {min, max}, per-unit on the row''s base_power'),
     ('thermal_generators', 'reactive_power_limits', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'JSON {min, max} in MVAr'),
+    ('thermal_generators', 'switching_times', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'JSON {up, down}'),
     ('thermal_generators', 'time_limits', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'JSON {up, down}'),
     ('three_winding_transformers', 'base_power_12', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'Base power the primary-secondary pair''s per-unit impedance resolves against'),
     ('three_winding_transformers', 'base_power_23', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'Base power the secondary-tertiary pair''s per-unit impedance resolves against'),
@@ -547,4 +548,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'ab9137a875d33a3278f89af3ad2a0074d9aba82477a3c1c1a43ff11114b4096b', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', 'cf45a95be0c0ccf05c178b6632a579f184d8b95d4b94d49ab0778fd6ba52de32', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
