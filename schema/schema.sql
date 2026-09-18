@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 1; -- first released schema version; bump on every schema or registry change
+PRAGMA user_version = 2; -- first released schema version; bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -348,6 +348,7 @@ CREATE TABLE thermal_generators (
     reactive_power_limits JSON NULL, -- {"min": ..., "max": ...}; Units: per power_units
     ramp_limits JSON NULL, -- {"up": ..., "down": ...}; Units: per power_units
     time_limits JSON NULL, -- {"up": ..., "down": ...}, minutes
+    switching_times JSON NULL, -- {"up": ..., "down": ...}, minutes
     available BOOLEAN NOT NULL DEFAULT TRUE,
     status TEXT NOT NULL CHECK (status IN ('OFFLINE', 'ONLINE', 'STARTUP', 'SHUTDOWN')),
     commitment_mode TEXT NOT NULL DEFAULT 'COMMITTED'
