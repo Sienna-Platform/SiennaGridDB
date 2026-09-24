@@ -1,0 +1,24 @@
+{
+  "name": "@sienna-platform/griddb-tools",
+  "version": "0.1.0",
+  "description": "Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database",
+  "type": "module",
+  "license": "BSD-3-Clause",
+  "engines": { "node": ">=22" },
+  "files": ["dist", "data"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "bin": { "griddb-tools": "./dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && vitest run"
+  },
+  "dependencies": { "better-sqlite3": "^12.4.1" },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
