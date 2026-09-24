@@ -1,0 +1,22 @@
+name = "SiennaGridDBTools"
+uuid = "5d0a7e39-3b7c-4b52-9f0e-6f0c2c1e8a41"
+version = "0.1.0"
+authors = ["Sienna-Platform"]
+
+[deps]
+DBInterface = "a10d1c49-ce27-4219-8d33-6db1a4562965"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+SQLite = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
+
+[weakdeps]
+PowerOpenAPIModels = "0730f07c-cff6-4c3b-a9df-c546153be50a"
+
+[extensions]
+SiennaGridDBToolsPowerOpenAPIModelsExt = "PowerOpenAPIModels"
+
+[compat]
+DBInterface = "2.5"
+JSON = "1"
+PowerOpenAPIModels = "0.1"
+SQLite = "1.6"
+julia = "1.11"
