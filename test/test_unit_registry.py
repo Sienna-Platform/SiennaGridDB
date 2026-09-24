@@ -21,8 +21,8 @@ import pytest
 from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
-EXPECTED_QUANTITY_TYPES = 41
-EXPECTED_ALLOWED_UNITS = 67
+EXPECTED_QUANTITY_TYPES = 42
+EXPECTED_ALLOWED_UNITS = 69
 EXPECTED_UNIT_CONVENTIONS = 420
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
@@ -1780,7 +1780,7 @@ def test_switched_admittance_admittance_units_conventions(db):
         "AND column_name IN ('Y_increase', 'solved_admittance', 'admittance_limits')"
     ).fetchall()
     assert set(rows) == {
-        ("Y_increase", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
+        ("Y_increase", "admittance_units", "NATURAL_UNITS", "Admittance", "S"),
         ("Y_increase", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
         ("solved_admittance", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
         ("solved_admittance", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),

@@ -9,6 +9,7 @@ PRAGMA foreign_keys = ON;
 INSERT INTO quantity_kinds (name, default_unit, dimension, description) VALUES
     ('ActivePower', 'MW', '{"L":2,"M":1,"T":-3}', 'Active (real) power'),
     ('ActivePowerChangeRate', 'MW/min', '{"L":2,"M":1,"T":-4}', 'Rate of change of active power (ramp)'),
+    ('Admittance', 'S', '{"I":2,"L":-2,"M":-1,"T":3}', 'Admittance (complex conductance + j susceptance)'),
     ('Angle', 'rad', '{}', 'Angle (allowed units rad and deg)'),
     ('ApparentPower', 'MVA', '{"L":2,"M":1,"T":-3}', 'Apparent power'),
     ('CO2Emissions', 't/MMBtu', '{"Btu":-1,"M":1}', 'CO2 emission rate (mass per unit of fuel energy)'),
@@ -58,6 +59,8 @@ INSERT INTO allowed_units (quantity_kind, unit) VALUES
     ('ActivePower', 'pu'),
     ('ActivePowerChangeRate', 'MW/min'),
     ('ActivePowerChangeRate', 'pu/min'),
+    ('Admittance', 'S'),
+    ('Admittance', 'pu'),
     ('Angle', 'deg'),
     ('Angle', 'rad'),
     ('ApparentPower', 'MVA'),
@@ -387,7 +390,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('supply_technologies', 'time_limits', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'JSON {up, down} time limits'),
     ('supply_technologies', 'unit_size', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Unit nameplate capacity'),
     ('switched_admittance', 'Y_increase', 'ReactivePower', 'MVAr', 'admittance_units', 'COMPONENT_MVAR', NULL, NULL, NULL, NULL, 'Per-step admittance increment in the PSS/E form: MVAr at 1.0 pu voltage'),
-    ('switched_admittance', 'Y_increase', 'Susceptance', 'S', 'admittance_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Per-step admittance increment in siemens'),
+    ('switched_admittance', 'Y_increase', 'Admittance', 'S', 'admittance_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Per-step admittance increment in siemens'),
     ('switched_admittance', 'admittance_limits', 'ReactivePower', 'MVAr', 'admittance_units', 'COMPONENT_MVAR', NULL, NULL, NULL, NULL, 'Admittance limits (JSON min/max) in the PSS/E form: MVAr at 1.0 pu voltage'),
     ('switched_admittance', 'admittance_limits', 'Susceptance', 'S', 'admittance_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Admittance limits (JSON min/max) in siemens'),
     ('switched_admittance', 'control_mode', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Switched-shunt control mode'),
@@ -564,4 +567,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'acd084e643a828bef2496a5c5cc9c14cd4e8a9078cec096699fddc8e40e073c6', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', 'd9810b38c8fd2836c03b3bb2936e7f652394c8cd7ed5576d34e7073674dcd80f', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

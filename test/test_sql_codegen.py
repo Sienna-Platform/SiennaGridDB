@@ -128,6 +128,7 @@ def test_branch_parameter_pu_pairs_in_vocabulary(fresh_db):
         ("Reactance", "pu"),
         ("Impedance", "pu"),
         ("Susceptance", "pu"),
+        ("Admittance", "pu"),
         ("Conductance", "pu"),
         ("Voltage", "pu"),
         ("ActivePower", "pu"),
