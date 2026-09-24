@@ -1,0 +1,3506 @@
+{
+  "associations": [
+    {
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "component_id"
+        },
+        {
+          "encode": "text",
+          "path": "component_type"
+        },
+        {
+          "encode": "int",
+          "path": "attribute_id"
+        },
+        {
+          "encode": "text",
+          "path": "attribute_type"
+        }
+      ],
+      "row_sql": "INSERT INTO supplemental_attribute_associations (component_id, component_type, attribute_id, attribute_type) VALUES (?, ?, ?, ?)",
+      "section": "supplemental_attribute_associations"
+    },
+    {
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "plant_id"
+        },
+        {
+          "encode": "int",
+          "path": "entity_id"
+        },
+        {
+          "encode": "int",
+          "path": "group_index"
+        }
+      ],
+      "row_sql": "INSERT INTO plant_associations (plant_id, entity_id, group_index) VALUES (?, ?, ?)",
+      "section": "plant_associations"
+    },
+    {
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "plant_id"
+        },
+        {
+          "encode": "int",
+          "path": "entity_id"
+        },
+        {
+          "encode": "text",
+          "path": "role"
+        },
+        {
+          "encode": "int",
+          "path": "hrsg_index"
+        }
+      ],
+      "row_sql": "INSERT INTO combined_cycle_associations (plant_id, entity_id, role, hrsg_index) VALUES (?, ?, ?, ?)",
+      "section": "combined_cycle_associations"
+    },
+    {
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "trading_hub_id"
+        },
+        {
+          "encode": "int",
+          "path": "entity_id"
+        }
+      ],
+      "row_sql": "INSERT INTO trading_hub_associations (trading_hub_id, entity_id) VALUES (?, ?)",
+      "section": "trading_hub_associations"
+    }
+  ],
+  "attribute_sql": "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) VALUES (?, ?, ?, ?, ?, ?)",
+  "components": {
+    "ACBus": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "area"
+        },
+        {
+          "encode": "real",
+          "path": "base_voltage"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'ACBus')",
+      "gaps": [
+        "angle",
+        "available",
+        "bustype",
+        "load_zone",
+        "magnitude",
+        "number",
+        "voltage_limits"
+      ],
+      "rank": 1,
+      "row_sql": "INSERT INTO balancing_topologies (id, name, area, base_voltage) VALUES (?, ?, ?, ?)",
+      "skip": [],
+      "table": "balancing_topologies"
+    },
+    "AggregateTransportTechnology": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "power_systems_type"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "capital_costs"
+        },
+        {
+          "encode": "json",
+          "path": "financial_data"
+        },
+        {
+          "encode": "real",
+          "path": "unit_size"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'AggregateTransportTechnology')",
+      "gaps": [
+        "capacity_limits",
+        "end_region",
+        "line_loss",
+        "start_region"
+      ],
+      "rank": 0,
+      "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, ?)",
+      "skip": [],
+      "table": "transport_technologies"
+    },
+    "Arc": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "int",
+          "path": "from_id"
+        },
+        {
+          "encode": "int",
+          "path": "to_id"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'arcs', 'Arc')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO arcs (id, from_id, to_id) VALUES (?, ?, ?)",
+      "skip": [],
+      "table": "arcs"
+    },
+    "Area": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'planning_regions', 'Area')",
+      "gaps": [
+        "base_power",
+        "load_response",
+        "peak_active_power",
+        "peak_reactive_power",
+        "power_units"
+      ],
+      "rank": 0,
+      "row_sql": "INSERT INTO planning_regions (id, name) VALUES (?, ?)",
+      "skip": [],
+      "table": "planning_regions"
+    },
+    "AreaInterchange": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "real",
+          "path": "flow_limits.from_to"
+        },
+        {
+          "encode": "real",
+          "path": "flow_limits.to_from"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_interchanges', 'AreaInterchange')",
+      "gaps": [
+        "active_power_flow",
+        "available",
+        "from_area",
+        "to_area"
+      ],
+      "rank": 1,
+      "row_sql": "INSERT INTO transmission_interchanges (id, name, max_flow_from, max_flow_to, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "transmission_interchanges"
+    },
+    "DCBus": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "area"
+        },
+        {
+          "encode": "real",
+          "path": "base_voltage"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'DCBus')",
+      "gaps": [
+        "available",
+        "load_zone",
+        "magnitude",
+        "number",
+        "voltage_limits"
+      ],
+      "rank": 1,
+      "row_sql": "INSERT INTO balancing_topologies (id, name, area, base_voltage) VALUES (?, ?, ?, ?)",
+      "skip": [],
+      "table": "balancing_topologies"
+    },
+    "DemandRequirement": {
+      "attributes": [
+        {
+          "field": "unserved_demand_curve",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "value_of_lost_load",
+          "quantity_kind": "CostPerEnergy",
+          "unit": "USD/MWh"
+        }
+      ],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "region"
+        },
+        {
+          "encode": "text",
+          "path": "power_systems_type"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'demand_technologies', 'DemandRequirement')",
+      "gaps": [
+        "conformity",
+        "growth_rate",
+        "new_construction_year",
+        "new_demand_mw"
+      ],
+      "rank": 0,
+      "row_sql": "INSERT INTO demand_technologies (id, name, available, region, power_systems_type) VALUES (?, ?, COALESCE(?, TRUE), ?, ?)",
+      "skip": [],
+      "table": "demand_technologies"
+    },
+    "DiscreteControlledACBranch": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "real",
+          "path": "r"
+        },
+        {
+          "encode": "real",
+          "path": "x"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "text",
+          "path": "discrete_branch_type"
+        },
+        {
+          "encode": "text",
+          "path": "branch_status"
+        },
+        {
+          "encode": "text",
+          "path": "normal_branch_status"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'discrete_controlled_ac_branches', 'DiscreteControlledACBranch')",
+      "gaps": [],
+      "rank": 1,
+      "row_sql": "INSERT INTO discrete_controlled_ac_branches (id, name, arc_id, r, x, rating, base_power, power_units, discrete_branch_type, branch_status, normal_branch_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'OTHER'), COALESCE(?, 'CLOSED'), COALESCE(?, 'CLOSED'))",
+      "skip": [
+        "active_power_flow",
+        "available",
+        "reactive_power_flow"
+      ],
+      "table": "discrete_controlled_ac_branches"
+    },
+    "EnergyReservoirStorage": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "text",
+          "path": "storage_technology_type"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "storage_capacity"
+        },
+        {
+          "encode": "text",
+          "path": "energy_units"
+        },
+        {
+          "encode": "json",
+          "path": "storage_level_limits"
+        },
+        {
+          "encode": "real",
+          "path": "initial_storage_capacity_level"
+        },
+        {
+          "encode": "json",
+          "path": "input_active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "output_active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "efficiency"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "conversion_factor"
+        },
+        {
+          "encode": "real",
+          "path": "storage_target"
+        },
+        {
+          "encode": "int",
+          "path": "cycle_limits"
+        },
+        {
+          "encode": "json",
+          "path": "ramp_limits"
+        },
+        {
+          "encode": "real",
+          "path": "self_discharge"
+        },
+        {
+          "encode": "real",
+          "path": "standing_loss"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'storage_units', 'EnergyReservoirStorage')",
+      "gaps": [
+        "dynamic_injector"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO storage_units (id, name, prime_mover_type, storage_technology_type, balancing_topology, rating, base_power, power_units, storage_capacity, energy_units, storage_level_limits, initial_storage_capacity_level, input_active_power_limits, output_active_power_limits, efficiency, reactive_power_limits, active_power, reactive_power, available, conversion_factor, storage_target, cycle_limits, ramp_limits, self_discharge, standing_loss, operation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'MWH'), ?, ?, ?, ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, TRUE), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 10000), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"STORAGE\", \"charge_variable_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}, \"discharge_variable_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
+      "skip": [],
+      "table": "storage_units"
+    },
+    "ExponentialLoad": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'ExponentialLoad')",
+      "gaps": [
+        "active_power",
+        "alpha",
+        "available",
+        "beta",
+        "conformity",
+        "dynamic_injector",
+        "max_active_power",
+        "max_reactive_power",
+        "reactive_power"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "loads"
+    },
+    "FACTSControlDevice": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "voltage_setpoint"
+        },
+        {
+          "encode": "text",
+          "path": "voltage_setpoint_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "max_reactive_power"
+        },
+        {
+          "encode": "text",
+          "path": "shunt_control_type"
+        },
+        {
+          "encode": "int",
+          "path": "regulated_bus_number"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'facts_control_devices', 'FACTSControlDevice')",
+      "gaps": [
+        "available",
+        "control_mode",
+        "dynamic_injector",
+        "max_shunt_current",
+        "reactive_power_required"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO facts_control_devices (id, name, bus, voltage_setpoint, parameter_units, base_power, power_units, max_reactive_power, shunt_control_type, regulated_bus_number) VALUES (?, ?, ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 9999.0), COALESCE(?, 'STATCOM'), COALESCE(?, 0))",
+      "skip": [],
+      "table": "facts_control_devices"
+    },
+    "FixedAdmittance": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "text",
+          "path": "admittance_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'fixed_admittance', 'FixedAdmittance')",
+      "gaps": [
+        "Y"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO fixed_admittance (id, name, bus, available, admittance_units, base_power) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 'COMPONENT_MVAR'), ?)",
+      "skip": [
+        "dynamic_injector"
+      ],
+      "table": "fixed_admittance"
+    },
+    "HydroDispatch": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "ramp_limits"
+        },
+        {
+          "encode": "json",
+          "path": "time_limits"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "text",
+          "path": "status"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroDispatch')",
+      "gaps": [
+        "dynamic_injector",
+        "time_at_status"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, active_power, reactive_power, operation_cost) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
+      "skip": [],
+      "table": "hydro_generators"
+    },
+    "HydroPumpTurbine": {
+      "attributes": [
+        {
+          "field": "active_power_limits_pump",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "efficiency",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        }
+      ],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "ramp_limits"
+        },
+        {
+          "encode": "json",
+          "path": "time_limits"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "text",
+          "path": "status"
+        },
+        {
+          "encode": "text",
+          "path": "commitment_mode"
+        },
+        {
+          "encode": "text",
+          "path": "operating_mode"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "real",
+          "path": "powerhouse_elevation"
+        },
+        {
+          "encode": "json",
+          "path": "outflow_limits"
+        },
+        {
+          "encode": "real",
+          "path": "conversion_factor"
+        },
+        {
+          "encode": "real",
+          "path": "travel_time"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroPumpTurbine')",
+      "gaps": [
+        "active_power_pump",
+        "dynamic_injector",
+        "minimum_time",
+        "time_at_status",
+        "transition_time"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, operating_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost) VALUES (?, ?, COALESCE(?, 'PS'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 'OFF'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
+      "skip": [],
+      "table": "hydro_generators"
+    },
+    "HydroReservoir": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "storage_level_limits"
+        },
+        {
+          "encode": "real",
+          "path": "initial_level"
+        },
+        {
+          "encode": "json",
+          "path": "spillage_limits"
+        },
+        {
+          "encode": "real",
+          "path": "inflow"
+        },
+        {
+          "encode": "real",
+          "path": "outflow"
+        },
+        {
+          "encode": "real",
+          "path": "level_targets"
+        },
+        {
+          "encode": "real",
+          "path": "intake_elevation"
+        },
+        {
+          "encode": "json",
+          "path": "head_to_volume_factor"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        },
+        {
+          "encode": "text",
+          "path": "level_data_type"
+        },
+        {
+          "encode": "real",
+          "path": "evaporative_loss"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_reservoirs', 'HydroReservoir')",
+      "gaps": [
+        "downstream_turbines",
+        "upstream_reservoirs",
+        "upstream_turbines"
+      ],
+      "rank": 0,
+      "row_sql": "INSERT INTO hydro_reservoirs (id, name, available, storage_level_limits, initial_level, spillage_limits, inflow, outflow, level_targets, intake_elevation, head_to_volume_factor, operation_cost, level_data_type, evaporative_loss) VALUES (?, ?, COALESCE(?, TRUE), ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 0.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_RES\", \"level_shortage_cost\": 0.0, \"level_surplus_cost\": 0.0, \"spillage_cost\": 0.0}'), COALESCE(?, 'USABLE_VOLUME'), COALESCE(?, 0.0))",
+      "skip": [],
+      "table": "hydro_reservoirs"
+    },
+    "HydroTurbine": {
+      "attributes": [
+        {
+          "field": "efficiency",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "turbine_type",
+          "quantity_kind": null,
+          "unit": null
+        }
+      ],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "ramp_limits"
+        },
+        {
+          "encode": "json",
+          "path": "time_limits"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "text",
+          "path": "status"
+        },
+        {
+          "encode": "text",
+          "path": "commitment_mode"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "real",
+          "path": "powerhouse_elevation"
+        },
+        {
+          "encode": "json",
+          "path": "outflow_limits"
+        },
+        {
+          "encode": "real",
+          "path": "conversion_factor"
+        },
+        {
+          "encode": "real",
+          "path": "travel_time"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroTurbine')",
+      "gaps": [
+        "dynamic_injector",
+        "time_at_status"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
+      "skip": [],
+      "table": "hydro_generators"
+    },
+    "InterconnectingConverter": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "int",
+          "path": "dc_bus"
+        },
+        {
+          "encode": "real",
+          "path": "dc_setpoint"
+        },
+        {
+          "encode": "text",
+          "path": "dc_control"
+        },
+        {
+          "encode": "real",
+          "path": "ac_setpoint"
+        },
+        {
+          "encode": "text",
+          "path": "ac_control"
+        },
+        {
+          "encode": "text",
+          "path": "voltage_setpoint_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "int",
+          "path": "remote_bus_control"
+        },
+        {
+          "encode": "real",
+          "path": "rmpct"
+        },
+        {
+          "encode": "real",
+          "path": "power_factor_weighting_fraction"
+        },
+        {
+          "encode": "json",
+          "path": "voltage_limits"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'interconnecting_converters', 'InterconnectingConverter')",
+      "gaps": [
+        "active_power",
+        "active_power_limits",
+        "available",
+        "dc_current",
+        "dc_voltage_droop",
+        "dynamic_injector",
+        "loss_function",
+        "max_dc_current",
+        "rating",
+        "reactive_power_limits"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO interconnecting_converters (id, name, bus, dc_bus, dc_setpoint, dc_control, ac_setpoint, ac_control, parameter_units, base_power, power_units, remote_bus_control, rmpct, power_factor_weighting_fraction, voltage_limits) VALUES (?, ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 'DC_VOLTAGE'), COALESCE(?, 1.0), COALESCE(?, 'AC_REACTIVE_POWER'), COALESCE(?, 'COMPONENT_BASE'), ?, ?, ?, COALESCE(?, 100.0), COALESCE(?, 1.0), COALESCE(?, '{\"max\":999.9,\"min\":0.0}'))",
+      "skip": [],
+      "table": "interconnecting_converters"
+    },
+    "InterruptiblePowerLoad": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'InterruptiblePowerLoad')",
+      "gaps": [
+        "active_power",
+        "available",
+        "conformity",
+        "dynamic_injector",
+        "max_active_power",
+        "max_reactive_power",
+        "operation_cost",
+        "reactive_power"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "loads"
+    },
+    "InterruptibleStandardLoad": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'InterruptibleStandardLoad')",
+      "gaps": [
+        "available",
+        "conformity",
+        "constant_active_power",
+        "constant_reactive_power",
+        "current_active_power",
+        "current_reactive_power",
+        "dynamic_injector",
+        "impedance_active_power",
+        "impedance_reactive_power",
+        "max_constant_active_power",
+        "max_constant_reactive_power",
+        "max_current_active_power",
+        "max_current_reactive_power",
+        "max_impedance_active_power",
+        "max_impedance_reactive_power",
+        "operation_cost"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "loads"
+    },
+    "Line": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "r"
+        },
+        {
+          "encode": "real",
+          "path": "x"
+        },
+        {
+          "encode": "json",
+          "path": "b"
+        },
+        {
+          "encode": "json",
+          "path": "g"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_lines', 'Line')",
+      "gaps": [
+        "active_power_flow",
+        "angle_limits",
+        "available",
+        "rating_b",
+        "rating_c",
+        "reactive_power_flow"
+      ],
+      "rank": 1,
+      "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0.0,\"to\":0.0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?)",
+      "skip": [],
+      "table": "transmission_lines"
+    },
+    "MonitoredLine": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "r"
+        },
+        {
+          "encode": "real",
+          "path": "x"
+        },
+        {
+          "encode": "json",
+          "path": "b"
+        },
+        {
+          "encode": "json",
+          "path": "g"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_lines', 'MonitoredLine')",
+      "gaps": [
+        "active_power_flow",
+        "angle_limits",
+        "available",
+        "flow_limits",
+        "rating_b",
+        "rating_c",
+        "reactive_power_flow"
+      ],
+      "rank": 1,
+      "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0.0,\"to\":0.0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?)",
+      "skip": [],
+      "table": "transmission_lines"
+    },
+    "MotorLoad": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'MotorLoad')",
+      "gaps": [
+        "active_power",
+        "available",
+        "dynamic_injector",
+        "max_active_power",
+        "motor_technology",
+        "rating",
+        "reactive_power",
+        "reactive_power_limits"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "loads"
+    },
+    "NodalACTransportTechnology": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "power_systems_type"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "capital_costs"
+        },
+        {
+          "encode": "json",
+          "path": "financial_data"
+        },
+        {
+          "encode": "real",
+          "path": "unit_size"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'NodalACTransportTechnology')",
+      "gaps": [
+        "capacity_limits",
+        "end_node",
+        "reactance",
+        "resistance",
+        "start_node",
+        "voltage"
+      ],
+      "rank": 0,
+      "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, COALESCE(?, 0.0))",
+      "skip": [],
+      "table": "transport_technologies"
+    },
+    "NodalHVDCTransportTechnology": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "power_systems_type"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "capital_costs"
+        },
+        {
+          "encode": "json",
+          "path": "financial_data"
+        },
+        {
+          "encode": "real",
+          "path": "unit_size"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'NodalHVDCTransportTechnology')",
+      "gaps": [
+        "capacity_limits",
+        "end_node",
+        "line_loss",
+        "start_node"
+      ],
+      "rank": 0,
+      "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, ?)",
+      "skip": [],
+      "table": "transport_technologies"
+    },
+    "PointToPointBid": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "int",
+          "path": "from_id"
+        },
+        {
+          "encode": "int",
+          "path": "to_id"
+        },
+        {
+          "encode": "real",
+          "path": "max_active_power"
+        },
+        {
+          "encode": "json",
+          "path": "spread_bid"
+        },
+        {
+          "encode": "json",
+          "path": "price_limits"
+        },
+        {
+          "encode": "text",
+          "path": "linked_crr"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'point_to_point_bids', 'PointToPointBid')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO point_to_point_bids (id, name, available, from_id, to_id, max_active_power, spread_bid, price_limits, linked_crr) VALUES (?, ?, COALESCE(?, 1), ?, ?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "point_to_point_bids"
+    },
+    "PowerLoad": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'PowerLoad')",
+      "gaps": [
+        "active_power",
+        "available",
+        "conformity",
+        "dynamic_injector",
+        "max_active_power",
+        "max_reactive_power",
+        "reactive_power"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "loads"
+    },
+    "RenewableDispatch": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "power_factor"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'renewable_generators', 'RenewableDispatch')",
+      "gaps": [
+        "dynamic_injector"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO renewable_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, power_factor, reactive_power_limits, available, active_power, reactive_power, operation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1.0), ?, COALESCE(?, TRUE), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"RENEWABLE\",\"fixed\":0,\"curtailment_cost\":{\"variable_cost_type\":\"COST\",\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}},\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}}},\"variable_operation_cost\":{\"variable_cost_type\":\"COST\",\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}},\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}}}}'))",
+      "skip": [],
+      "table": "renewable_generators"
+    },
+    "RenewableNonDispatch": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "power_factor"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'renewable_generators', 'RenewableNonDispatch')",
+      "gaps": [
+        "dynamic_injector"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO renewable_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, power_factor, available, active_power, reactive_power) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1.0), COALESCE(?, TRUE), COALESCE(?, 0.0), COALESCE(?, 0.0))",
+      "skip": [],
+      "table": "renewable_generators"
+    },
+    "ShiftablePowerLoad": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'ShiftablePowerLoad')",
+      "gaps": [
+        "active_power",
+        "active_power_limits",
+        "available",
+        "dynamic_injector",
+        "load_balance_time_horizon",
+        "max_active_power",
+        "max_reactive_power",
+        "operation_cost",
+        "reactive_power"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "loads"
+    },
+    "Source": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "base_voltage"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "real",
+          "path": "internal_voltage"
+        },
+        {
+          "encode": "real",
+          "path": "internal_angle"
+        },
+        {
+          "encode": "real",
+          "path": "R_th"
+        },
+        {
+          "encode": "real",
+          "path": "X_th"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'sources', 'Source')",
+      "gaps": [],
+      "rank": 2,
+      "row_sql": "INSERT INTO sources (id, name, bus, available, base_voltage, base_power, power_units, active_power, reactive_power, active_power_limits, reactive_power_limits, internal_voltage, internal_angle, r_th, x_th, parameter_units, operation_cost) VALUES (?, ?, ?, COALESCE(?, 1), ?, COALESCE(?, 100.0), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_BASE'), COALESCE(?, '{\"cost_type\":\"IMPORTEXPORT\",\"energy_export_weekly_limit\":1000000.0,\"energy_import_weekly_limit\":1000000.0,\"export_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}},\"import_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'))",
+      "skip": [
+        "dynamic_injector"
+      ],
+      "table": "sources"
+    },
+    "StandardLoad": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'StandardLoad')",
+      "gaps": [
+        "available",
+        "conformity",
+        "constant_active_power",
+        "constant_reactive_power",
+        "current_active_power",
+        "current_reactive_power",
+        "dynamic_injector",
+        "impedance_active_power",
+        "impedance_reactive_power",
+        "max_constant_active_power",
+        "max_constant_reactive_power",
+        "max_current_active_power",
+        "max_current_reactive_power",
+        "max_impedance_active_power",
+        "max_impedance_reactive_power"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "loads"
+    },
+    "StorageTechnology": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "text",
+          "path": "storage_tech"
+        },
+        {
+          "encode": "json",
+          "path": "region"
+        },
+        {
+          "encode": "text",
+          "path": "power_systems_type"
+        },
+        {
+          "encode": "int",
+          "path": "lifetime"
+        },
+        {
+          "encode": "real",
+          "path": "unit_size_charge"
+        },
+        {
+          "encode": "real",
+          "path": "unit_size_discharge"
+        },
+        {
+          "encode": "real",
+          "path": "unit_size_energy"
+        },
+        {
+          "encode": "json",
+          "path": "capacity_limits_charge"
+        },
+        {
+          "encode": "json",
+          "path": "capacity_limits_discharge"
+        },
+        {
+          "encode": "json",
+          "path": "capacity_limits_energy"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "duration_limits"
+        },
+        {
+          "encode": "json",
+          "path": "efficiency"
+        },
+        {
+          "encode": "real",
+          "path": "min_discharge_fraction"
+        },
+        {
+          "encode": "real",
+          "path": "losses"
+        },
+        {
+          "encode": "json",
+          "path": "operation_costs"
+        },
+        {
+          "encode": "json",
+          "path": "financial_data"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'storage_technologies', 'StorageTechnology')",
+      "gaps": [
+        "capital_costs"
+      ],
+      "rank": 0,
+      "row_sql": "INSERT INTO storage_technologies (id, name, prime_mover_type, storage_tech, region, power_systems_type, lifetime, unit_size_charge, unit_size_discharge, unit_size_energy, capacity_limits_charge, capacity_limits_discharge, capacity_limits_energy, available, duration_limits, efficiency, min_discharge_fraction, losses, operation_costs, financial_data) VALUES (?, ?, COALESCE(?, 'OT'), COALESCE(?, '[\"OTHER\"]'), ?, ?, COALESCE(?, 100), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, TRUE), ?, ?, COALESCE(?, 0.0), COALESCE(?, 1.0), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'), ?)",
+      "skip": [],
+      "table": "storage_technologies"
+    },
+    "SupplyTechnology": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "json",
+          "path": "region"
+        },
+        {
+          "encode": "text",
+          "path": "power_systems_type"
+        },
+        {
+          "encode": "int",
+          "path": "lifetime"
+        },
+        {
+          "encode": "real",
+          "path": "unit_size"
+        },
+        {
+          "encode": "json",
+          "path": "capacity_limits"
+        },
+        {
+          "encode": "json",
+          "path": "fuel"
+        },
+        {
+          "encode": "real",
+          "path": "start_fuel_mmbtu_per_mw"
+        },
+        {
+          "encode": "json",
+          "path": "cofire_level_limits"
+        },
+        {
+          "encode": "json",
+          "path": "cofire_start_limits"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "ramp_limits"
+        },
+        {
+          "encode": "json",
+          "path": "time_limits"
+        },
+        {
+          "encode": "json",
+          "path": "outage_factor"
+        },
+        {
+          "encode": "real",
+          "path": "min_generation_fraction"
+        },
+        {
+          "encode": "json",
+          "path": "capital_costs"
+        },
+        {
+          "encode": "json",
+          "path": "operation_costs"
+        },
+        {
+          "encode": "json",
+          "path": "financial_data"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'supply_technologies', 'SupplyTechnology')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO supply_technologies (id, name, prime_mover_type, region, power_systems_type, lifetime, unit_size, capacity_limits, fuel, start_fuel_mmbtu_per_mw, cofire_level_limits, cofire_start_limits, available, ramp_limits, time_limits, outage_factor, min_generation_fraction, capital_costs, operation_costs, financial_data) VALUES (?, ?, COALESCE(?, 'OT'), ?, ?, COALESCE(?, 100), COALESCE(?, 0.0), ?, COALESCE(?, '[\"OTHER\"]'), COALESCE(?, 0.0), ?, ?, COALESCE(?, TRUE), ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'), ?)",
+      "skip": [],
+      "table": "supply_technologies"
+    },
+    "SwitchedAdmittance": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "text",
+          "path": "admittance_units"
+        },
+        {
+          "encode": "json",
+          "path": "Y_increase"
+        },
+        {
+          "encode": "json",
+          "path": "number_engaged"
+        },
+        {
+          "encode": "json",
+          "path": "number_of_steps"
+        },
+        {
+          "encode": "real",
+          "path": "solved_admittance"
+        },
+        {
+          "encode": "json",
+          "path": "admittance_limits"
+        },
+        {
+          "encode": "text",
+          "path": "control_mode"
+        },
+        {
+          "encode": "int",
+          "path": "regulated_bus_number"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'switched_admittance', 'SwitchedAdmittance')",
+      "gaps": [],
+      "rank": 2,
+      "row_sql": "INSERT INTO switched_admittance (id, name, bus, available, admittance_units, Y_increase, number_engaged, number_of_steps, solved_admittance, admittance_limits, control_mode, regulated_bus_number) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 'COMPONENT_MVAR'), ?, ?, ?, ?, COALESCE(?, '{\"max\":1.0,\"min\":1.0}'), COALESCE(?, 'FIXED'), COALESCE(?, 0))",
+      "skip": [
+        "dynamic_injector"
+      ],
+      "table": "switched_admittance"
+    },
+    "SynchronousCondenser": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_losses"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'synchronous_condensers', 'SynchronousCondenser')",
+      "gaps": [],
+      "rank": 2,
+      "row_sql": "INSERT INTO synchronous_condensers (id, name, bus, available, reactive_power, rating, base_power, power_units, reactive_power_limits, active_power_losses) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), ?, ?, ?, ?, COALESCE(?, 0.0))",
+      "skip": [
+        "dynamic_injector"
+      ],
+      "table": "synchronous_condensers"
+    },
+    "TModelHVDCLine": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "real",
+          "path": "r"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_current"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'tmodel_hvdc_lines', 'TModelHVDCLine')",
+      "gaps": [
+        "active_power_flow",
+        "active_power_limits_from",
+        "active_power_limits_to",
+        "available",
+        "c",
+        "l"
+      ],
+      "rank": 1,
+      "row_sql": "INSERT INTO tmodel_hvdc_lines (id, name, arc_id, r, parameter_units, base_current) VALUES (?, ?, ?, ?, COALESCE(?, 'NATURAL_UNITS'), ?)",
+      "skip": [],
+      "table": "tmodel_hvdc_lines"
+    },
+    "ThermalMultiStart": {
+      "attributes": [
+        {
+          "field": "power_trajectory",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "start_time_limits",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
+        },
+        {
+          "field": "start_types",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        }
+      ],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "text",
+          "path": "fuel"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "ramp_limits"
+        },
+        {
+          "encode": "json",
+          "path": "time_limits"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "text",
+          "path": "status"
+        },
+        {
+          "encode": "text",
+          "path": "commitment_mode"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'thermal_generators', 'ThermalMultiStart')",
+      "gaps": [
+        "dynamic_injector",
+        "time_at_status"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO thermal_generators (id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, operation_cost) VALUES (?, ?, ?, COALESCE(?, 'OTHER'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), ?, COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
+      "skip": [],
+      "table": "thermal_generators"
+    },
+    "ThermalStandard": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "text",
+          "path": "prime_mover_type"
+        },
+        {
+          "encode": "text",
+          "path": "fuel"
+        },
+        {
+          "encode": "int",
+          "path": "bus"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits"
+        },
+        {
+          "encode": "json",
+          "path": "ramp_limits"
+        },
+        {
+          "encode": "json",
+          "path": "time_limits"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "text",
+          "path": "status"
+        },
+        {
+          "encode": "text",
+          "path": "commitment_mode"
+        },
+        {
+          "encode": "real",
+          "path": "active_power"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'thermal_generators', 'ThermalStandard')",
+      "gaps": [
+        "dynamic_injector",
+        "time_at_status"
+      ],
+      "rank": 2,
+      "row_sql": "INSERT INTO thermal_generators (id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, operation_cost) VALUES (?, ?, COALESCE(?, 'OT'), COALESCE(?, 'OTHER'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), ?, COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
+      "skip": [],
+      "table": "thermal_generators"
+    },
+    "ThreeWindingTransformer": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "primary_circuit"
+        },
+        {
+          "encode": "int",
+          "path": "secondary_circuit"
+        },
+        {
+          "encode": "int",
+          "path": "tertiary_circuit"
+        },
+        {
+          "encode": "int",
+          "path": "star_bus"
+        },
+        {
+          "encode": "real",
+          "path": "r_12"
+        },
+        {
+          "encode": "real",
+          "path": "x_12"
+        },
+        {
+          "encode": "real",
+          "path": "r_23"
+        },
+        {
+          "encode": "real",
+          "path": "x_23"
+        },
+        {
+          "encode": "real",
+          "path": "r_31"
+        },
+        {
+          "encode": "real",
+          "path": "x_31"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power_12"
+        },
+        {
+          "encode": "real",
+          "path": "base_power_23"
+        },
+        {
+          "encode": "real",
+          "path": "base_power_31"
+        },
+        {
+          "encode": "json",
+          "path": "magnetizing_shunt"
+        },
+        {
+          "encode": "text",
+          "path": "shunt_location"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'three_winding_transformers', 'ThreeWindingTransformer')",
+      "gaps": [],
+      "rank": 2,
+      "row_sql": "INSERT INTO three_winding_transformers (id, name, primary_circuit, secondary_circuit, tertiary_circuit, star_bus, r_12, x_12, r_23, x_23, r_31, x_31, parameter_units, base_power_12, base_power_23, base_power_31, magnetizing_shunt, shunt_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, ?, COALESCE(?, '{\"imag\":0.0,\"real\":0.0}'), COALESCE(?, 'PRIMARY'))",
+      "skip": [
+        "admittance_units"
+      ],
+      "table": "three_winding_transformers"
+    },
+    "TradingHub": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'trading_hubs', 'TradingHub')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO trading_hubs (id, name) VALUES (?, ?)",
+      "skip": [],
+      "table": "trading_hubs"
+    },
+    "TransformerCircuit": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "real",
+          "path": "tap"
+        },
+        {
+          "encode": "real",
+          "path": "alpha"
+        },
+        {
+          "encode": "real",
+          "path": "r"
+        },
+        {
+          "encode": "real",
+          "path": "x"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "text",
+          "path": "control_objective"
+        },
+        {
+          "encode": "int",
+          "path": "regulated_bus_number"
+        },
+        {
+          "encode": "json",
+          "path": "control_limits"
+        },
+        {
+          "encode": "json",
+          "path": "controlled_quantity_limits"
+        },
+        {
+          "encode": "int",
+          "path": "number_of_tap_positions"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "rating_b"
+        },
+        {
+          "encode": "real",
+          "path": "rating_c"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_flow"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power_flow"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_voltage_primary"
+        },
+        {
+          "encode": "real",
+          "path": "base_voltage_secondary"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transformer_circuits', 'TransformerCircuit')",
+      "gaps": [],
+      "rank": 1,
+      "row_sql": "INSERT INTO transformer_circuits (id, available, arc_id, tap, alpha, r, x, parameter_units, control_objective, regulated_bus_number, control_limits, controlled_quantity_limits, number_of_tap_positions, rating, rating_b, rating_c, active_power_flow, reactive_power_flow, base_power, power_units, base_voltage_primary, base_voltage_secondary) VALUES (?, COALESCE(?, 1), ?, COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_BASE'), COALESCE(?, 'UNDEFINED'), COALESCE(?, 0), COALESCE(?, '{\"max\":1.1,\"min\":0.9}'), COALESCE(?, '{\"max\":1.1,\"min\":0.9}'), COALESCE(?, 33), ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 100.0), ?, ?, ?)",
+      "skip": [],
+      "table": "transformer_circuits"
+    },
+    "TwoTerminalGenericHVDCLine": {
+      "attributes": [
+        {
+          "field": "loss",
+          "quantity_kind": null,
+          "unit": null
+        }
+      ],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_flow"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits_from"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits_to"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits_from"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits_to"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalGenericHVDCLine')",
+      "gaps": [],
+      "rank": 1,
+      "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, active_power_limits_from, active_power_limits_to, reactive_power_limits_from, reactive_power_limits_to, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, ?, ?, 'GENERIC')",
+      "skip": [],
+      "table": "two_terminal_hvdc_lines"
+    },
+    "TwoTerminalLCCLine": {
+      "attributes": [
+        {
+          "field": "compounding_resistance",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "inverter_base_voltage",
+          "quantity_kind": "Voltage",
+          "unit": "kV"
+        },
+        {
+          "field": "inverter_bridges",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "inverter_capacitor_reactance",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "inverter_extinction_angle",
+          "quantity_kind": "Angle",
+          "unit": "deg"
+        },
+        {
+          "field": "inverter_extinction_angle_limits",
+          "quantity_kind": "Angle",
+          "unit": "deg"
+        },
+        {
+          "field": "inverter_rc",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "inverter_tap_limits",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "inverter_tap_setting",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "inverter_tap_step",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "inverter_transformer_ratio",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "inverter_xc",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "loss",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "min_compounding_voltage",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "power_mode",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "r",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "rectifier_base_voltage",
+          "quantity_kind": "Voltage",
+          "unit": "kV"
+        },
+        {
+          "field": "rectifier_bridges",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "rectifier_capacitor_reactance",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "rectifier_delay_angle",
+          "quantity_kind": "Angle",
+          "unit": "deg"
+        },
+        {
+          "field": "rectifier_delay_angle_limits",
+          "quantity_kind": "Angle",
+          "unit": "deg"
+        },
+        {
+          "field": "rectifier_rc",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "rectifier_tap_limits",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "rectifier_tap_setting",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "rectifier_tap_step",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "rectifier_transformer_ratio",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "rectifier_xc",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "scheduled_dc_voltage",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "switch_mode_voltage",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "transfer_setpoint",
+          "quantity_kind": null,
+          "unit": null
+        }
+      ],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_flow"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits_from"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits_to"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits_from"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits_to"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalLCCLine')",
+      "gaps": [],
+      "rank": 1,
+      "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, active_power_limits_from, active_power_limits_to, reactive_power_limits_from, reactive_power_limits_to, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), 'LCC')",
+      "skip": [
+        "dc_voltage_units",
+        "parameter_units"
+      ],
+      "table": "two_terminal_hvdc_lines"
+    },
+    "TwoTerminalVSCLine": {
+      "attributes": [
+        {
+          "field": "ac_control_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "ac_control_to",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "ac_setpoint_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "ac_setpoint_to",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "converter_loss_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "converter_loss_to",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "dc_control_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "dc_control_to",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "dc_current",
+          "quantity_kind": "CurrentFlow",
+          "unit": "A"
+        },
+        {
+          "field": "dc_setpoint_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "dc_setpoint_to",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "dc_voltage_droop_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "dc_voltage_droop_to",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "g",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "max_dc_current_from",
+          "quantity_kind": "CurrentFlow",
+          "unit": "A"
+        },
+        {
+          "field": "max_dc_current_to",
+          "quantity_kind": "CurrentFlow",
+          "unit": "A"
+        },
+        {
+          "field": "power_factor_weighting_fraction_from",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "power_factor_weighting_fraction_to",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "rated_ac_voltage_from",
+          "quantity_kind": "Voltage",
+          "unit": "kV"
+        },
+        {
+          "field": "rated_ac_voltage_to",
+          "quantity_kind": "Voltage",
+          "unit": "kV"
+        },
+        {
+          "field": "rated_dc_voltage",
+          "quantity_kind": "Voltage",
+          "unit": "kV"
+        },
+        {
+          "field": "rating",
+          "quantity_kind": "ApparentPower",
+          "unit": "MVA"
+        },
+        {
+          "field": "rating_from",
+          "quantity_kind": "ApparentPower",
+          "unit": "MVA"
+        },
+        {
+          "field": "rating_to",
+          "quantity_kind": "ApparentPower",
+          "unit": "MVA"
+        },
+        {
+          "field": "reactive_power_from",
+          "quantity_kind": "ReactivePower",
+          "unit": "MVAr"
+        },
+        {
+          "field": "reactive_power_to",
+          "quantity_kind": "ReactivePower",
+          "unit": "MVAr"
+        },
+        {
+          "field": "remote_bus_control_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "remote_bus_control_to",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "rmpct_from",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "rmpct_to",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "voltage_limits_from",
+          "quantity_kind": null,
+          "unit": null
+        },
+        {
+          "field": "voltage_limits_to",
+          "quantity_kind": null,
+          "unit": null
+        }
+      ],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_flow"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits_from"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_limits_to"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits_from"
+        },
+        {
+          "encode": "json",
+          "path": "reactive_power_limits_to"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalVSCLine')",
+      "gaps": [],
+      "rank": 1,
+      "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, active_power_limits_from, active_power_limits_to, reactive_power_limits_from, reactive_power_limits_to, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), 'VSC')",
+      "skip": [
+        "admittance_units",
+        "setpoint_voltage_units",
+        "voltage_units"
+      ],
+      "table": "two_terminal_hvdc_lines"
+    },
+    "TwoWindingTransformer": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "circuit"
+        },
+        {
+          "encode": "json",
+          "path": "magnetizing_shunt"
+        },
+        {
+          "encode": "text",
+          "path": "shunt_location"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_winding_transformers', 'TwoWindingTransformer')",
+      "gaps": [],
+      "rank": 2,
+      "row_sql": "INSERT INTO two_winding_transformers (id, name, circuit, magnetizing_shunt, shunt_location) VALUES (?, ?, ?, COALESCE(?, '{\"imag\":0.0,\"real\":0.0}'), COALESCE(?, 'PRIMARY'))",
+      "skip": [
+        "admittance_units"
+      ],
+      "table": "two_winding_transformers"
+    },
+    "VirtualParticipant": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "int",
+          "path": "settlement_point_id"
+        },
+        {
+          "encode": "real",
+          "path": "max_supply"
+        },
+        {
+          "encode": "real",
+          "path": "max_demand"
+        },
+        {
+          "encode": "json",
+          "path": "operation_cost"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'virtual_participants', 'VirtualParticipant')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO virtual_participants (id, name, available, settlement_point_id, max_supply, max_demand, operation_cost) VALUES (?, ?, COALESCE(?, 1), ?, ?, ?, ?)",
+      "skip": [],
+      "table": "virtual_participants"
+    }
+  },
+  "manifest_version": 1,
+  "schema_user_version": 1,
+  "supplemental_attributes": {
+    "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
+    "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",
+    "plant_types": [
+      "CombinedCycleBlock",
+      "CombinedCycleFractional",
+      "HydroPowerPlant",
+      "RenewablePowerPlant",
+      "ThermalPowerPlant"
+    ]
+  },
+  "unsupported_components": {
+    "LoadZone": "no table in schema.sql"
+  },
+  "unsupported_sections": {
+    "ext": "no table in schema.sql",
+    "service_associations": "no table in schema.sql",
+    "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified"
+  },
+  "vocabulary": {
+    "entity_types": [
+      {
+        "is_dc": false,
+        "is_topology": true,
+        "name": "ACBus"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "AggregateTransportTechnology"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "Arc"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "Area"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "AreaInterchange"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "CombinedCycleBlock"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "CombinedCycleFractional"
+      },
+      {
+        "is_dc": true,
+        "is_topology": true,
+        "name": "DCBus"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "DataSource"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "DemandRequirement"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "DiscreteControlledACBranch"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "EmissionsData"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "EnergyReservoirStorage"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ExponentialLoad"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "FACTSControlDevice"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "FixedAdmittance"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "FixedForcedOutage"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "GeographicInfo"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "GeometricDistributionForcedOutage"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "HydroDispatch"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "HydroPowerPlant"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "HydroPumpTurbine"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "HydroReservoir"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "HydroTurbine"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ImpedanceCorrectionData"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "InterconnectingConverter"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "InterruptiblePowerLoad"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "InterruptibleStandardLoad"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "Line"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "MonitoredLine"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "MotorLoad"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "NodalACTransportTechnology"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "NodalHVDCTransportTechnology"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "PlannedOutage"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "PointToPointBid"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "PowerLoad"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "RenewableDispatch"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "RenewableNonDispatch"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "RenewablePowerPlant"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ShiftablePowerLoad"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "Source"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "StandardLoad"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "StorageTechnology"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "Substation"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "SupplyTechnology"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "SwitchedAdmittance"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "SynchronousCondenser"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TModelHVDCLine"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ThermalMultiStart"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ThermalPowerPlant"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ThermalStandard"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ThreeWindingTransformer"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TradingHub"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TransformerCircuit"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TwoTerminalGenericHVDCLine"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TwoTerminalLCCLine"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TwoTerminalVSCLine"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TwoWindingTransformer"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "VirtualParticipant"
+      }
+    ],
+    "fuels": [
+      "AG_BYPRODUCT",
+      "ANTHRACITE_COAL",
+      "BITUMINOUS_COAL",
+      "BLACK_LIQUOR",
+      "BLAST_FURNACE_GAS",
+      "COAL",
+      "DISTILLATE_FUEL_OIL",
+      "GEOTHERMAL",
+      "JET_FUEL",
+      "KEROSENE",
+      "LANDFILL_GAS",
+      "LIGNITE_COAL",
+      "MUNICIPAL_WASTE",
+      "NATURAL_GAS",
+      "NUCLEAR",
+      "OTHER",
+      "OTHER_BIOMASS_GAS",
+      "OTHER_BIOMASS_LIQUIDS",
+      "OTHER_BIOMASS_SOLIDS",
+      "OTHER_GAS",
+      "PETROLEUM_COKE",
+      "PROPANE",
+      "REFINED_COAL",
+      "RESIDUAL_FUEL_OIL",
+      "SLUDGE_WASTE",
+      "SUBBITUMINOUS_COAL",
+      "SYNTHESIS_GAS_COAL",
+      "SYNTHESIS_GAS_PETROLEUM_COKE",
+      "TIRE_DERIVED_FUEL",
+      "WASTE_COAL",
+      "WASTE_HEAT",
+      "WASTE_OIL",
+      "WOOD_WASTE_LIQUIDS",
+      "WOOD_WASTE_SOLIDS"
+    ],
+    "prime_mover_types": [
+      "BA",
+      "BT",
+      "CA",
+      "CC",
+      "CE",
+      "CP",
+      "CS",
+      "CT",
+      "ES",
+      "FC",
+      "FW",
+      "GT",
+      "HA",
+      "HB",
+      "HK",
+      "HY",
+      "IC",
+      "OT",
+      "PS",
+      "PVe",
+      "ST",
+      "WS",
+      "WT"
+    ],
+    "storage_technology_types": [
+      "FLWB",
+      "HGS",
+      "LAB",
+      "LAES",
+      "LIB",
+      "OTHER_CHEM",
+      "OTHER_MECH",
+      "OTHER_THERM",
+      "PTES",
+      "SIB",
+      "ZIB"
+    ]
+  }
+}
