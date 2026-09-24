@@ -259,7 +259,7 @@ CREATE TABLE transformer_circuits (
     -- voltage. regulated_bus_side says which winding the bus lies beyond when it is not an
     -- end of the circuit's arc; for an arc end the side follows from the arc and must be
     -- NULL (enforce_transformer_circuits_regulated_bus_side_*).
-    regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
+    regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL,
     regulated_bus_side TEXT NULL
         CHECK (regulated_bus_side IS NULL OR regulated_bus_side IN ('CONTROLLING_WINDING', 'OPPOSITE_WINDING')),
     -- Load drop compensation CR + jCX: the impedance times the circuit current that
@@ -358,7 +358,7 @@ CREATE TABLE thermal_generators (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
     -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
     voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
     voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
@@ -413,7 +413,7 @@ CREATE TABLE renewable_generators (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
     -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
     voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
     voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
@@ -458,7 +458,7 @@ CREATE TABLE hydro_generators (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
     -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
     voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
     voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
@@ -513,7 +513,7 @@ CREATE TABLE storage_units (
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
     -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
     voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
     voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
@@ -771,7 +771,7 @@ CREATE TABLE voltage_control_groups (
     name TEXT NOT NULL UNIQUE,
     TYPE TEXT NOT NULL CHECK (TYPE IN ('VoltageDroopControl', 'ReactivePowerSharing')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
-    regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
+    regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     reactive_power_limits TEXT NULL -- {"min": ..., "max": ...}
         CHECK (reactive_power_limits IS NULL OR json_valid(reactive_power_limits)), -- Units: MVAr
     deadband_reactive_power REAL NULL, -- Units: MVAr
@@ -1008,7 +1008,7 @@ CREATE TABLE switched_admittance (
             'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
     -- Bus whose voltage the device regulates; NULL means its own bus, so naming the own
     -- bus is rejected. A shared regulation weight lives on voltage_control_associations:
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus)
 ) strict;
 
@@ -1022,7 +1022,7 @@ CREATE TABLE synchronous_condensers (
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
     -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus),
     voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
     voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
@@ -1049,7 +1049,7 @@ CREATE TABLE sources (
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
     -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus),
     voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
     voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
@@ -1169,14 +1169,14 @@ CREATE TABLE two_terminal_hvdc_lines (
         CHECK (reactive_power_limits_to IS NULL OR json_valid(reactive_power_limits_to)), -- Units: per power_units
     -- VSC only: the bus each converter's AC voltage control holds. NULL means its own
     -- terminal bus, which enforce_two_terminal_hvdc_lines_remote_bus_* forbids naming.
-    remote_regulated_bus_id_from INTEGER NULL REFERENCES balancing_topologies (id),
-    remote_regulated_bus_id_to INTEGER NULL REFERENCES balancing_topologies (id),
+    remote_regulated_bus_id_from INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL,
+    remote_regulated_bus_id_to INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL,
     -- LCC only: each converter's commutating bus and tap transformer, when they are not
     -- its terminal bus and an ideal transformer.
-    rectifier_commutating_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
-    inverter_commutating_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
-    rectifier_tap_transformer_id INTEGER NULL REFERENCES two_winding_transformers (id),
-    inverter_tap_transformer_id INTEGER NULL REFERENCES two_winding_transformers (id),
+    rectifier_commutating_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL,
+    inverter_commutating_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL,
+    rectifier_tap_transformer_id INTEGER NULL REFERENCES two_winding_transformers (id) ON DELETE SET NULL,
+    inverter_tap_transformer_id INTEGER NULL REFERENCES two_winding_transformers (id) ON DELETE SET NULL,
     CHECK (converter_type = 'VSC'
         OR (remote_regulated_bus_id_from IS NULL AND remote_regulated_bus_id_to IS NULL)),
     CHECK (converter_type = 'LCC'
@@ -1223,7 +1223,7 @@ CREATE TABLE facts_control_devices (
         CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
     -- Bus whose voltage the device regulates; NULL means its own bus, so naming the own
     -- bus is rejected. A shared regulation weight lives on voltage_control_associations:
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus)
 ) strict;
 
@@ -1249,7 +1249,7 @@ CREATE TABLE interconnecting_converters (
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     -- Bus whose voltage the device regulates; NULL means its own bus, so naming the own
     -- bus is rejected. A shared regulation weight lives on voltage_control_associations:
-    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
         CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus),
     power_factor_weighting_fraction REAL NOT NULL DEFAULT 1.0 CHECK (power_factor_weighting_fraction >= 0),
     voltage_limits TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'

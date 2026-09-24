@@ -264,14 +264,29 @@ def test_facts_cannot_name_its_own_bus_as_remote(fresh_db):
         _facts(fresh_db, 4, bus, remote_regulated_bus_id=bus)
 
 
-def test_deleting_a_remote_bus_is_refused_while_a_device_regulates_it(fresh_db):
-    """A device regulating a deleted bus would silently fall back to its own bus, so the
-    reference blocks the delete instead of being cleared."""
+def test_deleting_a_droop_controllers_bus_removes_the_controller(fresh_db):
+    """A droop controller exists for its regulated bus the way a device exists on its bus,
+    so that reference cascades instead of clearing."""
+    bus = make_bus(fresh_db, 1, "b1")
+    _droop_group(fresh_db, 10, bus)
+    fresh_db.execute("DELETE FROM balancing_topologies WHERE id = ?", (bus,))
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM voltage_control_groups WHERE id = 10"
+    ).fetchone()
+    assert count == 0
+
+
+def test_deleting_a_remote_bus_clears_the_reference(fresh_db):
+    """A remote regulated bus is a non-owning reference like settlement_point_id: deleting
+    the bus clears it, and null already means the device regulates its own bus."""
     own = make_bus(fresh_db, 1, "b1")
     remote = make_bus(fresh_db, 2, "b2")
     _thermal(fresh_db, 3, own, remote_regulated_bus_id=remote)
-    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-        fresh_db.execute("DELETE FROM balancing_topologies WHERE id = ?", (remote,))
+    fresh_db.execute("DELETE FROM balancing_topologies WHERE id = ?", (remote,))
+    (cleared,) = fresh_db.execute(
+        "SELECT remote_regulated_bus_id FROM thermal_generators WHERE id = 3"
+    ).fetchone()
+    assert cleared is None
 
 
 # Transformer circuits
