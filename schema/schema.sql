@@ -258,10 +258,10 @@ CREATE TABLE transformer_circuits (
     -- Bus whose voltage the tap holds, named exactly when control_objective regulates
     -- voltage. regulated_bus_side says which winding the bus lies beyond when it is not an
     -- end of the circuit's arc; for an arc end the side follows from the arc and must be
-    -- NULL (enforce_transformer_circuits_regulated_bus_side_*).
+    -- UNDEFINED (enforce_transformer_circuits_regulated_bus_side_*).
     regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL,
-    regulated_bus_side TEXT NULL
-        CHECK (regulated_bus_side IS NULL OR regulated_bus_side IN ('CONTROLLING_WINDING', 'OPPOSITE_WINDING')),
+    regulated_bus_side TEXT NOT NULL DEFAULT 'UNDEFINED'
+        CHECK (regulated_bus_side IN ('UNDEFINED', 'CONTROLLING_WINDING', 'OPPOSITE_WINDING')),
     -- Load drop compensation CR + jCX: the impedance times the circuit current that
     -- corrects the regulated voltage.
     load_drop_compensation_r REAL NOT NULL DEFAULT 0.0, -- Units: per parameter_units
@@ -281,7 +281,7 @@ CREATE TABLE transformer_circuits (
     base_voltage_primary REAL NULL CHECK (base_voltage_primary > 0), -- Units: kV
     base_voltage_secondary REAL NULL CHECK (base_voltage_secondary > 0), -- Units: kV
     CHECK ((regulated_bus_id IS NOT NULL) = (control_objective IN ('VOLTAGE', 'VOLTAGE_DISABLED'))),
-    CHECK (regulated_bus_side IS NULL OR regulated_bus_id IS NOT NULL)
+    CHECK (regulated_bus_side = 'UNDEFINED' OR regulated_bus_id IS NOT NULL)
 ) strict;
 
 -- Two-winding transformer (PSY TwoWindingTransformer); series data lives on
@@ -790,7 +790,8 @@ CREATE TABLE voltage_control_groups (
 ) strict;
 
 -- One row per member of a voltage control group: entity_id is the regulating device, or
--- a two-terminal VSC line with terminal naming the converter. weight is the member's
+-- a two-terminal VSC line with terminal naming the converter (UNDEFINED for any other
+-- member). weight is the member's
 -- relative reactive power share (PSS/E RMPCT / 100); shares are relative, so a group's
 -- rows need not sum to one. Which entities may join, and when terminal is required, is
 -- enforced by enforce_voltage_control_member_types_*. Like plant_associations, the
@@ -800,12 +801,12 @@ CREATE TABLE voltage_control_associations (
     control_id INTEGER NOT NULL REFERENCES voltage_control_groups (id) ON DELETE CASCADE,
     entity_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     weight REAL NOT NULL DEFAULT 1.0 CHECK (weight > 0), -- Units: 1
-    terminal TEXT NULL CHECK (terminal IS NULL OR terminal IN ('FROM', 'TO'))
+    terminal TEXT NOT NULL DEFAULT 'UNDEFINED' CHECK (terminal IN ('UNDEFINED', 'FROM', 'TO'))
 ) strict;
 
 -- A device, or one converter of a VSC line, belongs to at most one group of either kind.
 CREATE UNIQUE INDEX uq_voltage_control_member
-    ON voltage_control_associations (entity_id, COALESCE(terminal, ''));
+    ON voltage_control_associations (entity_id, terminal);
 
 CREATE INDEX idx_voltage_control_assoc_control
     ON voltage_control_associations (control_id, entity_id);

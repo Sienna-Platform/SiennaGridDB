@@ -2583,7 +2583,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_regulated_bus_side_insert BEFORE
 INSERT ON transformer_circuits
     WHEN NEW.regulated_bus_id IS NOT NULL
-    AND (NEW.regulated_bus_side IS NULL) <> EXISTS (
+    AND (NEW.regulated_bus_side = 'UNDEFINED') <> EXISTS (
         SELECT 1
         FROM arcs
         WHERE id = NEW.arc_id
@@ -2592,14 +2592,14 @@ INSERT ON transformer_circuits
 BEGIN
 SELECT RAISE(
         ABORT,
-        'transformer_circuits.regulated_bus_side must be NULL when regulated_bus_id is an end of the circuit''s arc and set when it is not'
+        'transformer_circuits.regulated_bus_side must be UNDEFINED when regulated_bus_id is an end of the circuit''s arc and a winding side when it is not'
     );
 END;
 
 CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_regulated_bus_side_update BEFORE
 UPDATE OF regulated_bus_id, regulated_bus_side, arc_id ON transformer_circuits
     WHEN NEW.regulated_bus_id IS NOT NULL
-    AND (NEW.regulated_bus_side IS NULL) <> EXISTS (
+    AND (NEW.regulated_bus_side = 'UNDEFINED') <> EXISTS (
         SELECT 1
         FROM arcs
         WHERE id = NEW.arc_id
@@ -2608,7 +2608,7 @@ UPDATE OF regulated_bus_id, regulated_bus_side, arc_id ON transformer_circuits
 BEGIN
 SELECT RAISE(
         ABORT,
-        'transformer_circuits.regulated_bus_side must be NULL when regulated_bus_id is an end of the circuit''s arc and set when it is not'
+        'transformer_circuits.regulated_bus_side must be UNDEFINED when regulated_bus_id is an end of the circuit''s arc and a winding side when it is not'
     );
 END;
 
@@ -2640,8 +2640,8 @@ END;
 
 -- Voltage control membership. Droop members are generators; sharing members are the
 -- devices that regulate voltage (RenewableNonDispatch shares the renewable table but is a
--- fixed injection); terminal names a converter of a two-terminal VSC line and nothing
--- else. The member's table comes from entities, the same source the arc trigger reads.
+-- fixed injection); terminal names a converter of a two-terminal VSC line and is
+-- UNDEFINED for anything else. The member's table comes from entities, the same source the arc trigger reads.
 CREATE TRIGGER IF NOT EXISTS enforce_voltage_control_member_types_insert
 AFTER INSERT ON voltage_control_associations
 BEGIN
@@ -2664,11 +2664,11 @@ SELECT
                     AND entity_type <> 'RenewableNonDispatch'
             )
             THEN RAISE(ABORT, 'voltage_control_associations: the member must be a voltage regulating device (generator, storage unit, synchronous condenser, source, switched shunt, FACTS device, converter or two-terminal VSC line)')
-        WHEN (NEW.terminal IS NULL) = COALESCE(
+        WHEN (NEW.terminal = 'UNDEFINED') = COALESCE(
                 (SELECT converter_type FROM two_terminal_hvdc_lines WHERE id = NEW.entity_id) = 'VSC',
                 0
             )
-            THEN RAISE(ABORT, 'voltage_control_associations.terminal names the converter of a two-terminal VSC line member and must be NULL for any other member')
+            THEN RAISE(ABORT, 'voltage_control_associations.terminal names the converter of a two-terminal VSC line member and must be UNDEFINED for any other member')
     END;
 END;
 
@@ -2694,10 +2694,10 @@ SELECT
                     AND entity_type <> 'RenewableNonDispatch'
             )
             THEN RAISE(ABORT, 'voltage_control_associations: the member must be a voltage regulating device (generator, storage unit, synchronous condenser, source, switched shunt, FACTS device, converter or two-terminal VSC line)')
-        WHEN (NEW.terminal IS NULL) = COALESCE(
+        WHEN (NEW.terminal = 'UNDEFINED') = COALESCE(
                 (SELECT converter_type FROM two_terminal_hvdc_lines WHERE id = NEW.entity_id) = 'VSC',
                 0
             )
-            THEN RAISE(ABORT, 'voltage_control_associations.terminal names the converter of a two-terminal VSC line member and must be NULL for any other member')
+            THEN RAISE(ABORT, 'voltage_control_associations.terminal names the converter of a two-terminal VSC line member and must be UNDEFINED for any other member')
     END;
 END;

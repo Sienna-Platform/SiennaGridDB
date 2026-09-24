@@ -171,7 +171,7 @@ def _droop_group(conn, group_id, bus_id, **extra):
     return group_id
 
 
-def _member(conn, group_id, entity_id, weight=1.0, terminal=None):
+def _member(conn, group_id, entity_id, weight=1.0, terminal="UNDEFINED"):
     conn.execute(
         "INSERT INTO voltage_control_associations(control_id, entity_id, weight, terminal) "
         "VALUES (?, ?, ?, ?)",
@@ -296,7 +296,8 @@ def test_transformer_circuit_control_columns(db):
     columns = _columns(db, "transformer_circuits")
     assert "regulated_bus_number" not in columns
     assert columns["regulated_bus_id"][3] == 0
-    assert columns["regulated_bus_side"][3] == 0
+    assert columns["regulated_bus_side"][3] == 1
+    assert columns["regulated_bus_side"][4] == "'UNDEFINED'"
     assert columns["load_drop_compensation_r"][4] == "0.0"
     assert columns["load_drop_compensation_x"][4] == "0.0"
     foreign_keys = {
@@ -546,6 +547,20 @@ def test_each_vsc_terminal_belongs_to_at_most_one_group(fresh_db):
     _member(fresh_db, second, line, terminal="TO")
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         _member(fresh_db, second, line, terminal="FROM")
+
+
+def test_terminal_is_never_null(fresh_db):
+    """UNDEFINED, not NULL, is how a single-bus member says it names no converter."""
+    b1 = make_bus(fresh_db, 1, "b1")
+    gen = _thermal(fresh_db, 3, b1)
+    group = _sharing_group(fresh_db, 8)
+    with pytest.raises(sqlite3.IntegrityError, match="NOT NULL"):
+        _member(fresh_db, group, gen, terminal=None)
+    _member(fresh_db, group, gen)
+    (terminal,) = fresh_db.execute(
+        "SELECT terminal FROM voltage_control_associations WHERE entity_id = 3"
+    ).fetchone()
+    assert terminal == "UNDEFINED"
 
 
 def test_terminal_names_a_vsc_converter_only(fresh_db):
