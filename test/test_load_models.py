@@ -9,14 +9,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def _power_openapi_models_src_path():
     """Locate the power-openapi-models checkout the same way conftest's
     SiennaSchemas lookup does: nested at <repo>/power-openapi-models for CI,
-    a sibling checkout locally."""
+    a sibling checkout locally. The importable package lives in python/src;
+    a top-level src/ tree is pre-monorepo residue and is never importable."""
     for candidate in (
-        REPO_ROOT / "power-openapi-models" / "src",
-        REPO_ROOT.parent / "power-openapi-models" / "src",
+        REPO_ROOT / "power-openapi-models" / "python" / "src",
+        REPO_ROOT.parent / "power-openapi-models" / "python" / "src",
     ):
         if candidate.exists():
             return candidate
-    return REPO_ROOT.parent / "power-openapi-models" / "src"
+    return REPO_ROOT.parent / "power-openapi-models" / "python" / "src"
 
 
 POWER_OPENAPI_MODELS_SRC = _power_openapi_models_src_path()
