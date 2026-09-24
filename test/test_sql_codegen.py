@@ -316,8 +316,10 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("r", "NATURAL_UNITS"): ("Resistance", "ohm"),
         ("x", "COMPONENT_BASE"): ("Reactance", "pu"),
         ("x", "NATURAL_UNITS"): ("Reactance", "ohm"),
-        ("load_drop_compensation", "COMPONENT_BASE"): ("Impedance", "pu"),
-        ("load_drop_compensation", "NATURAL_UNITS"): ("Impedance", "ohm"),
+        ("load_drop_compensation_r", "COMPONENT_BASE"): ("Resistance", "pu"),
+        ("load_drop_compensation_r", "NATURAL_UNITS"): ("Resistance", "ohm"),
+        ("load_drop_compensation_x", "COMPONENT_BASE"): ("Reactance", "pu"),
+        ("load_drop_compensation_x", "NATURAL_UNITS"): ("Reactance", "ohm"),
     }
 
     assert {

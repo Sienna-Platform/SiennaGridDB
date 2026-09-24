@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 42
 EXPECTED_ALLOWED_UNITS = 69
-EXPECTED_UNIT_CONVENTIONS = 420
+EXPECTED_UNIT_CONVENTIONS = 422
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"

@@ -282,9 +282,8 @@ def test_transformer_circuit_control_columns(db):
     assert "regulated_bus_number" not in columns
     assert columns["regulated_bus_id"][3] == 0
     assert columns["regulated_bus_side"][3] == 0
-    assert json.loads(columns["load_drop_compensation"][4].strip("'")) == {
-        "real": 0.0, "imag": 0.0,
-    }
+    assert columns["load_drop_compensation_r"][4] == "0.0"
+    assert columns["load_drop_compensation_x"][4] == "0.0"
     foreign_keys = {
         row[3]: row[2] for row in db.execute("PRAGMA foreign_key_list(transformer_circuits)")
     }
@@ -355,18 +354,21 @@ def test_regulated_bus_side_is_rechecked_on_update(fresh_db):
         )
 
 
-def test_load_drop_compensation_is_json(fresh_db):
+def test_load_drop_compensation_round_trips_as_two_columns(fresh_db):
     arc = make_arc(fresh_db, 3, make_bus(fresh_db, 1, "b1"), make_bus(fresh_db, 2, "b2"))
     _control_circuit(
         fresh_db, 4, arc, control_objective="VOLTAGE", regulated_bus_id=1,
-        load_drop_compensation='{"real": 0.01, "imag": 0.02}',
+        load_drop_compensation_r=0.01, load_drop_compensation_x=0.02,
     )
-    (imag,) = fresh_db.execute(
-        "SELECT json_extract(load_drop_compensation, '$.imag') FROM transformer_circuits WHERE id = 4"
-    ).fetchone()
-    assert imag == 0.02
-    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
-        _control_circuit(fresh_db, 5, arc, load_drop_compensation="0.01+0.02j")
+    assert fresh_db.execute(
+        "SELECT load_drop_compensation_r, load_drop_compensation_x "
+        "FROM transformer_circuits WHERE id = 4"
+    ).fetchone() == (0.01, 0.02)
+    _control_circuit(fresh_db, 5, arc, control_objective="VOLTAGE", regulated_bus_id=1)
+    assert fresh_db.execute(
+        "SELECT load_drop_compensation_r, load_drop_compensation_x "
+        "FROM transformer_circuits WHERE id = 5"
+    ).fetchone() == (0.0, 0.0)
 
 
 # Two-terminal HVDC lines

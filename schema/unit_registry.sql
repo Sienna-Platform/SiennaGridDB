@@ -481,8 +481,10 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('transformer_circuits', 'controlled_quantity_limits', 'Voltage', 'pu', 'control_objective', 'UNDEFINED', NULL, NULL, NULL, 'base_voltage_primary', 'JSON {min, max} controlled-quantity band; no control block'),
     ('transformer_circuits', 'controlled_quantity_limits', 'Voltage', 'pu', 'control_objective', 'VOLTAGE', NULL, NULL, NULL, 'base_voltage_primary', 'JSON {min, max} pu voltage band (voltage control)'),
     ('transformer_circuits', 'controlled_quantity_limits', 'Voltage', 'pu', 'control_objective', 'VOLTAGE_DISABLED', NULL, NULL, NULL, 'base_voltage_primary', 'JSON {min, max} pu voltage band (voltage control, disabled)'),
-    ('transformer_circuits', 'load_drop_compensation', 'Impedance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'base_voltage_primary', 'Load drop compensation impedance (JSON real/imag = PSS/E CR/CX), per-unit on the row''s base_power, referenced to base_voltage_primary'),
-    ('transformer_circuits', 'load_drop_compensation', 'Impedance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Load drop compensation impedance (JSON real/imag) in ohm'),
+    ('transformer_circuits', 'load_drop_compensation_r', 'Resistance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'base_voltage_primary', 'Resistive part of the load drop compensation impedance (PSS/E CR), per-unit on the row''s base_power, referenced to base_voltage_primary'),
+    ('transformer_circuits', 'load_drop_compensation_r', 'Resistance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Resistive part of the load drop compensation impedance (PSS/E CR), in ohm'),
+    ('transformer_circuits', 'load_drop_compensation_x', 'Reactance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'base_voltage_primary', 'Reactive part of the load drop compensation impedance (PSS/E CX), per-unit on the row''s base_power, referenced to base_voltage_primary'),
+    ('transformer_circuits', 'load_drop_compensation_x', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Reactive part of the load drop compensation impedance (PSS/E CX), in ohm'),
     ('transformer_circuits', 'r', 'Resistance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'base_voltage_primary', 'Circuit resistance, per-unit on the row''s base_power, referenced to base_voltage_primary'),
     ('transformer_circuits', 'r', 'Resistance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Circuit resistance, in ohm'),
     ('transformer_circuits', 'rating', 'ApparentPower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Thermal rating, per-unit on the row''s base_power'),
@@ -567,4 +569,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'd9810b38c8fd2836c03b3bb2936e7f652394c8cd7ed5576d34e7073674dcd80f', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '80ab58bbf50508e6742a1c6a042a11de770f91f7d2038b140b1d6ffb663243c3', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

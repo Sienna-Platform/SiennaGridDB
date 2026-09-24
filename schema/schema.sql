@@ -262,10 +262,10 @@ CREATE TABLE transformer_circuits (
     regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
     regulated_bus_side TEXT NULL
         CHECK (regulated_bus_side IS NULL OR regulated_bus_side IN ('CONTROLLING_WINDING', 'OPPOSITE_WINDING')),
-    -- Load drop compensation {"real": CR, "imag": CX}: the impedance times the circuit
-    -- current that corrects the regulated voltage.
-    load_drop_compensation TEXT NOT NULL DEFAULT '{"real": 0.0, "imag": 0.0}'
-        CHECK (json_valid(load_drop_compensation)), -- Units: per parameter_units
+    -- Load drop compensation CR + jCX: the impedance times the circuit current that
+    -- corrects the regulated voltage.
+    load_drop_compensation_r REAL NOT NULL DEFAULT 0.0, -- Units: per parameter_units
+    load_drop_compensation_x REAL NOT NULL DEFAULT 0.0, -- Units: per parameter_units
     control_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
         CHECK (control_limits IS NULL OR json_valid(control_limits)), -- Units: per control_objective (tap ratio 1 / angle rad)
     controlled_quantity_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
