@@ -1,0 +1,111 @@
+name: Insert SDKs
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout power-openapi-models (SDK model tests)
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/power-openapi-models
+          ref: 531659201ff86e699005fde0ae9aaa25b16906b7
+          path: power-openapi-models
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e "sdk/python[test]" "pydantic>=2" -e power-openapi-models/python
+      # Golden fixtures are generated on the fly and gitignored, never checked in.
+      - name: Generate golden fixtures
+        run: python3 test/prepare_fixtures.py
+      - name: Test
+        run: python3 -m pytest sdk/python/tests -v
+      - name: Parity
+        run: |
+          for c in NATURAL_UNITS COMPONENT_BASE; do
+            python3 -m sienna_griddb_tools build test/fixtures/insert/case14_$c.json /tmp/py_$c.sqlite > /tmp/py_$c.report.json
+            python3 scripts/check_insert_parity.py --db /tmp/py_$c.sqlite --report /tmp/py_$c.report.json \
+              --expected-dump test/fixtures/insert/case14_$c.dump.json --expected-report test/fixtures/insert/case14_$c.report.json
+          done
+
+  julia:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout PowerOpenAPIModels (extension tests)
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/PowerOpenAPIModels
+          ref: 5eaae341529c6deca0e4561a538db167495abd76
+          path: PowerOpenAPIModels
+          fetch-depth: 1
+      - name: Checkout power-openapi-models (golden fixtures)
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/power-openapi-models
+          ref: 531659201ff86e699005fde0ae9aaa25b16906b7
+          path: power-openapi-models
+          fetch-depth: 1
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+      - name: Generate golden fixtures
+        run: python3 test/prepare_fixtures.py
+      - name: Test
+        working-directory: sdk/julia
+        run: |
+          julia --project=test -e 'using Pkg; Pkg.instantiate()'
+          julia --project=test test/runtests.jl
+      - name: Extension tests
+        env:
+          POWER_OPENAPI_MODELS_PATH: ${{ github.workspace }}/PowerOpenAPIModels
+        run: julia sdk/julia/test/ext/run_ext_tests.jl
+      - name: Parity
+        working-directory: sdk/julia
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+          for c in NATURAL_UNITS COMPONENT_BASE; do
+            julia --project=. bin/build_db.jl ../../test/fixtures/insert/case14_$c.json /tmp/jl_$c.sqlite > /tmp/jl_$c.report.json
+            python3 ../../scripts/check_insert_parity.py --db /tmp/jl_$c.sqlite --report /tmp/jl_$c.report.json \
+              --expected-dump ../../test/fixtures/insert/case14_$c.dump.json --expected-report ../../test/fixtures/insert/case14_$c.report.json
+          done
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout power-openapi-models (golden fixtures)
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/power-openapi-models
+          ref: 531659201ff86e699005fde0ae9aaa25b16906b7
+          path: power-openapi-models
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Generate golden fixtures
+        run: python3 test/prepare_fixtures.py
+      - name: Test
+        working-directory: sdk/typescript
+        run: |
+          npm ci
+          npm test
+      - name: Parity
+        working-directory: sdk/typescript
+        run: |
+          for c in NATURAL_UNITS COMPONENT_BASE; do
+            node dist/cli.js build ../../test/fixtures/insert/case14_$c.json /tmp/ts_$c.sqlite > /tmp/ts_$c.report.json
+            python3 ../../scripts/check_insert_parity.py --db /tmp/ts_$c.sqlite --report /tmp/ts_$c.report.json \
+              --expected-dump ../../test/fixtures/insert/case14_$c.dump.json --expected-report ../../test/fixtures/insert/case14_$c.report.json
+          done
