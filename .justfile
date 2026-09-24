@@ -55,3 +55,20 @@ format sql-schema:
         echo "SQL formatter does not exist. Installed it using `cargo install sleek`"
         exit 1
     fi
+
+# Regenerate the insert manifest + gap report (SiennaSchemas at the CI-pinned tag).
+generate-insert-manifest schemas="../SiennaSchemas":
+    {{python-command}} scripts/generate_insert_manifest.py --schemas-path {{schemas}}
+
+check-insert-manifest schemas="../SiennaSchemas":
+    {{python-command}} scripts/generate_insert_manifest.py --schemas-path {{schemas}} --check
+
+# Copy the manifest + schema files into sdk/*/data (rerun after generate-insert-manifest).
+sync-sdk-data:
+    {{python-command}} scripts/sync_sdk_data.py
+
+# Local-only large-system insertion smoke test: CATS is far too large for CI, so
+# this never runs there. Set the CATS source directory with CATS_DIR or pass
+# --cats-dir through, e.g. `CATS_DIR=../CATS just insert-cats --strict`.
+insert-cats db="/tmp/griddb-cats.sqlite" *args:
+    {{python-command}} scripts/insert_experiment.py --db {{db}} --overwrite --dump {{db}}.dump.json {{args}}

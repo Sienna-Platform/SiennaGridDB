@@ -169,3 +169,13 @@ griddb-example.sqlite
 # Design plans and agent scratch stay local
 .claude/plans/
 .superpowers/
+
+# Insert SDK build artifacts
+sdk/julia/**/Manifest.toml
+sdk/typescript/node_modules/
+sdk/typescript/dist/
+
+# Insert golden fixtures are generated on the fly by test/prepare_fixtures.py,
+# never checked in
+/fixtures/
+/test/fixtures/
