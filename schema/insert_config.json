@@ -1,0 +1,49 @@
+{
+  "description": "Hand-written, inserter-owned mapping additions consumed by scripts/insert_manifest.py. Holds only what schema_map.json and sql_codegen_map.json do not: extra component->table maps, entity-type flags, per-component constant columns, columns derived from a JSON path, and the component types / document sections the inserter cannot store (with the reason).",
+  "association_sections": [
+    ["supplemental_attribute_associations", "Core/Associations/SupplementalAttributeAssociation.json"],
+    ["plant_associations", "Operations/Associations/PlantAssociation.json"],
+    ["combined_cycle_associations", "Operations/Associations/CombinedCycleAssociation.json"],
+    ["trading_hub_associations", "Operations/Associations/TradingHubAssociation.json"]
+  ],
+  "constants": {
+    "TwoTerminalGenericHVDCLine": {"converter_type": "GENERIC"},
+    "TwoTerminalLCCLine": {"converter_type": "LCC"},
+    "TwoTerminalVSCLine": {"converter_type": "VSC"}
+  },
+  "derived": {
+    "AreaInterchange": {
+      "max_flow_from": {"path": "flow_limits.from_to", "encode": "real"},
+      "max_flow_to": {"path": "flow_limits.to_from", "encode": "real"}
+    }
+  },
+  "entity_type_flags": {
+    "ACBus": {"is_topology": true, "is_dc": false},
+    "DCBus": {"is_topology": true, "is_dc": true}
+  },
+  "extra_components": {
+    "arcs": [{"component": "Arc", "file": "Core/Topology/Arc.json"}],
+    "planning_regions": [{"component": "Area", "file": "Core/Topology/Area.json"}]
+  },
+  "plant_attribute_types": [
+    "CombinedCycleBlock",
+    "CombinedCycleFractional",
+    "HydroPowerPlant",
+    "RenewablePowerPlant",
+    "ThermalPowerPlant"
+  ],
+  "supplemental_attribute_dirs": ["Core/SupplementalAttributes", "Operations/SupplementalAttributes"],
+  "unsupported_components": {
+    "LoadZone": "no table in schema.sql"
+  },
+  "unsupported_sections": {
+    "ext": "no table in schema.sql",
+    "service_associations": "no table in schema.sql",
+    "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified"
+  },
+  "vocabulary_enums": {
+    "fuels": "Core/common.json#/$defs/ThermalFuels",
+    "prime_mover_types": "Core/common.json#/$defs/PrimeMovers",
+    "storage_technology_types": "Core/common.json#/$defs/StorageTech"
+  }
+}
