@@ -368,6 +368,42 @@ ORDER BY cca.entity_id;
 Both were run against a database built from `schema/schema.sql` + `triggers.sql` +
 `unit_registry.sql` + `views.sql` on this branch.
 
+## Insert SDKs
+
+`sdk/` holds three small packages that insert Sienna OpenAPI SDK objects into a GridDB
+database: [`sdk/python`](sdk/python/README.md), [`sdk/julia`](sdk/julia/README.md), and
+[`sdk/typescript`](sdk/typescript/README.md). None of them contains mapping logic. Each
+one interprets `schema/insert_manifest.json`, which `scripts/generate_insert_manifest.py`
+builds from `schema_map.json`, `sql_codegen_map.json`, `column_conventions.json`,
+`schema/insert_config.json`, and the DDL itself. Every INSERT a runtime can issue is
+written out in that file.
+
+- **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
+- **Unmapped fields.** A field with no column yet is listed in `schema/insert_gaps.json`.
+  At insert time it is counted in the returned report instead of being written;
+  `strict` mode raises instead. Regenerating the manifest after a schema update closes
+  these gaps with no runtime change.
+- **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
+  and the runtimes do not convert.
+- **Not supported yet.** `LoadZone`, services, `service_associations`,
+  `time_series_associations`, and `ext` have no table. They are reported, not written.
+- **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
+  outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
+  checked in. CI builds a database from them with each runtime and requires identical
+  canonical dumps (`scripts/check_insert_parity.py`).
+- **Large-system smoke test (local only).** `just insert-cats` inserts a CATS
+  CaliforniaTestSystem `system.json` into a fresh database, then reconciles table row
+  counts against the report and classifies every skipped field. Set the CATS source
+  directory with `CATS_DIR` or `python3 scripts/insert_experiment.py --cats-dir PATH`
+  (a CATS clone holding `CATS-CaliforniaTestSystem/`); `--document PATH` inserts any
+  other export.
+  CATS is far too large for CI; this is a development task and never runs there. Known
+  blocker: the current CATS export serializes `status` as booleans while the schema
+  treats it as a string enum, so insertion raises `InsertError` until CATS is
+  re-exported with the current serializer.
+
+After changing any mapping input: `just generate-insert-manifest && just sync-sdk-data`.
+
 ## Code generation
 
 Two independent generators project SiennaSchemas into this repo. Neither is authoritative
