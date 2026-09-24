@@ -22,6 +22,9 @@ CREATE TABLE thermal_generators (
     status TEXT NOT NULL CHECK (status IN ('OFFLINE', 'ONLINE', 'STARTUP', 'SHUTDOWN')),
     commitment_mode TEXT NULL DEFAULT 'COMMITTED' CHECK (commitment_mode IN ('UNCOMMITTED', 'COMMITTED', 'SELF_SCHEDULED', 'RELIABILITY', 'MUST_RUN')),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus_id INTEGER NULL,
+    voltage_setpoint_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (voltage_setpoint_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    voltage_setpoint REAL NULL DEFAULT 1.0, -- Units: per voltage_setpoint_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
@@ -44,6 +47,9 @@ CREATE TABLE renewable_generators (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus_id INTEGER NULL,
+    voltage_setpoint_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (voltage_setpoint_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    voltage_setpoint REAL NULL DEFAULT 1.0, -- Units: per voltage_setpoint_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
@@ -64,6 +70,9 @@ CREATE TABLE hydro_generators (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus_id INTEGER NULL,
+    voltage_setpoint_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (voltage_setpoint_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    voltage_setpoint REAL NULL DEFAULT 1.0, -- Units: per voltage_setpoint_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     active_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
@@ -95,6 +104,9 @@ CREATE TABLE storage_units (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus_id INTEGER NULL,
+    voltage_setpoint_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (voltage_setpoint_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    voltage_setpoint REAL NULL DEFAULT 1.0, -- Units: per voltage_setpoint_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     prime_mover_type TEXT NOT NULL CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
     storage_technology_type TEXT NOT NULL CHECK (storage_technology_type IN ('PTES', 'LIB', 'LAB', 'FLWB', 'SIB', 'ZIB', 'HGS', 'LAES', 'OTHER_CHEM', 'OTHER_MECH', 'OTHER_THERM')) REFERENCES storage_technology_types (name),
     storage_capacity REAL NOT NULL, -- Units: per energy_units (MWH: MWh, MWMIN: MWmin)
@@ -238,7 +250,9 @@ CREATE TABLE transformer_circuits (
     r REAL NULL DEFAULT 0.0, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     x REAL NULL DEFAULT 0.0, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     control_objective TEXT NULL DEFAULT 'UNDEFINED' CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED', 'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED', 'CONTROL_OF_DC_LINE_DISABLED', 'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE', 'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE', 'ASYMMETRIC_ACTIVE_POWER_FLOW')),
-    regulated_bus_number INTEGER NULL DEFAULT 0,
+    regulated_bus_id INTEGER NULL,
+    regulated_bus_side JSON NULL,
+    load_drop_compensation JSON NULL DEFAULT '{"imag":0.0,"real":0.0}', -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     control_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: rad, ACTIVE_POWER_FLOW_DISABLED: rad, ASYMMETRIC_ACTIVE_POWER_FLOW: rad, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: rad, CONTROL_OF_DC_LINE: 1, CONTROL_OF_DC_LINE_DISABLED: 1, FIXED: 1, REACTIVE_POWER_FLOW: 1, REACTIVE_POWER_FLOW_DISABLED: 1, UNDEFINED: 1, VOLTAGE: 1, VOLTAGE_DISABLED: 1)
     controlled_quantity_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: MW, ACTIVE_POWER_FLOW_DISABLED: MW, ASYMMETRIC_ACTIVE_POWER_FLOW: MW, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: MW, CONTROL_OF_DC_LINE: MW, CONTROL_OF_DC_LINE_DISABLED: MW, FIXED: pu, REACTIVE_POWER_FLOW: MVAr, REACTIVE_POWER_FLOW_DISABLED: MVAr, UNDEFINED: pu, VOLTAGE: pu, VOLTAGE_DISABLED: pu)
     number_of_tap_positions INTEGER NULL DEFAULT 33,
@@ -286,7 +300,7 @@ CREATE TABLE three_winding_transformers (
 
 -- two_terminal_hvdc_lines: generated from TwoTerminalGenericHVDCLine, TwoTerminalLCCLine, TwoTerminalVSCLine
 -- Stored via the generic `attributes` table (registered attribute-name
--- conventions), not as columns: loss, r, transfer_setpoint, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_capacitor_reactance, inverter_bridges, inverter_extinction_angle, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_capacitor_reactance, power_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rating, rating_from, rating_to, g, dc_current, rated_dc_voltage, reactive_power_from, reactive_power_to, dc_control_from, dc_control_to, ac_control_from, ac_control_to, dc_setpoint_from, dc_setpoint_to, ac_setpoint_from, ac_setpoint_to, converter_loss_from, converter_loss_to, max_dc_current_from, max_dc_current_to, power_factor_weighting_fraction_from, power_factor_weighting_fraction_to, voltage_limits_from, voltage_limits_to, dc_voltage_droop_from, dc_voltage_droop_to, remote_bus_control_from, remote_bus_control_to, rated_ac_voltage_from, rated_ac_voltage_to, rmpct_from, rmpct_to
+-- conventions), not as columns: loss, r, transfer_setpoint, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_capacitor_reactance, inverter_bridges, inverter_extinction_angle, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_capacitor_reactance, power_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rating, rating_from, rating_to, g, dc_current, rated_dc_voltage, reactive_power_from, reactive_power_to, dc_control_from, dc_control_to, ac_control_from, ac_control_to, dc_setpoint_from, dc_setpoint_to, ac_setpoint_from, ac_setpoint_to, converter_loss_from, converter_loss_to, max_dc_current_from, max_dc_current_to, power_factor_weighting_fraction_from, power_factor_weighting_fraction_to, voltage_limits_from, voltage_limits_to, dc_voltage_droop_from, dc_voltage_droop_to, rated_ac_voltage_from, rated_ac_voltage_to
 CREATE TABLE two_terminal_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -298,7 +312,13 @@ CREATE TABLE two_terminal_hvdc_lines (
     reactive_power_limits_from JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     reactive_power_limits_to JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     base_power REAL NOT NULL, -- Units: MVA
-    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    rectifier_commutating_bus_id INTEGER NULL,
+    inverter_commutating_bus_id INTEGER NULL,
+    rectifier_tap_transformer_id INTEGER NULL,
+    inverter_tap_transformer_id INTEGER NULL,
+    remote_regulated_bus_id_from INTEGER NULL,
+    remote_regulated_bus_id_to INTEGER NULL
 );
 
 -- tmodel_hvdc_lines: generated from TModelHVDCLine
@@ -323,6 +343,9 @@ CREATE TABLE synchronous_condensers (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus_id INTEGER NULL,
+    voltage_setpoint_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (voltage_setpoint_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    voltage_setpoint REAL NULL DEFAULT 1.0, -- Units: per voltage_setpoint_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     reactive_power REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
@@ -355,7 +378,7 @@ CREATE TABLE switched_admittance (
     solved_admittance REAL NULL, -- Units: per admittance_units (COMPONENT_MVAR: MVAr, NATURAL_UNITS: S)
     admittance_limits JSON NULL DEFAULT '{"max":1.0,"min":1.0}', -- Units: per admittance_units (COMPONENT_MVAR: MVAr, NATURAL_UNITS: S)
     control_mode TEXT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE', 'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT', 'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
-    regulated_bus_number INTEGER NULL DEFAULT 0 -- Units: 1
+    remote_regulated_bus_id INTEGER NULL
 );
 
 -- sources: generated from Source
@@ -364,6 +387,9 @@ CREATE TABLE sources (
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus_id INTEGER NULL,
+    voltage_setpoint_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (voltage_setpoint_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    voltage_setpoint REAL NULL DEFAULT 1.0, -- Units: per voltage_setpoint_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     active_power_limits JSON NULL DEFAULT '{"max":0.0,"min":0.0}', -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
@@ -401,8 +427,7 @@ CREATE TABLE interconnecting_converters (
     dc_setpoint REAL NULL DEFAULT 0.0, -- Units: per dc_control (DC_POWER: MW; DC_VOLTAGE: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV]; DC_VOLTAGE_DROOP: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
     ac_setpoint REAL NULL DEFAULT 1.0, -- Units: per ac_control (AC_REACTIVE_POWER: 1; AC_VOLTAGE: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
     dc_voltage_droop REAL NULL DEFAULT 0.0, -- Units: pu
-    remote_bus_control INTEGER NULL,
-    rmpct REAL NULL DEFAULT 100.0, -- Units: 1
+    remote_regulated_bus_id INTEGER NULL,
     power_factor_weighting_fraction REAL NULL DEFAULT 1.0, -- Units: 1
     voltage_limits JSON NULL DEFAULT '{"max":999.9,"min":0.0}', -- Units: pu
     dynamic_injector INTEGER NULL
@@ -418,10 +443,10 @@ CREATE TABLE facts_control_devices (
     parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     voltage_setpoint REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     max_shunt_current REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
-    reactive_power_required REAL NOT NULL, -- Units: 1
+    reactive_power_required REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     max_reactive_power REAL NULL DEFAULT 9999.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     shunt_control_type TEXT NULL DEFAULT 'STATCOM' CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
-    regulated_bus_number INTEGER NULL DEFAULT 0, -- Units: 1
+    remote_regulated_bus_id INTEGER NULL,
     base_power REAL NOT NULL, -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     dynamic_injector INTEGER NULL

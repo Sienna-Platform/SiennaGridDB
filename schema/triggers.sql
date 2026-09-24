@@ -2554,3 +2554,150 @@ SELECT
     );
 
 END;
+
+-- Voltage control groups: entity supertype boilerplate.
+CREATE TRIGGER IF NOT EXISTS check_voltage_control_groups_entity_exists BEFORE
+INSERT ON voltage_control_groups
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM entities
+        WHERE id = NEW.id
+            AND entity_table = 'voltage_control_groups'
+    ) BEGIN
+SELECT RAISE(
+        ABORT,
+        'voltage_control_groups.id must exist in entities with entity_table voltage_control_groups before insert'
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_voltage_control_groups_entity
+AFTER DELETE ON voltage_control_groups
+FOR EACH ROW
+BEGIN
+    DELETE FROM entities WHERE id = OLD.id;
+END;
+
+-- A transformer circuit regulating an end of its own arc derives the side from the arc
+-- and stores none; regulating any other bus needs the side to say which winding the bus
+-- lies beyond.
+CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_regulated_bus_side_insert BEFORE
+INSERT ON transformer_circuits
+    WHEN NEW.regulated_bus_id IS NOT NULL
+    AND (NEW.regulated_bus_side IS NULL) <> EXISTS (
+        SELECT 1
+        FROM arcs
+        WHERE id = NEW.arc_id
+            AND NEW.regulated_bus_id IN (from_id, to_id)
+    )
+BEGIN
+SELECT RAISE(
+        ABORT,
+        'transformer_circuits.regulated_bus_side must be NULL when regulated_bus_id is an end of the circuit''s arc and set when it is not'
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_regulated_bus_side_update BEFORE
+UPDATE OF regulated_bus_id, regulated_bus_side, arc_id ON transformer_circuits
+    WHEN NEW.regulated_bus_id IS NOT NULL
+    AND (NEW.regulated_bus_side IS NULL) <> EXISTS (
+        SELECT 1
+        FROM arcs
+        WHERE id = NEW.arc_id
+            AND NEW.regulated_bus_id IN (from_id, to_id)
+    )
+BEGIN
+SELECT RAISE(
+        ABORT,
+        'transformer_circuits.regulated_bus_side must be NULL when regulated_bus_id is an end of the circuit''s arc and set when it is not'
+    );
+END;
+
+-- A VSC converter's remote regulated bus is never its own terminal bus: NULL already means
+-- own-bus control.
+CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_remote_bus_insert
+AFTER INSERT ON two_terminal_hvdc_lines
+BEGIN
+SELECT
+    CASE
+        WHEN NEW.remote_regulated_bus_id_from = (SELECT from_id FROM arcs WHERE id = NEW.arc_id)
+            THEN RAISE(ABORT, 'two_terminal_hvdc_lines.remote_regulated_bus_id_from must not be the from converter''s own terminal bus; NULL means own-bus control')
+        WHEN NEW.remote_regulated_bus_id_to = (SELECT to_id FROM arcs WHERE id = NEW.arc_id)
+            THEN RAISE(ABORT, 'two_terminal_hvdc_lines.remote_regulated_bus_id_to must not be the to converter''s own terminal bus; NULL means own-bus control')
+    END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_remote_bus_update
+AFTER UPDATE OF remote_regulated_bus_id_from, remote_regulated_bus_id_to, arc_id ON two_terminal_hvdc_lines
+BEGIN
+SELECT
+    CASE
+        WHEN NEW.remote_regulated_bus_id_from = (SELECT from_id FROM arcs WHERE id = NEW.arc_id)
+            THEN RAISE(ABORT, 'two_terminal_hvdc_lines.remote_regulated_bus_id_from must not be the from converter''s own terminal bus; NULL means own-bus control')
+        WHEN NEW.remote_regulated_bus_id_to = (SELECT to_id FROM arcs WHERE id = NEW.arc_id)
+            THEN RAISE(ABORT, 'two_terminal_hvdc_lines.remote_regulated_bus_id_to must not be the to converter''s own terminal bus; NULL means own-bus control')
+    END;
+END;
+
+-- Voltage control membership. Droop members are generators; sharing members are the
+-- devices that regulate voltage (RenewableNonDispatch shares the renewable table but is a
+-- fixed injection); terminal names a converter of a two-terminal VSC line and nothing
+-- else. The member's table comes from entities, the same source the arc trigger reads.
+CREATE TRIGGER IF NOT EXISTS enforce_voltage_control_member_types_insert
+AFTER INSERT ON voltage_control_associations
+BEGIN
+SELECT
+    CASE
+        WHEN (SELECT TYPE FROM voltage_control_groups WHERE id = NEW.control_id) = 'VoltageDroopControl'
+            AND NOT EXISTS (
+                SELECT 1 FROM entities
+                WHERE id = NEW.entity_id
+                    AND entity_table IN ('thermal_generators', 'hydro_generators', 'renewable_generators')
+                    AND entity_type <> 'RenewableNonDispatch'
+            )
+            THEN RAISE(ABORT, 'voltage_control_associations: only generators can be members of a VoltageDroopControl')
+        WHEN NOT EXISTS (
+                SELECT 1 FROM entities
+                WHERE id = NEW.entity_id
+                    AND entity_table IN ('thermal_generators', 'hydro_generators', 'renewable_generators',
+                        'storage_units', 'synchronous_condensers', 'sources', 'switched_admittance',
+                        'facts_control_devices', 'interconnecting_converters', 'two_terminal_hvdc_lines')
+                    AND entity_type <> 'RenewableNonDispatch'
+            )
+            THEN RAISE(ABORT, 'voltage_control_associations: the member must be a voltage regulating device (generator, storage unit, synchronous condenser, source, switched shunt, FACTS device, converter or two-terminal VSC line)')
+        WHEN (NEW.terminal IS NULL) = COALESCE(
+                (SELECT converter_type FROM two_terminal_hvdc_lines WHERE id = NEW.entity_id) = 'VSC',
+                0
+            )
+            THEN RAISE(ABORT, 'voltage_control_associations.terminal names the converter of a two-terminal VSC line member and must be NULL for any other member')
+    END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_voltage_control_member_types_update
+AFTER UPDATE OF control_id, entity_id, terminal ON voltage_control_associations
+BEGIN
+SELECT
+    CASE
+        WHEN (SELECT TYPE FROM voltage_control_groups WHERE id = NEW.control_id) = 'VoltageDroopControl'
+            AND NOT EXISTS (
+                SELECT 1 FROM entities
+                WHERE id = NEW.entity_id
+                    AND entity_table IN ('thermal_generators', 'hydro_generators', 'renewable_generators')
+                    AND entity_type <> 'RenewableNonDispatch'
+            )
+            THEN RAISE(ABORT, 'voltage_control_associations: only generators can be members of a VoltageDroopControl')
+        WHEN NOT EXISTS (
+                SELECT 1 FROM entities
+                WHERE id = NEW.entity_id
+                    AND entity_table IN ('thermal_generators', 'hydro_generators', 'renewable_generators',
+                        'storage_units', 'synchronous_condensers', 'sources', 'switched_admittance',
+                        'facts_control_devices', 'interconnecting_converters', 'two_terminal_hvdc_lines')
+                    AND entity_type <> 'RenewableNonDispatch'
+            )
+            THEN RAISE(ABORT, 'voltage_control_associations: the member must be a voltage regulating device (generator, storage unit, synchronous condenser, source, switched shunt, FACTS device, converter or two-terminal VSC line)')
+        WHEN (NEW.terminal IS NULL) = COALESCE(
+                (SELECT converter_type FROM two_terminal_hvdc_lines WHERE id = NEW.entity_id) = 'VSC',
+                0
+            )
+            THEN RAISE(ABORT, 'voltage_control_associations.terminal names the converter of a two-terminal VSC line member and must be NULL for any other member')
+    END;
+END;

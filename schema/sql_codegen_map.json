@@ -179,12 +179,8 @@
         "voltage_limits_to",
         "dc_voltage_droop_from",
         "dc_voltage_droop_to",
-        "remote_bus_control_from",
-        "remote_bus_control_to",
         "rated_ac_voltage_from",
-        "rated_ac_voltage_to",
-        "rmpct_from",
-        "rmpct_to"
+        "rated_ac_voltage_to"
       ],
       "skip": [
         "parameter_units",

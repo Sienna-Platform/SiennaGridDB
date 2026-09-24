@@ -8,43 +8,15 @@ import sqlite3
 
 import pytest
 
-from conftest import SCHEMAS_PATH, load_schemas_json, make_entity
-
-
-def make_bus(conn, bus_id, name):
-    make_entity(conn, bus_id, "balancing_topologies", "ACBus", is_topology=1)
-    conn.execute(
-        "INSERT INTO balancing_topologies(id, name) VALUES (?, ?)", (bus_id, name)
-    )
-    return bus_id
-
-
-def make_dc_bus(conn, bus_id, name):
-    """Create a DC balancing-topology entity plus its row (entity_types.is_dc = 1)."""
-    make_entity(conn, bus_id, "balancing_topologies", "DCBus", is_topology=1, is_dc=1)
-    conn.execute(
-        "INSERT INTO balancing_topologies(id, name) VALUES (?, ?)", (bus_id, name)
-    )
-    return bus_id
-
-
-def make_arc(conn, arc_id, from_id, to_id):
-    make_entity(conn, arc_id, "arcs", "Arc")
-    conn.execute(
-        "INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)",
-        (arc_id, from_id, to_id),
-    )
-    return arc_id
-
-
-def make_circuit(conn, circuit_id, arc_id):
-    make_entity(conn, circuit_id, "transformer_circuits", "TransformerCircuit")
-    conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, power_units, base_power) "
-        "VALUES (?, ?, 'COMPONENT_BASE', 100.0)",
-        (circuit_id, arc_id),
-    )
-    return circuit_id
+from conftest import (
+    SCHEMAS_PATH,
+    load_schemas_json,
+    make_arc,
+    make_bus,
+    make_circuit,
+    make_dc_bus,
+    make_entity,
+)
 
 
 def _arc_between_new_buses(conn):
@@ -271,6 +243,7 @@ _TRANSFORMER_ENUM_COLUMNS = [
     ("three_winding_transformers", "shunt_location",
      "ThreeWindingTransformerShuntLocation"),
     ("transformer_circuits", "control_objective", "TransformerControlObjective"),
+    ("transformer_circuits", "regulated_bus_side", "TransformerRegulatedBusSide"),
 ]
 
 
@@ -521,5 +494,3 @@ def test_dc_flag_requires_topology_type(fresh_db):
         fresh_db.execute(
             "INSERT INTO entity_types(name, is_topology, is_dc) VALUES ('Bogus', 0, 1)"
         )
-
-

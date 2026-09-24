@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 1; -- first released schema version; bump on every schema or registry change
+PRAGMA user_version = 2; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -83,6 +83,10 @@ DROP TABLE IF EXISTS fuels;
 DROP TABLE IF EXISTS supplemental_attribute_associations;
 
 DROP TABLE IF EXISTS transport_technologies;
+
+DROP TABLE IF EXISTS voltage_control_associations;
+
+DROP TABLE IF EXISTS voltage_control_groups;
 
 DROP TABLE IF EXISTS combined_cycle_associations;
 
@@ -251,8 +255,17 @@ CREATE TABLE transformer_circuits (
             'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE',
             'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE',
             'ASYMMETRIC_ACTIVE_POWER_FLOW')),
-    -- Controlled bus number (sign = regulation side):
-    regulated_bus_number INTEGER NOT NULL DEFAULT 0,
+    -- Bus whose voltage the tap holds, named exactly when control_objective regulates
+    -- voltage. regulated_bus_side says which winding the bus lies beyond when it is not an
+    -- end of the circuit's arc; for an arc end the side follows from the arc and must be
+    -- NULL (enforce_transformer_circuits_regulated_bus_side_*).
+    regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
+    regulated_bus_side TEXT NULL
+        CHECK (regulated_bus_side IS NULL OR regulated_bus_side IN ('CONTROLLING_WINDING', 'OPPOSITE_WINDING')),
+    -- Load drop compensation {"real": CR, "imag": CX}: the impedance times the circuit
+    -- current that corrects the regulated voltage.
+    load_drop_compensation TEXT NOT NULL DEFAULT '{"real": 0.0, "imag": 0.0}'
+        CHECK (json_valid(load_drop_compensation)), -- Units: per parameter_units
     control_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
         CHECK (control_limits IS NULL OR json_valid(control_limits)), -- Units: per control_objective (tap ratio 1 / angle rad)
     controlled_quantity_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
@@ -266,7 +279,9 @@ CREATE TABLE transformer_circuits (
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_voltage_primary REAL NULL CHECK (base_voltage_primary > 0), -- Units: kV
-    base_voltage_secondary REAL NULL CHECK (base_voltage_secondary > 0) -- Units: kV
+    base_voltage_secondary REAL NULL CHECK (base_voltage_secondary > 0), -- Units: kV
+    CHECK ((regulated_bus_id IS NOT NULL) = (control_objective IN ('VOLTAGE', 'VOLTAGE_DISABLED'))),
+    CHECK (regulated_bus_side IS NULL OR regulated_bus_id IS NOT NULL)
 ) strict;
 
 -- Two-winding transformer (PSY TwoWindingTransformer); series data lives on
@@ -341,6 +356,13 @@ CREATE TABLE thermal_generators (
     prime_mover_type TEXT NOT NULL REFERENCES prime_mover_types(name),
     fuel TEXT NOT NULL DEFAULT 'OTHER' REFERENCES fuels(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
+    -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
+    voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (voltage_setpoint_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -389,6 +411,13 @@ CREATE TABLE renewable_generators (
     name TEXT NOT NULL UNIQUE,
     prime_mover_type TEXT NOT NULL REFERENCES prime_mover_types(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
+    -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
+    voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (voltage_setpoint_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -427,6 +456,13 @@ CREATE TABLE hydro_generators (
     name TEXT NOT NULL UNIQUE,
     prime_mover_type TEXT NOT NULL DEFAULT 'HY' REFERENCES prime_mover_types(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
+    -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
+    voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (voltage_setpoint_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -475,6 +511,13 @@ CREATE TABLE storage_units (
     prime_mover_type TEXT NOT NULL REFERENCES prime_mover_types(name),
     storage_technology_type TEXT NOT NULL REFERENCES storage_technology_types(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
+    -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> balancing_topology),
+    voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (voltage_setpoint_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     rating REAL NOT NULL CHECK (rating >= 0), -- Units: per power_units
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -716,6 +759,57 @@ CREATE TABLE combined_cycle_associations (
     UNIQUE (plant_id, entity_id, hrsg_index)
 ) strict;
 
+-- Voltage droop controllers and reactive power sharing groups (PSY VoltageDroopControl
+-- and ReactivePowerSharing): supplemental attributes whose members jointly regulate one
+-- bus. Modeled on plants: TYPE discriminates the two kinds. The columns after available
+-- describe the droop controller's Q-V characteristic, which a sharing group does not
+-- have, so they are set exactly on a droop row. Reactive powers are natural MVAr: the
+-- attribute has no base_power to per-unitize against. Voltages follow voltage_units
+-- (COMPONENT_BASE: pu on the regulated bus's base_voltage; NATURAL_UNITS: kV).
+CREATE TABLE voltage_control_groups (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    TYPE TEXT NOT NULL CHECK (TYPE IN ('VoltageDroopControl', 'ReactivePowerSharing')),
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
+    reactive_power_limits TEXT NULL -- {"min": ..., "max": ...}
+        CHECK (reactive_power_limits IS NULL OR json_valid(reactive_power_limits)), -- Units: MVAr
+    deadband_reactive_power REAL NULL, -- Units: MVAr
+    voltage_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (voltage_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    deadband_voltage_limits TEXT NULL -- {"min": ..., "max": ...}
+        CHECK (deadband_voltage_limits IS NULL OR json_valid(deadband_voltage_limits)), -- Units: per voltage_units
+    voltage_limits TEXT NULL -- {"min": ..., "max": ...}
+        CHECK (voltage_limits IS NULL OR json_valid(voltage_limits)), -- Units: per voltage_units
+    CHECK ((TYPE = 'VoltageDroopControl') = (regulated_bus_id IS NOT NULL
+        AND reactive_power_limits IS NOT NULL AND deadband_reactive_power IS NOT NULL
+        AND deadband_voltage_limits IS NOT NULL AND voltage_limits IS NOT NULL)),
+    CHECK (TYPE = 'VoltageDroopControl' OR (regulated_bus_id IS NULL
+        AND reactive_power_limits IS NULL AND deadband_reactive_power IS NULL
+        AND deadband_voltage_limits IS NULL AND voltage_limits IS NULL))
+) strict;
+
+-- One row per member of a voltage control group: entity_id is the regulating device, or
+-- a two-terminal VSC line with terminal naming the converter. weight is the member's
+-- relative reactive power share (PSS/E RMPCT / 100); shares are relative, so a group's
+-- rows need not sum to one. Which entities may join, and when terminal is required, is
+-- enforced by enforce_voltage_control_member_types_*. Like plant_associations, the
+-- relationship is GridDB's own, so it gets a local AUTOINCREMENT surrogate.
+CREATE TABLE voltage_control_associations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    control_id INTEGER NOT NULL REFERENCES voltage_control_groups (id) ON DELETE CASCADE,
+    entity_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
+    weight REAL NOT NULL DEFAULT 1.0 CHECK (weight > 0), -- Units: 1
+    terminal TEXT NULL CHECK (terminal IS NULL OR terminal IN ('FROM', 'TO'))
+) strict;
+
+-- A device, or one converter of a VSC line, belongs to at most one group of either kind.
+CREATE UNIQUE INDEX uq_voltage_control_member
+    ON voltage_control_associations (entity_id, COALESCE(terminal, ''));
+
+CREATE INDEX idx_voltage_control_assoc_control
+    ON voltage_control_associations (control_id, entity_id);
+
 -- Mirrors infrastore's catalog table column-for-column so a row deserializes
 -- straight into a store, and projects onto the SiennaSchemas wire form.
 -- owner_category / time_series_type hold the wire string spelling directly
@@ -912,8 +1006,10 @@ CREATE TABLE switched_admittance (
         CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE',
             'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT',
             'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
-    -- 0 = local bus:
-    regulated_bus_number INTEGER NOT NULL DEFAULT 0
+    -- Bus whose voltage the device regulates; NULL means its own bus, so naming the own
+    -- bus is rejected. A shared regulation weight lives on voltage_control_associations:
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus)
 ) strict;
 
 -- Synchronous machine for inertia or reactive support (PSY SynchronousCondenser).
@@ -924,6 +1020,13 @@ CREATE TABLE synchronous_condensers (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
+    -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus),
+    voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (voltage_setpoint_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     reactive_power REAL NOT NULL DEFAULT 0.0, -- Units: per power_units
     rating REAL NOT NULL CHECK (rating > 0), -- Units: per power_units
@@ -944,6 +1047,13 @@ CREATE TABLE sources (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    -- Bus whose voltage the unit holds while it regulates voltage. NULL means its own
+    -- bus, so naming the own bus is rejected; the reference blocks deleting that bus.
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus),
+    voltage_setpoint REAL NOT NULL DEFAULT 1.0 CHECK (voltage_setpoint > 0), -- Units: per voltage_setpoint_units
+    voltage_setpoint_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE'
+        CHECK (voltage_setpoint_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     -- Nullable: a source may take the voltage of the bus it connects to instead:
     base_voltage REAL NULL CHECK (base_voltage IS NULL OR base_voltage > 0), -- Units: kV
@@ -1056,7 +1166,22 @@ CREATE TABLE two_terminal_hvdc_lines (
     reactive_power_limits_from TEXT NULL
         CHECK (reactive_power_limits_from IS NULL OR json_valid(reactive_power_limits_from)), -- Units: per power_units
     reactive_power_limits_to TEXT NULL
-        CHECK (reactive_power_limits_to IS NULL OR json_valid(reactive_power_limits_to)) -- Units: per power_units
+        CHECK (reactive_power_limits_to IS NULL OR json_valid(reactive_power_limits_to)), -- Units: per power_units
+    -- VSC only: the bus each converter's AC voltage control holds. NULL means its own
+    -- terminal bus, which enforce_two_terminal_hvdc_lines_remote_bus_* forbids naming.
+    remote_regulated_bus_id_from INTEGER NULL REFERENCES balancing_topologies (id),
+    remote_regulated_bus_id_to INTEGER NULL REFERENCES balancing_topologies (id),
+    -- LCC only: each converter's commutating bus and tap transformer, when they are not
+    -- its terminal bus and an ideal transformer.
+    rectifier_commutating_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
+    inverter_commutating_bus_id INTEGER NULL REFERENCES balancing_topologies (id),
+    rectifier_tap_transformer_id INTEGER NULL REFERENCES two_winding_transformers (id),
+    inverter_tap_transformer_id INTEGER NULL REFERENCES two_winding_transformers (id),
+    CHECK (converter_type = 'VSC'
+        OR (remote_regulated_bus_id_from IS NULL AND remote_regulated_bus_id_to IS NULL)),
+    CHECK (converter_type = 'LCC'
+        OR (rectifier_commutating_bus_id IS NULL AND inverter_commutating_bus_id IS NULL
+            AND rectifier_tap_transformer_id IS NULL AND inverter_tap_transformer_id IS NULL))
 ) strict;
 
 -- T-model HVDC line (PSY TModelHVDCLine): a DC-network element whose arc
@@ -1096,8 +1221,10 @@ CREATE TABLE facts_control_devices (
     max_reactive_power REAL NOT NULL DEFAULT 9999.0 CHECK (max_reactive_power >= 0), -- Units: per power_units
     shunt_control_type TEXT NOT NULL DEFAULT 'STATCOM'
         CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
-    -- 0 = local (sending) bus:
-    regulated_bus_number INTEGER NOT NULL DEFAULT 0
+    -- Bus whose voltage the device regulates; NULL means its own bus, so naming the own
+    -- bus is rejected. A shared regulation weight lives on voltage_control_associations:
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus)
 ) strict;
 
 -- Interconnecting power converter (PSY InterconnectingConverter), an AC<->DC
@@ -1120,9 +1247,10 @@ CREATE TABLE interconnecting_converters (
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    -- Remote-bus voltage control, droop, and power-factor weighting:
-    remote_bus_control INTEGER NULL CHECK (remote_bus_control IS NULL OR remote_bus_control >= 1),
-    rmpct REAL NOT NULL DEFAULT 100.0 CHECK (rmpct >= 0),
+    -- Bus whose voltage the device regulates; NULL means its own bus, so naming the own
+    -- bus is rejected. A shared regulation weight lives on voltage_control_associations:
+    remote_regulated_bus_id INTEGER NULL REFERENCES balancing_topologies (id)
+        CHECK (remote_regulated_bus_id IS NULL OR remote_regulated_bus_id <> bus),
     power_factor_weighting_fraction REAL NOT NULL DEFAULT 1.0 CHECK (power_factor_weighting_fraction >= 0),
     voltage_limits TEXT NULL DEFAULT '{"min": 0.0, "max": 999.9}'
         CHECK (voltage_limits IS NULL OR json_valid(voltage_limits)),

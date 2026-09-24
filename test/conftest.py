@@ -56,6 +56,42 @@ def make_entity(
     )
     return entity_id
 
+def make_bus(conn, bus_id, name):
+    make_entity(conn, bus_id, "balancing_topologies", "ACBus", is_topology=1)
+    conn.execute(
+        "INSERT INTO balancing_topologies(id, name) VALUES (?, ?)", (bus_id, name)
+    )
+    return bus_id
+
+
+def make_dc_bus(conn, bus_id, name):
+    """Create a DC balancing-topology entity plus its row (entity_types.is_dc = 1)."""
+    make_entity(conn, bus_id, "balancing_topologies", "DCBus", is_topology=1, is_dc=1)
+    conn.execute(
+        "INSERT INTO balancing_topologies(id, name) VALUES (?, ?)", (bus_id, name)
+    )
+    return bus_id
+
+
+def make_arc(conn, arc_id, from_id, to_id):
+    make_entity(conn, arc_id, "arcs", "Arc")
+    conn.execute(
+        "INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)",
+        (arc_id, from_id, to_id),
+    )
+    return arc_id
+
+
+def make_circuit(conn, circuit_id, arc_id):
+    make_entity(conn, circuit_id, "transformer_circuits", "TransformerCircuit")
+    conn.execute(
+        "INSERT INTO transformer_circuits(id, arc_id, power_units, base_power) "
+        "VALUES (?, ?, 'COMPONENT_BASE', 100.0)",
+        (circuit_id, arc_id),
+    )
+    return circuit_id
+
+
 # Order matters: schema (tables) -> triggers -> registry seed (+ seal) -> views.
 SCHEMA_FILES = [
     SCHEMA_DIR / "schema.sql",
