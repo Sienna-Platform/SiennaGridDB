@@ -50,20 +50,22 @@ def make_bus(conn, bus_id, name):
     return bus_id
 
 
-def insert_thermal(conn, gen_id, bus_id, production_cost):
+def insert_thermal(conn, gen_id, bus_id, production_cost, operation_cost=None):
     """production_cost is a generated column; the curve is written through
-    operation_cost.variable_operation_cost and read back via production_cost."""
+    operation_cost.variable_operation_cost and read back via production_cost.
+    Pass operation_cost to write a whole cost object instead."""
     make_entity(conn, gen_id, "thermal_generators", "ThermalStandard")
     # A fresh build seeds no vocabularies; thermal_generators FKs both of these.
     conn.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES ('ST')")
     conn.execute("INSERT OR IGNORE INTO fuels(name) VALUES ('NATURAL_GAS')")
-    operation_cost = {
-        "cost_type": "THERMAL",
-        "fixed": 0,
-        "shut_down": 0,
-        "start_up": 0,
-        "variable_operation_cost": production_cost,
-    }
+    if operation_cost is None:
+        operation_cost = {
+            "cost_type": "THERMAL",
+            "fixed": 0,
+            "shut_down": 0,
+            "start_up": 0,
+            "variable_operation_cost": production_cost,
+        }
     conn.execute(
         """INSERT INTO thermal_generators
                (id, name, prime_mover_type, fuel, balancing_topology, rating,
@@ -465,6 +467,17 @@ def test_unknown_curve_type_is_rejected(fresh_db):
     cost["value_curve"]["curve_type"] = "SPLINE"
     with pytest.raises(sqlite3.IntegrityError):
         insert_thermal(fresh_db, 2, bus, cost)
+
+
+@pytest.mark.parametrize(
+    "cost_type", ["MARKET_BID", "MARKET_BID_TIME_SERIES", "IMPORT_EXPORT_TIME_SERIES"]
+)
+def test_bid_costs_have_no_production_cost(fresh_db, cost_type):
+    """Bid and import/export costs carry offer curves, not variable_operation_cost."""
+    bus = make_bus(fresh_db, 1, "bus-1")
+    insert_thermal(fresh_db, 2, bus, None, operation_cost={"cost_type": cost_type})
+    row = fresh_db.execute("SELECT production_cost FROM thermal_generators").fetchone()
+    assert row == (None,)
 
 
 def test_production_cost_cannot_be_written_directly(fresh_db):
