@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 1; -- first released schema version; bump on every schema or registry change
+PRAGMA user_version = 2; -- bump on every schema or registry change (2: fixed-quantity control fields)
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -253,10 +253,18 @@ CREATE TABLE transformer_circuits (
             'ASYMMETRIC_ACTIVE_POWER_FLOW')),
     -- Controlled bus number (sign = regulation side):
     regulated_bus_number INTEGER NOT NULL DEFAULT 0,
-    control_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
-        CHECK (control_limits IS NULL OR json_valid(control_limits)), -- Units: per control_objective (tap ratio 1 / angle rad)
-    controlled_quantity_limits TEXT NULL DEFAULT '{"min": 0.9, "max": 1.1}'
-        CHECK (controlled_quantity_limits IS NULL OR json_valid(controlled_quantity_limits)), -- Units: per control_objective (pu / MVAr / MW)
+    -- One field per physical quantity; control_objective selects one actuator band
+    -- (tap ratio or phase angle) and one target band, and the rest stay NULL.
+    tap_ratio_limits TEXT NULL
+        CHECK (tap_ratio_limits IS NULL OR json_valid(tap_ratio_limits)), -- Units: 1
+    phase_angle_limits TEXT NULL
+        CHECK (phase_angle_limits IS NULL OR json_valid(phase_angle_limits)), -- Units: rad
+    controlled_voltage_limits TEXT NULL
+        CHECK (controlled_voltage_limits IS NULL OR json_valid(controlled_voltage_limits)), -- Units: pu of the regulated bus
+    controlled_reactive_power_flow_limits TEXT NULL
+        CHECK (controlled_reactive_power_flow_limits IS NULL OR json_valid(controlled_reactive_power_flow_limits)), -- Units: per power_units
+    controlled_active_power_flow_limits TEXT NULL
+        CHECK (controlled_active_power_flow_limits IS NULL OR json_valid(controlled_active_power_flow_limits)), -- Units: per power_units
     number_of_tap_positions INTEGER NOT NULL DEFAULT 33,
     rating REAL NULL CHECK (rating >= 0), -- Units: per power_units
     rating_b REAL NULL CHECK (rating_b >= 0), -- Units: per power_units
@@ -906,12 +914,18 @@ CREATE TABLE switched_admittance (
     number_of_steps TEXT NULL
         CHECK (number_of_steps IS NULL OR json_valid(number_of_steps)),
     solved_admittance REAL NULL, -- Units: per admittance_units
-    admittance_limits TEXT NULL DEFAULT '{"min": 1.0, "max": 1.0}' -- Units: per admittance_units
-        CHECK (admittance_limits IS NULL OR json_valid(admittance_limits)),
+    -- PSS/E VSWLO/VSWHI, one column per quantity: the voltage modes fill
+    -- voltage_limits, the reactive and remote-admittance modes fill
+    -- reactive_power_range_limits, and FIXED/UNDEFINED fill neither.
+    voltage_limits TEXT NULL -- Units: pu of the regulated bus
+        CHECK (voltage_limits IS NULL OR json_valid(voltage_limits)),
+    reactive_power_range_limits TEXT NULL -- Units: 1, fraction of the regulated device's reactive range
+        CHECK (reactive_power_range_limits IS NULL OR json_valid(reactive_power_range_limits)),
     control_mode TEXT NOT NULL DEFAULT 'FIXED'
         CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE',
             'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT',
-            'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
+            'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE',
+            'DISCRETE_REACTIVE_FACTS')),
     -- 0 = local bus:
     regulated_bus_number INTEGER NOT NULL DEFAULT 0
 ) strict;
@@ -1101,10 +1115,12 @@ CREATE TABLE facts_control_devices (
 ) strict;
 
 -- Interconnecting power converter (PSY InterconnectingConverter), an AC<->DC
--- bus converter. dc_setpoint/ac_setpoint are mode-multiplexed by
--- dc_control/ac_control; their voltage-mode values (DC_VOLTAGE,
--- DC_VOLTAGE_DROOP, AC_VOLTAGE) are further discriminated by parameter_units
--- (pu/kV) via the registry's second discriminator column.
+-- bus converter. Each control mode selects one setpoint column and the other
+-- stays NULL: dc_control picks dc_power_setpoint or dc_voltage_setpoint,
+-- ac_control picks power_factor_setpoint or ac_voltage_setpoint. The voltage
+-- setpoints are pu or kV per parameter_units (the schema's
+-- voltage_setpoint_units). The control modes carry no default: an in-service
+-- converter always controls something on each side, so the writer states it.
 CREATE TABLE interconnecting_converters (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -1113,10 +1129,12 @@ CREATE TABLE interconnecting_converters (
     -- the entity_types.is_dc flag.
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     dc_bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    dc_setpoint REAL NOT NULL DEFAULT 0.0,
-    dc_control TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER','DC_VOLTAGE','DC_VOLTAGE_DROOP')),
-    ac_setpoint REAL NOT NULL DEFAULT 1.0,
-    ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_VOLTAGE','AC_REACTIVE_POWER')),
+    dc_power_setpoint REAL NULL, -- Units: per power_units
+    dc_voltage_setpoint REAL NULL, -- Units: per parameter_units (kV / pu on dc_bus base)
+    dc_control TEXT NOT NULL CHECK (dc_control IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
+    power_factor_setpoint REAL NULL, -- Units: 1
+    ac_voltage_setpoint REAL NULL, -- Units: per parameter_units (kV / pu on bus base)
+    ac_control TEXT NOT NULL CHECK (ac_control IN ('AC_VOLTAGE', 'AC_REACTIVE_POWER')),
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),

@@ -239,8 +239,11 @@ CREATE TABLE transformer_circuits (
     x REAL NULL DEFAULT 0.0, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     control_objective TEXT NULL DEFAULT 'UNDEFINED' CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED', 'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED', 'CONTROL_OF_DC_LINE_DISABLED', 'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE', 'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE', 'ASYMMETRIC_ACTIVE_POWER_FLOW')),
     regulated_bus_number INTEGER NULL DEFAULT 0,
-    control_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: rad, ACTIVE_POWER_FLOW_DISABLED: rad, ASYMMETRIC_ACTIVE_POWER_FLOW: rad, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: rad, CONTROL_OF_DC_LINE: 1, CONTROL_OF_DC_LINE_DISABLED: 1, FIXED: 1, REACTIVE_POWER_FLOW: 1, REACTIVE_POWER_FLOW_DISABLED: 1, UNDEFINED: 1, VOLTAGE: 1, VOLTAGE_DISABLED: 1)
-    controlled_quantity_limits JSON NULL DEFAULT '{"max":1.1,"min":0.9}', -- Units: per control_objective (ACTIVE_POWER_FLOW: MW, ACTIVE_POWER_FLOW_DISABLED: MW, ASYMMETRIC_ACTIVE_POWER_FLOW: MW, ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED: MW, CONTROL_OF_DC_LINE: MW, CONTROL_OF_DC_LINE_DISABLED: MW, FIXED: pu, REACTIVE_POWER_FLOW: MVAr, REACTIVE_POWER_FLOW_DISABLED: MVAr, UNDEFINED: pu, VOLTAGE: pu, VOLTAGE_DISABLED: pu)
+    tap_ratio_limits JSON NULL, -- Units: 1
+    phase_angle_limits JSON NULL, -- Units: rad
+    controlled_voltage_limits JSON NULL, -- Units: pu
+    controlled_reactive_power_flow_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
+    controlled_active_power_flow_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     number_of_tap_positions INTEGER NULL DEFAULT 33,
     rating REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
     rating_b REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
@@ -286,7 +289,7 @@ CREATE TABLE three_winding_transformers (
 
 -- two_terminal_hvdc_lines: generated from TwoTerminalGenericHVDCLine, TwoTerminalLCCLine, TwoTerminalVSCLine
 -- Stored via the generic `attributes` table (registered attribute-name
--- conventions), not as columns: loss, r, transfer_setpoint, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_capacitor_reactance, inverter_bridges, inverter_extinction_angle, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_capacitor_reactance, power_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rating, rating_from, rating_to, g, dc_current, rated_dc_voltage, reactive_power_from, reactive_power_to, dc_control_from, dc_control_to, ac_control_from, ac_control_to, dc_setpoint_from, dc_setpoint_to, ac_setpoint_from, ac_setpoint_to, converter_loss_from, converter_loss_to, max_dc_current_from, max_dc_current_to, power_factor_weighting_fraction_from, power_factor_weighting_fraction_to, voltage_limits_from, voltage_limits_to, dc_voltage_droop_from, dc_voltage_droop_to, remote_bus_control_from, remote_bus_control_to, rated_ac_voltage_from, rated_ac_voltage_to, rmpct_from, rmpct_to
+-- conventions), not as columns: loss, r, power_transfer_setpoint, current_transfer_setpoint, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_capacitor_reactance, inverter_bridges, inverter_extinction_angle, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_capacitor_reactance, control_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rating, rating_from, rating_to, g, dc_current, rated_dc_voltage, reactive_power_from, reactive_power_to, dc_control_from, dc_control_to, ac_control_from, ac_control_to, dc_power_setpoint_from, dc_power_setpoint_to, power_factor_setpoint_from, power_factor_setpoint_to, dc_voltage_setpoint_from, dc_voltage_setpoint_to, ac_voltage_setpoint_from, ac_voltage_setpoint_to, converter_loss_from, converter_loss_to, max_dc_current_from, max_dc_current_to, power_factor_weighting_fraction_from, power_factor_weighting_fraction_to, voltage_limits_from, voltage_limits_to, dc_voltage_droop_from, dc_voltage_droop_to, remote_bus_control_from, remote_bus_control_to, rated_ac_voltage_from, rated_ac_voltage_to, rmpct_from, rmpct_to
 CREATE TABLE two_terminal_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -353,8 +356,9 @@ CREATE TABLE switched_admittance (
     number_of_steps JSON NULL,
     Y_increase JSON NULL, -- Units: per admittance_units (COMPONENT_MVAR: MVAr, NATURAL_UNITS: S)
     solved_admittance REAL NULL, -- Units: per admittance_units (COMPONENT_MVAR: MVAr, NATURAL_UNITS: S)
-    admittance_limits JSON NULL DEFAULT '{"max":1.0,"min":1.0}', -- Units: per admittance_units (COMPONENT_MVAR: MVAr, NATURAL_UNITS: S)
-    control_mode TEXT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE', 'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT', 'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE')),
+    voltage_limits JSON NULL, -- Units: pu
+    reactive_power_range_limits JSON NULL, -- Units: 1
+    control_mode TEXT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE', 'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT', 'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE', 'DISCRETE_REACTIVE_FACTS')),
     regulated_bus_number INTEGER NULL DEFAULT 0 -- Units: 1
 );
 
@@ -395,11 +399,13 @@ CREATE TABLE interconnecting_converters (
     dc_current REAL NULL DEFAULT 0.0, -- Units: A
     max_dc_current REAL NULL DEFAULT 100000000.0, -- Units: A
     loss_function JSON NULL,
-    dc_control TEXT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
-    ac_control TEXT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_REACTIVE_POWER', 'AC_VOLTAGE')),
+    dc_control TEXT NULL CHECK (dc_control IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
+    ac_control TEXT NULL CHECK (ac_control IN ('AC_REACTIVE_POWER', 'AC_VOLTAGE')),
     parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    dc_setpoint REAL NULL DEFAULT 0.0, -- Units: per dc_control (DC_POWER: MW; DC_VOLTAGE: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV]; DC_VOLTAGE_DROOP: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
-    ac_setpoint REAL NULL DEFAULT 1.0, -- Units: per ac_control (AC_REACTIVE_POWER: 1; AC_VOLTAGE: per parameter_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
+    dc_power_setpoint REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    dc_voltage_setpoint REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
+    power_factor_setpoint REAL NULL CHECK (power_factor_setpoint >= -1.0) CHECK (power_factor_setpoint <= 1.0), -- Units: 1
+    ac_voltage_setpoint REAL NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)
     dc_voltage_droop REAL NULL DEFAULT 0.0, -- Units: pu
     remote_bus_control INTEGER NULL,
     rmpct REAL NULL DEFAULT 100.0, -- Units: 1

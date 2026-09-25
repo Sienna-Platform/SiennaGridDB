@@ -126,9 +126,9 @@ inside `attributes` has no column sibling to name). `two_terminal_hvdc_lines` fo
 for all three HVDC variants (LCC impedances, VSC setpoints); `thermal_generators` follows
 it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_trajectory` stays
 unregistered, basis-dependent on the attribute `power_units`, same as VSC's
-`dc_setpoint_*`).
+`dc_voltage_setpoint_*`/`ac_voltage_setpoint_*` on `setpoint_voltage_units`).
 
-Current registry: **41 quantity kinds, 66 allowed units, 405 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 390 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`

@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 405
+EXPECTED_UNIT_CONVENTIONS = 390
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1355,9 +1355,15 @@ def test_merged_hvdc_columns_registered(db):
         ("scheduled_dc_voltage", None),
         ("g", None),
         ("voltage_limits_from", None),
-        ("dc_setpoint_from", None),
-        ("ac_setpoint_to", None),
-        ("transfer_setpoint", None),
+        ("dc_voltage_setpoint_from", None),
+        ("ac_voltage_setpoint_to", None),
+        # One field per quantity since the fixed-quantity split. The power setpoints
+        # follow the attribute power_units like their sibling power fields, so they stay
+        # unregistered; the current and power-factor setpoints have one unit each.
+        ("power_transfer_setpoint", None),
+        ("dc_power_setpoint_from", None),
+        ("current_transfer_setpoint", "CurrentFlow/A"),
+        ("power_factor_setpoint_to", "PowerFactor/1"),
         ("dc_voltage_droop_from", None),
         ("loss", None),
         ("converter_loss_from", None),
@@ -1382,7 +1388,7 @@ def test_demoted_hvdc_attribute_conventions(db, name, expected):
         # unambiguous units get a fixed convention, same as time_at_status.
         ("start_time_limits", "OperationalDuration/min"),
         ("start_types", "Dimensionless/1"),
-        # power_units-discriminated, same reason r/dc_setpoint_* stay unregistered
+        # power_units-discriminated, same reason r/dc_voltage_setpoint_* stay unregistered
         # above: the discriminator column lives on thermal_generators, not on the
         # attributes row itself.
         ("power_trajectory", None),
@@ -1423,19 +1429,25 @@ def test_attribute_start_time_limits_wrong_unit_rejected(fresh_db):
         )
 
 
-def test_interconnecting_converter_setpoints_two_discriminator(db):
-    """InterconnectingConverter dc_setpoint/ac_setpoint are mode-multiplexed by
-    dc_control/ac_control, the same enums used by TwoTerminalVSCLine; their
-    voltage-mode rows carry a second discriminator (parameter_units) so pu vs kV is
-    also explicit."""
+def test_interconnecting_converter_setpoints_one_per_quantity(db):
+    """InterconnectingConverter carries one setpoint column per quantity; dc_control/
+    ac_control select which is populated. Only the voltage setpoints have a basis
+    choice, pu vs kV per parameter_units (the schema's voltage_setpoint_units)."""
     rows = set(db.execute(
-        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_kind, unit "
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name='interconnecting_converters' "
-        "AND column_name IN ('dc_setpoint','ac_setpoint')"
+        "AND column_name IN ('dc_power_setpoint','dc_voltage_setpoint',"
+        "'power_factor_setpoint','ac_voltage_setpoint')"
     ).fetchall())
-    assert ('dc_setpoint','DC_POWER',None,'ActivePower','MW') in rows
-    assert ('dc_setpoint','DC_VOLTAGE','COMPONENT_BASE','Voltage','pu') in rows
-    assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
+    assert rows == {
+        ('dc_power_setpoint', 'power_units', 'COMPONENT_BASE', 'ActivePower', 'pu'),
+        ('dc_power_setpoint', 'power_units', 'NATURAL_UNITS', 'ActivePower', 'MW'),
+        ('dc_voltage_setpoint', 'parameter_units', 'COMPONENT_BASE', 'Voltage', 'pu'),
+        ('dc_voltage_setpoint', 'parameter_units', 'NATURAL_UNITS', 'Voltage', 'kV'),
+        ('power_factor_setpoint', None, None, 'PowerFactor', '1'),
+        ('ac_voltage_setpoint', 'parameter_units', 'COMPONENT_BASE', 'Voltage', 'pu'),
+        ('ac_voltage_setpoint', 'parameter_units', 'NATURAL_UNITS', 'Voltage', 'kV'),
+    }
 
 
 # Basis resolvability invariant: every pu convention names a unit_basis_rules
@@ -1703,8 +1715,8 @@ def _build_interconnecting_converter(conn, base_id, parameter_units):
     )
     conn.execute(
         "INSERT INTO interconnecting_converters"
-        "(id, name, bus, dc_bus, parameter_units, power_units, base_power) "
-        "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE', 100.0)",
+        "(id, name, bus, dc_bus, parameter_units, power_units, base_power, dc_control, ac_control) "
+        "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE', 100.0, 'DC_VOLTAGE', 'AC_REACTIVE_POWER')",
         (base_id, f"conv_{base_id}", ac_bus, dc_bus, parameter_units),
     )
 
@@ -1772,21 +1784,37 @@ def test_fixed_admittance_rejects_non_shunt_basis(fresh_db, value):
 
 
 # switched_admittance follows the schemas' ShuntAdmittanceUnitBasis too: one
-# arm per admittance_units value, across Y_increase/solved_admittance/admittance_limits.
+# arm per admittance_units value, across Y_increase/solved_admittance.
 def test_switched_admittance_admittance_units_conventions(db):
     rows = db.execute(
         "SELECT column_name, discriminator_column, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'switched_admittance' "
-        "AND column_name IN ('Y_increase', 'solved_admittance', 'admittance_limits')"
+        "AND column_name IN ('Y_increase', 'solved_admittance')"
     ).fetchall()
     assert set(rows) == {
         ("Y_increase", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
         ("Y_increase", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
         ("solved_admittance", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
         ("solved_admittance", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
-        ("admittance_limits", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
-        ("admittance_limits", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
     }
+
+
+# PSS/E VSWLO/VSWHI is one band per quantity now: a per-unit voltage band under the
+# voltage modes, a fraction of the regulated device's reactive range under the others.
+def test_switched_admittance_control_bands_one_per_quantity(db):
+    rows = db.execute(
+        "SELECT column_name, discriminator_column, quantity_kind, unit, base_voltage_ref "
+        "FROM unit_conventions WHERE table_name = 'switched_admittance' "
+        "AND column_name IN ('voltage_limits', 'reactive_power_range_limits')"
+    ).fetchall()
+    assert set(rows) == {
+        ("voltage_limits", None, "Voltage", "pu", "bus->balancing_topologies.base_voltage"),
+        ("reactive_power_range_limits", None, "Fraction", "1", None),
+    }
+    assert db.execute(
+        "SELECT COUNT(*) FROM unit_conventions WHERE table_name = 'switched_admittance' "
+        "AND column_name = 'admittance_limits'"
+    ).fetchone() == (0,)
 
 
 @pytest.mark.parametrize("value", ["NATURAL_UNITS", "COMPONENT_MVAR"])
@@ -1939,9 +1967,8 @@ def test_parameter_units_arms_share_quantity_kind(db):
         if disc_col == "parameter_units":
             key, basis = (table_name, column_name), disc_val
         else:
-            # parameter_units is the SECOND discriminator (interconnecting_converters
-            # dc_setpoint/ac_setpoint): group per primary discriminator value, since
-            # DC_POWER and DC_VOLTAGE are legitimately different quantities.
+            # parameter_units is the SECOND discriminator: group per primary
+            # discriminator value, since the primary arms may be different quantities.
             key, basis = (table_name, column_name, disc_val), disc_val2
         by_group.setdefault(key, {"COMPONENT_BASE": set(), "NATURAL_UNITS": set()})
         by_group[key][basis].add(quantity_kind)
