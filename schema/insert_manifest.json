@@ -3134,7 +3134,7 @@
     }
   },
   "manifest_version": 1,
-  "schema_user_version": 1,
+  "schema_user_version": 2,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",
