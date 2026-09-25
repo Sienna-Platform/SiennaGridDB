@@ -241,13 +241,13 @@ def test_transformer_circuit_control_fields_roundtrip(fresh_db):
     make_entity(fresh_db, 4, "transformer_circuits", "TransformerCircuit")
     fresh_db.execute(
         "INSERT INTO transformer_circuits"
-        "(id, arc_id, tap, alpha, r, x, control_objective, control_limits, rating, power_units, base_power) "
+        "(id, arc_id, tap, alpha, r, x, control_objective, phase_angle_limits, rating, power_units, base_power) "
         "VALUES (4, ?, 1.05, 0.1, 0.001, 0.05, 'ASYMMETRIC_ACTIVE_POWER_FLOW', "
         "json('{\"min\": -0.5, \"max\": 0.5}'), 250.0, 'COMPONENT_BASE', 100.0)",
         (arc_id,),
     )
     row = fresh_db.execute(
-        "SELECT tap, control_objective, json_extract(control_limits, '$.max') "
+        "SELECT tap, control_objective, json_extract(phase_angle_limits, '$.max') "
         "FROM transformer_circuits WHERE id = 4"
     ).fetchone()
     assert row == (1.05, "ASYMMETRIC_ACTIVE_POWER_FLOW", 0.5)
@@ -432,8 +432,9 @@ def test_interconnecting_converter_bridges_ac_and_dc(fresh_db):
     ac, dc = make_bus(fresh_db, 1, "ac"), make_dc_bus(fresh_db, 2, "dc")
     make_entity(fresh_db, 99, "interconnecting_converters", "InterconnectingConverter")
     fresh_db.execute(
-        "INSERT INTO interconnecting_converters(id, name, bus, dc_bus, power_units, base_power) "
-        "VALUES (99, 'c', ?, ?, 'COMPONENT_BASE', 100.0)",
+        "INSERT INTO interconnecting_converters"
+        "(id, name, bus, dc_bus, power_units, base_power, dc_control, ac_control) "
+        "VALUES (99, 'c', ?, ?, 'COMPONENT_BASE', 100.0, 'DC_VOLTAGE', 'AC_REACTIVE_POWER')",
         (ac, dc),
     )
 
@@ -450,8 +451,9 @@ def test_interconnecting_converter_rejects_wrong_domains(fresh_db, bus_kinds):
     make_entity(fresh_db, 99, "interconnecting_converters", "InterconnectingConverter")
     with pytest.raises(sqlite3.IntegrityError, match="must be an AC topology"):
         fresh_db.execute(
-            "INSERT INTO interconnecting_converters(id, name, bus, dc_bus) "
-            "VALUES (99, 'c', ?, ?)",
+            "INSERT INTO interconnecting_converters"
+            "(id, name, bus, dc_bus, dc_control, ac_control) "
+            "VALUES (99, 'c', ?, ?, 'DC_VOLTAGE', 'AC_REACTIVE_POWER')",
             (first, second),
         )
 

@@ -268,8 +268,8 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
 def test_transformer_circuits_columns_and_units(fresh_db):
     """Circuit r/x are first-class impedance columns stored flexibly in pu on the
     component base OR natural-units ohm, recorded per row by parameter_units exactly
-    as transmission_lines does it, and the two MinMax control bands are
-    registered per control_objective value."""
+    as transmission_lines does it, and the five fixed-quantity control bands are
+    each registered with one unit."""
     cols = {
         row[1]: row[2]
         for row in fresh_db.execute("PRAGMA table_info(transformer_circuits)")
@@ -278,8 +278,11 @@ def test_transformer_circuits_columns_and_units(fresh_db):
     assert cols["x"] == "REAL"
     assert cols["tap"] == "REAL"
     assert cols["alpha"] == "REAL"
-    assert cols["control_limits"] == "TEXT"
-    assert cols["controlled_quantity_limits"] == "TEXT"
+    for band in (
+        "tap_ratio_limits", "phase_angle_limits", "controlled_voltage_limits",
+        "controlled_reactive_power_flow_limits", "controlled_active_power_flow_limits",
+    ):
+        assert cols[band] == "TEXT"
     assert cols["parameter_units"] == "TEXT"
     assert "name" not in cols  # circuits are unnamed subcomponents
 
@@ -300,6 +303,11 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("base_power", "ApparentPower", "MVA"),
         ("base_voltage_primary", "Voltage", "kV"),
         ("base_voltage_secondary", "Voltage", "kV"),
+        # One band per physical quantity; control_objective selects which two are
+        # populated, so none is discriminated by it any more.
+        ("tap_ratio_limits", "Dimensionless", "1"),
+        ("phase_angle_limits", "Angle", "rad"),
+        ("controlled_voltage_limits", "Voltage", "pu"),
     }
 
     assert {
@@ -334,40 +342,17 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("active_power_flow", "NATURAL_UNITS"): ("ActivePower", "MW"),
         ("reactive_power_flow", "COMPONENT_BASE"): ("ReactivePower", "pu"),
         ("reactive_power_flow", "NATURAL_UNITS"): ("ReactivePower", "MVAr"),
+        # The two power-flow target bands are power fields on the circuit base.
+        ("controlled_reactive_power_flow_limits", "COMPONENT_BASE"): ("ReactivePower", "pu"),
+        ("controlled_reactive_power_flow_limits", "NATURAL_UNITS"): ("ReactivePower", "MVAr"),
+        ("controlled_active_power_flow_limits", "COMPONENT_BASE"): ("ActivePower", "pu"),
+        ("controlled_active_power_flow_limits", "NATURAL_UNITS"): ("ActivePower", "MW"),
     }
 
-    control_bands = {
-        (col, disc): (qt, unit)
-        for col, disc, qt, unit in fresh_db.execute(
-            "SELECT column_name, discriminator_value, quantity_kind, unit "
-            "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
-            "AND discriminator_column = 'control_objective'"
-        )
-    }
-    angle_objectives = {
-        "ACTIVE_POWER_FLOW", "ACTIVE_POWER_FLOW_DISABLED",
-        "ASYMMETRIC_ACTIVE_POWER_FLOW", "ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED",
-    }
-    schema_objectives = set(
-        load_schemas_json("Operations/common.json")["$defs"][
-            "TransformerControlObjective"
-        ]["enum"]
-    )
-    objectives = {disc for (col, disc) in control_bands if col == "control_limits"}
-    assert objectives == schema_objectives
-    assert objectives == {
-        disc for (col, disc) in control_bands if col == "controlled_quantity_limits"
-    }
-    for objective in objectives:
-        if objective in angle_objectives:
-            assert control_bands[("control_limits", objective)] == ("Angle", "rad")
-            assert control_bands[("controlled_quantity_limits", objective)] == (
-                "ActivePower", "MW",
-            )
-        else:
-            assert control_bands[("control_limits", objective)] == (
-                "Dimensionless", "1",
-            )
+    assert fresh_db.execute(
+        "SELECT COUNT(*) FROM unit_conventions WHERE table_name = 'transformer_circuits' "
+        "AND discriminator_column = 'control_objective'"
+    ).fetchone() == (0,)
 
 
 def test_transformer_tables_magnetizing_shunt_units(fresh_db):
@@ -420,26 +405,3 @@ def test_units_comment_discriminator_renamed():
     assert units_comment(prop, renames) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)"
 
 
-def test_units_comment_nested_x_units():
-    """A nested x-units value (dc_setpoint_from-shaped: unit depends on a SECOND
-    discriminator) renders both discriminators and the pu/kV pair."""
-    prop = {
-        "x-unit-discriminator": "dc_control_from",
-        "x-units": {
-            "DC_POWER": "MW",
-            "DC_VOLTAGE": {
-                "x-unit-discriminator": "voltage_units",
-                "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
-            },
-        },
-    }
-    comment = units_comment(prop, {})
-    assert "dc_control_from" in comment
-    assert "DC_POWER: MW" in comment
-    assert "voltage_units" in comment
-    assert "COMPONENT_BASE: pu" in comment
-    assert "NATURAL_UNITS: kV" in comment
-    assert comment == (
-        " -- Units: per dc_control_from (DC_POWER: MW; "
-        "DC_VOLTAGE: per voltage_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])"
-    )

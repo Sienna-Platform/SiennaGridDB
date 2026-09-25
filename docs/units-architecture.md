@@ -305,8 +305,8 @@ keep their inline `unit`/`quantity_kind` instead; the exemption is recorded in
 
 ### Open items
 
-- `transformer_circuits.controlled_quantity_limits` resolves its pu arms against
-  `base_voltage_primary`, but the PSS/E VMA/VMI controlled bus may be the *secondary* side for some
+- `transformer_circuits.controlled_voltage_limits` resolves against `base_voltage_primary`, but
+  the PSS/E VMA/VMI regulated bus may be the *secondary* side or a remote bus for some
   transformers. Flagged for human review, not resolved here.
 - No cross-repo check catches a pu column typed with the wrong quantity dimension (e.g. a
   `Resistance` column mistakenly registered as `Voltage`, still `unit='pu'`) — upstream x-unit

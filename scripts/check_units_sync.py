@@ -276,29 +276,21 @@ def layer1(report, conventions, schema_map, schemas_path, allowed_pairs, doc_cac
 
 
 def _expand_schema_units_map(units_map):
-    """Expand a (possibly nested) schema x-units map into a flat
-    {(primary_value, secondary_value): unit} map.
+    """Key a schema x-units map as {(discriminator_value, None): unit}.
 
-    A flat entry (`{"COMPONENT_BASE": "pu", ...}`) expands to (primary_value, None).
-    A nested entry (a field whose unit depends on a SECOND discriminator, e.g.
-    `dc_setpoint_from`'s `DC_VOLTAGE` value being `{"x-unit-discriminator":
-    "voltage_units", "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"}}`)
-    expands to one (primary_value, secondary_value) entry per secondary key.
-    Must not choke on a dict value -- that is the whole point of this helper.
+    The schema vocabulary no longer nests discriminators: every field carries one
+    quantity, and only a unit-basis sibling may select its unit of measure. A dict value
+    is therefore a schema defect, not a shape to expand. The registry keeps its second
+    discriminator for its own two-level rows (cost/fuel), so keys stay pairs.
     """
     expanded = {}
     for primary_value, value in units_map.items():
         if isinstance(value, dict):
-            for secondary_value, unit in value.get("x-units", {}).items():
-                if isinstance(unit, dict):
-                    raise ValueError(
-                        "x-units nesting deeper than two levels is not representable "
-                        "in the registry (only discriminator_value_2 exists); found a "
-                        "third level under %r/%r" % (primary_value, secondary_value)
-                    )
-                expanded[(primary_value, secondary_value)] = unit
-        else:
-            expanded[(primary_value, None)] = value
+            raise ValueError(
+                "nested x-units under %r: the schema vocabulary is one discriminator deep, "
+                "split the field per quantity instead" % primary_value
+            )
+        expanded[(primary_value, None)] = value
     return expanded
 
 
@@ -327,10 +319,8 @@ def _l1_discriminated(report, table, column, comp, ann, discriminated, allowed_p
     """Compare a schema x-units discriminator map against the registry's discriminator rows.
 
     Registry rows are keyed on (discriminator_value, discriminator_value_2); rows with no
-    second discriminator carry discriminator_value_2=None. Flat schema x-units values
-    compare on the primary discriminator only (secondary=None); a
-    nested schema x-units value (a field whose unit depends on a second discriminator)
-    expands into (primary_value, secondary_value) pairs via _expand_schema_units_map.
+    second discriminator carry discriminator_value_2=None. Schema x-units values are flat
+    and compare on the primary discriminator only (secondary=None).
 
     Returns the number of WARNs emitted (0 if none).
     """
