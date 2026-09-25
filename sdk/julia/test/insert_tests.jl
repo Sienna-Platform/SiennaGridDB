@@ -43,13 +43,13 @@ end
 @testset "unsupported type" begin
     mktempdir() do dir
         fresh(dir) do db
-            zone = [Dict{String, Any}("id" => 1)]
-            report = insert_components!(db, "LoadZone", zone)
-            @test report.unsupported == Dict("LoadZone" => 1)
+            iface = [Dict{String, Any}("id" => 1)]
+            report = insert_components!(db, "TransmissionInterface", iface)
+            @test report.unsupported == Dict("TransmissionInterface" => 1)
             @test_throws UnsupportedComponentError insert_components!(
                 db,
-                "LoadZone",
-                zone;
+                "TransmissionInterface",
+                iface;
                 strict=true,
             )
         end

@@ -93,10 +93,10 @@ def test_strict_gap_raises_and_rolls_back(conn):
 
 
 def test_unsupported_type(conn):
-    report = griddb.insert_components(conn, "LoadZone", [{"id": 1}])
-    assert report.unsupported == {"LoadZone": 1}
+    report = griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}])
+    assert report.unsupported == {"TransmissionInterface": 1}
     with pytest.raises(griddb.UnsupportedComponentError):
-        griddb.insert_components(conn, "LoadZone", [{"id": 1}], strict=True)
+        griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}], strict=True)
 
 
 def test_component_base_cost_is_rejected(conn):

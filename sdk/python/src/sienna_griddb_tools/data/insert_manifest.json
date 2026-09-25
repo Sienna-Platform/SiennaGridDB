@@ -1245,6 +1245,30 @@
       "skip": [],
       "table": "transmission_lines"
     },
+    "LoadZone": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'LoadZone')",
+      "gaps": [
+        "base_power",
+        "peak_active_power",
+        "peak_reactive_power",
+        "power_units"
+      ],
+      "rank": 1,
+      "row_sql": "INSERT INTO balancing_topologies (id, name) VALUES (?, ?)",
+      "skip": [],
+      "table": "balancing_topologies"
+    },
     "MonitoredLine": {
       "attributes": [],
       "bindings": [
@@ -3122,9 +3146,7 @@
       "ThermalPowerPlant"
     ]
   },
-  "unsupported_components": {
-    "LoadZone": "no table in schema.sql"
-  },
+  "unsupported_components": {},
   "unsupported_sections": {
     "ext": "no table in schema.sql",
     "service_associations": "no table in schema.sql",
@@ -3276,6 +3298,11 @@
         "is_dc": false,
         "is_topology": false,
         "name": "Line"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "LoadZone"
       },
       {
         "is_dc": false,

@@ -145,7 +145,7 @@ def test_vocabulary(manifest):
 
 
 def test_unsupported_entries(manifest):
-    assert "LoadZone" in manifest["unsupported_components"]
+    assert manifest["unsupported_components"] == {}
     assert set(manifest["unsupported_sections"]) == {
         "ext",
         "service_associations",

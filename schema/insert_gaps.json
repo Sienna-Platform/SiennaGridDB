@@ -134,6 +134,12 @@
       "rating_c",
       "reactive_power_flow"
     ],
+    "LoadZone": [
+      "base_power",
+      "peak_active_power",
+      "peak_reactive_power",
+      "power_units"
+    ],
     "MonitoredLine": [
       "active_power_flow",
       "angle_limits",

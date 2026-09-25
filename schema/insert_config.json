@@ -23,6 +23,7 @@
   },
   "extra_components": {
     "arcs": [{"component": "Arc", "file": "Core/Topology/Arc.json"}],
+    "balancing_topologies": [{"component": "LoadZone", "file": "Core/Topology/LoadZone.json"}],
     "planning_regions": [{"component": "Area", "file": "Core/Topology/Area.json"}]
   },
   "plant_attribute_types": [
@@ -33,9 +34,7 @@
     "ThermalPowerPlant"
   ],
   "supplemental_attribute_dirs": ["Core/SupplementalAttributes", "Operations/SupplementalAttributes"],
-  "unsupported_components": {
-    "LoadZone": "no table in schema.sql"
-  },
+  "unsupported_components": {},
   "unsupported_sections": {
     "ext": "no table in schema.sql",
     "service_associations": "no table in schema.sql",
