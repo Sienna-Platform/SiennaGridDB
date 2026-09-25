@@ -21,7 +21,7 @@ run only the first statement of a string (verified with SQLite.jl 1.6), so a sch
 would silently apply one CREATE TABLE and stop; `sqlite3_exec` runs all of it.
 """
 function execute_script(db::SQLite.DB, sql::AbstractString)
-    errmsg = Ref{Ptr{UInt8}}(C_NULL)
+    errmsg = Ref{Ptr{Cchar}}(C_NULL)
     rc = SQLite.C.sqlite3_exec(db.handle, sql, C_NULL, C_NULL, errmsg)
     if rc != SQLite.C.SQLITE_OK
         msg = unsafe_string(errmsg[])

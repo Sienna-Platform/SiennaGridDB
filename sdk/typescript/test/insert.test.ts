@@ -52,8 +52,8 @@ test.skipIf(!hasGolden)("strict gap rolls back", () => {
 
 test("unsupported type", () => {
   const db = fresh();
-  expect(insertComponents(db, "LoadZone", [{ id: 1 }]).unsupported).toEqual({ LoadZone: 1 });
-  expect(() => insertComponents(db, "LoadZone", [{ id: 1 }], { strict: true })).toThrow(
+  expect(insertComponents(db, "TransmissionInterface", [{ id: 1 }]).unsupported).toEqual({ TransmissionInterface: 1 });
+  expect(() => insertComponents(db, "TransmissionInterface", [{ id: 1 }], { strict: true })).toThrow(
     UnsupportedComponentError,
   );
 });

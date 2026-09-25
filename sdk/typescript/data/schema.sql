@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 1; -- first released schema version; bump on every schema or registry change
+PRAGMA user_version = 2; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -367,9 +367,13 @@ CREATE TABLE thermal_generators (
         CHECK (json_valid(operation_cost))
         -- ifnull, not a bare IN: json_extract returns NULL for an absent key,
         -- and a CHECK passes on NULL, so an absent curve would slip through.
-        CHECK (ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '')
+        -- Market-bid and import/export costs carry offer curves instead of
+        -- variable_operation_cost, so the production-cost CHECKs skip them.
+        CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES')
+            OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '')
             IN ('COST', 'FUEL'))
-        CHECK (ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '')
+        CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES')
+            OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '')
             IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE',
                 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL',
                 'TIME_SERIES_AVERAGE_RATE'))
@@ -407,9 +411,9 @@ CREATE TABLE renewable_generators (
     -- FuelCurve, and FUEL here would admit rows with no registered unit.
     operation_cost JSON NULL DEFAULT '{"cost_type":"RENEWABLE","fixed":0,"curtailment_cost":{"variable_cost_type":"COST","power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"function_type":"LINEAR","proportional_term":0,"constant_term":0}},"vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}},"variable_operation_cost":{"variable_cost_type":"COST","power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"function_type":"LINEAR","proportional_term":0,"constant_term":0}},"vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}}'
         CHECK (operation_cost IS NULL OR json_valid(operation_cost))
-        CHECK (operation_cost IS NULL
+        CHECK (operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES')
             OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') = 'COST')
-        CHECK (operation_cost IS NULL
+        CHECK (operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES')
             OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '')
                 IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE',
                     'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL',
@@ -452,9 +456,11 @@ CREATE TABLE hydro_generators (
     operation_cost JSON NOT NULL DEFAULT '{"cost_type": "HYDRO_GEN", "fixed": 0.0, "variable_operation_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}'
         CHECK (json_valid(operation_cost))
         -- Same CHECKs as thermal_generators.operation_cost; see the rationale there.
-        CHECK (ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '')
+        CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES')
+            OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '')
             IN ('COST', 'FUEL'))
-        CHECK (ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '')
+        CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES')
+            OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '')
             IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE',
                 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL',
                 'TIME_SERIES_AVERAGE_RATE'))
