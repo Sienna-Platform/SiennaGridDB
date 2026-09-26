@@ -385,8 +385,8 @@ written out in that file.
   these gaps with no runtime change.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
-- **Not supported yet.** `LoadZone`, services, `service_associations`,
-  `time_series_associations`, and `ext` have no table. They are reported, not written.
+- **Not supported yet.** Services, `service_associations`, `time_series_associations`,
+  and `ext` have no table. They are reported, not written.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. CI builds a database from them with each runtime and requires identical
