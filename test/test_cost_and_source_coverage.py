@@ -266,6 +266,15 @@ CURVE_FORM_EXPECTATIONS = [
         "USD/pu*h",
     ),
     (
+        "thermal_generators",
+        "operation_cost.incremental_offer_curves",
+        "INCREMENTAL",
+        "COMPONENT_BASE",
+        None,
+        "CostPerEnergy",
+        "USD/pu*h",
+    ),
+    (
         "virtual_participants",
         "operation_cost.incremental_offer_curves",
         "INCREMENTAL",
@@ -582,6 +591,79 @@ def test_bid_costs_have_no_production_cost(fresh_db, cost_type):
     insert_thermal(fresh_db, 2, bus, None, operation_cost={"cost_type": cost_type})
     row = fresh_db.execute("SELECT production_cost FROM thermal_generators").fetchone()
     assert row == (None,)
+
+
+# Market bids on device tables: offer curves in either basis
+
+MARKET_BID_DEVICES = {
+    "thermal_generators": (
+        "prime_mover_type, fuel, rating, base_power, power_units, active_power_limits, status",
+        "'ST', 'NATURAL_GAS', 1.0, 100.0, 'NATURAL_UNITS', '{\"min\": 0, \"max\": 1}', 'ONLINE'",
+    ),
+    "renewable_generators": (
+        "prime_mover_type, rating, base_power, power_units",
+        "'PV', 1.0, 100.0, 'NATURAL_UNITS'",
+    ),
+    "hydro_generators": (
+        "rating, base_power, power_units, active_power_limits",
+        "1.0, 100.0, 'NATURAL_UNITS', '{\"min\": 0, \"max\": 1}'",
+    ),
+    "storage_units": (
+        "prime_mover_type, storage_technology_type, rating, base_power, power_units, "
+        "storage_capacity, storage_level_limits, initial_storage_capacity_level, "
+        "input_active_power_limits, output_active_power_limits, efficiency",
+        "'BA', 'LI', 1.0, 100.0, 'NATURAL_UNITS', 1.0, '{\"min\": 0, \"max\": 1}', 0.0, "
+        "'{\"min\": 0, \"max\": 1}', '{\"min\": 0, \"max\": 1}', '{\"in\": 0.9, \"out\": 0.9}'",
+    ),
+}
+
+
+def offer_curve(power_units):
+    return {
+        "variable_cost_type": "COST",
+        "power_units": power_units,
+        "value_curve": {
+            "curve_type": "INCREMENTAL",
+            "function_data": {"function_type": "PIECEWISE_STEP", "x_coords": [0.0, 1.0], "y_coords": [10.0]},
+            "initial_input": 0.0,
+        },
+    }
+
+
+def insert_market_bid_device(conn, table, incremental, decremental):
+    bus = make_bus(conn, 1, "bus-1")
+    for name in ("ST", "PV", "HY", "BA"):
+        conn.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES (?)", (name,))
+    conn.execute("INSERT OR IGNORE INTO fuels(name) VALUES ('NATURAL_GAS')")
+    conn.execute("INSERT OR IGNORE INTO storage_technology_types(name) VALUES ('LI')")
+    make_entity(conn, 2, table, "Device")
+    cost = {
+        "cost_type": "MARKET_BID",
+        "incremental_offer_curves": offer_curve(incremental),
+        "decremental_offer_curves": offer_curve(decremental),
+    }
+    columns, values = MARKET_BID_DEVICES[table]
+    conn.execute(
+        f"INSERT INTO {table} (id, name, balancing_topology, {columns}, operation_cost) "
+        f"VALUES (2, 'dev', ?, {values}, ?)",
+        (bus, json.dumps(cost)),
+    )
+
+
+@pytest.mark.parametrize("power_units", ["COMPONENT_BASE", "NATURAL_UNITS"])
+@pytest.mark.parametrize("table", sorted(MARKET_BID_DEVICES))
+def test_market_bid_offer_curves_accepted_in_either_basis(fresh_db, table, power_units):
+    insert_market_bid_device(fresh_db, table, power_units, power_units)
+    (count,) = fresh_db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    assert count == 1
+
+
+@pytest.mark.parametrize("side", ["incremental", "decremental"])
+@pytest.mark.parametrize("table", sorted(MARKET_BID_DEVICES))
+def test_market_bid_offer_curves_reject_unknown_basis(fresh_db, table, side):
+    bases = {"incremental": "NATURAL_UNITS", "decremental": "NATURAL_UNITS", side: "SYSTEM_BASE"}
+    with pytest.raises(sqlite3.IntegrityError, match="power_units"):
+        insert_market_bid_device(fresh_db, table, bases["incremental"], bases["decremental"])
 
 
 def test_production_cost_cannot_be_written_directly(fresh_db):

@@ -1918,6 +1918,8 @@ CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_insert BEFOR
 INSERT
     ON thermal_generators
     WHEN json_extract(NEW.production_cost, '$.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
@@ -1931,6 +1933,8 @@ CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_update BEFOR
 UPDATE
     ON thermal_generators
     WHEN json_extract(NEW.production_cost, '$.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
@@ -1945,6 +1949,8 @@ INSERT
     ON renewable_generators
     WHEN json_extract(NEW.production_cost, '$.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
     OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
@@ -1959,6 +1965,8 @@ UPDATE
     ON renewable_generators
     WHEN json_extract(NEW.production_cost, '$.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
     OR json_extract(NEW.operation_cost, '$.curtailment_cost.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
@@ -1972,6 +1980,8 @@ CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_insert BEFORE
 INSERT
     ON hydro_generators
     WHEN json_extract(NEW.production_cost, '$.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
@@ -1985,6 +1995,8 @@ CREATE TRIGGER IF NOT EXISTS validate_hydro_generators_cost_units_update BEFORE
 UPDATE
     ON hydro_generators
     WHEN json_extract(NEW.production_cost, '$.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
@@ -1999,6 +2011,8 @@ INSERT
     ON storage_units
     WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
     OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
@@ -2013,6 +2027,8 @@ UPDATE
     ON storage_units
     WHEN json_extract(NEW.operation_cost, '$.charge_variable_cost.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
     OR json_extract(NEW.operation_cost, '$.discharge_variable_cost.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.incremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
+    OR json_extract(NEW.operation_cost, '$.decremental_offer_curves.power_units') NOT IN ('COMPONENT_BASE', 'NATURAL_UNITS')
 BEGIN
 SELECT
     RAISE(
