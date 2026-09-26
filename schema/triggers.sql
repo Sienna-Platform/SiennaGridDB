@@ -1621,6 +1621,137 @@ SELECT
 END;
 
 -- =============================================================================
+-- Trading Hub Bid Basis Triggers
+-- A hub bid is a VirtualParticipant series named after one of its trading hubs,
+-- and PowerSystems accepts it only in natural units. unit_system is compared
+-- case-insensitively and NULL (unspecified) passes. Service bids carry the same
+-- rule, but services have no table yet, so a service bid cannot be matched.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_hub_bid_natural_units_insert BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NEW.owner_type = 'VirtualParticipant'
+    AND lower(NEW.unit_system) <> 'natural_units'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            trading_hub_associations tha
+            JOIN trading_hubs th ON th.id = tha.trading_hub_id
+        WHERE
+            tha.entity_id = NEW.owner_id
+            AND th.name = NEW.name
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'a trading hub bid (a VirtualParticipant series named after one of its trading hubs) must have unit_system natural_units.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_hub_bid_natural_units_update BEFORE
+UPDATE
+    OF owner_id,
+    owner_type,
+    name,
+    unit_system ON time_series_associations
+    WHEN NEW.owner_type = 'VirtualParticipant'
+    AND lower(NEW.unit_system) <> 'natural_units'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            trading_hub_associations tha
+            JOIN trading_hubs th ON th.id = tha.trading_hub_id
+        WHERE
+            tha.entity_id = NEW.owner_id
+            AND th.name = NEW.name
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'a trading hub bid (a VirtualParticipant series named after one of its trading hubs) must have unit_system natural_units.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_hub_bid_natural_units_member_insert BEFORE
+INSERT
+    ON trading_hub_associations
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations tsa
+            JOIN trading_hubs th ON th.id = NEW.trading_hub_id
+        WHERE
+            tsa.owner_id = NEW.entity_id
+            AND tsa.owner_type = 'VirtualParticipant'
+            AND tsa.name = th.name
+            AND lower(tsa.unit_system) <> 'natural_units'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'a trading hub bid (a VirtualParticipant series named after one of its trading hubs) must have unit_system natural_units.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_hub_bid_natural_units_member_update BEFORE
+UPDATE
+    OF trading_hub_id,
+    entity_id ON trading_hub_associations
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations tsa
+            JOIN trading_hubs th ON th.id = NEW.trading_hub_id
+        WHERE
+            tsa.owner_id = NEW.entity_id
+            AND tsa.owner_type = 'VirtualParticipant'
+            AND tsa.name = th.name
+            AND lower(tsa.unit_system) <> 'natural_units'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'a trading hub bid (a VirtualParticipant series named after one of its trading hubs) must have unit_system natural_units.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_hub_bid_natural_units_hub_rename BEFORE
+UPDATE
+    OF name ON trading_hubs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            trading_hub_associations tha
+            JOIN time_series_associations tsa ON tsa.owner_id = tha.entity_id
+        WHERE
+            tha.trading_hub_id = NEW.id
+            AND tsa.owner_type = 'VirtualParticipant'
+            AND tsa.name = NEW.name
+            AND lower(tsa.unit_system) <> 'natural_units'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'a trading hub bid (a VirtualParticipant series named after one of its trading hubs) must have unit_system natural_units.'
+    );
+
+END;
+
+-- =============================================================================
 -- Attribute Unit Validation Triggers
 -- A known attribute name must use its registered unit and quantity_kind from
 -- unit_conventions. An unknown attribute with a numeric or structured value

@@ -391,6 +391,12 @@ write-side trigger on top: a row whose `quantity_kind` names a registered quanti
 it with a registered unit from `allowed_units`. Free-form kinds pass untouched; the divergence adds
 integrity without changing the row shape.
 
+**Trading hub bids must be natural units.** A hub bid is a `VirtualParticipant` series named after
+one of its trading hubs, and the modeling layer accepts it only in natural units, so triggers on
+`time_series_associations`, `trading_hub_associations` and `trading_hubs` reject a `component_base`
+hub bid whichever row is written last. NULL still passes as unspecified. Service bids carry the
+same rule but cannot be matched until services have a table.
+
 **No per-series base snapshot.** A `component_base` series is interpreted against the owning
 component's own base columns (`base_power`, winding voltage bases, …) — the association carries no
 `base_power`/`base_voltage` of its own, matching infrastore, where the consumer's object model owns

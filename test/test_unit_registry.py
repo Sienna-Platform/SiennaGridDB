@@ -1867,6 +1867,75 @@ def test_association_unit_system_round_trips_lowercase(fresh_db):
     assert system == "component_base"
 
 
+# Trading hub bids: a VirtualParticipant series named after one of its hubs
+# must be natural units.
+def _hub_member(conn, hub_name="HB_NORTH"):
+    make_entity(conn, 1, entity_table="trading_hubs", entity_type="TradingHub")
+    conn.execute("INSERT INTO trading_hubs(id, name) VALUES (1, ?)", (hub_name,))
+    make_entity(conn, 2, entity_table="virtual_participants", entity_type="VirtualParticipant")
+
+
+def _join_hub(conn):
+    conn.execute("INSERT INTO trading_hub_associations(trading_hub_id, entity_id) VALUES (1, 2)")
+
+
+def _vp_series(conn, name, unit_system):
+    conn.execute(
+        "INSERT INTO time_series_associations("
+        "owner_id, owner_type, owner_category, time_series_type, name, "
+        "unit_system, uri, features_hash) "
+        "VALUES (2, 'VirtualParticipant', 'Component', 'SingleTimeSeries', ?, ?, ?, ?)",
+        (name, unit_system, f"static:{name}", "07" * 32),
+    )
+
+
+HUB_BID_ERROR = "trading hub bid"
+
+
+def test_hub_bid_component_base_rejected(fresh_db):
+    _hub_member(fresh_db)
+    _join_hub(fresh_db)
+    with pytest.raises(sqlite3.IntegrityError, match=HUB_BID_ERROR):
+        _vp_series(fresh_db, "HB_NORTH", "component_base")
+
+
+@pytest.mark.parametrize("unit_system", ["natural_units", "NATURAL_UNITS", None])
+def test_hub_bid_natural_or_unspecified_accepted(fresh_db, unit_system):
+    _hub_member(fresh_db)
+    _join_hub(fresh_db)
+    _vp_series(fresh_db, "HB_NORTH", unit_system)
+
+
+def test_non_hub_series_component_base_accepted(fresh_db):
+    _hub_member(fresh_db)
+    _join_hub(fresh_db)
+    _vp_series(fresh_db, "inc_offer", "component_base")
+
+
+def test_hub_bid_update_to_component_base_rejected(fresh_db):
+    _hub_member(fresh_db)
+    _join_hub(fresh_db)
+    _vp_series(fresh_db, "HB_NORTH", "natural_units")
+    with pytest.raises(sqlite3.IntegrityError, match=HUB_BID_ERROR):
+        fresh_db.execute("UPDATE time_series_associations SET unit_system = 'component_base'")
+
+
+def test_joining_hub_with_component_base_bid_rejected(fresh_db):
+    """The rule holds whichever side is written last."""
+    _hub_member(fresh_db)
+    _vp_series(fresh_db, "HB_NORTH", "component_base")
+    with pytest.raises(sqlite3.IntegrityError, match=HUB_BID_ERROR):
+        _join_hub(fresh_db)
+
+
+def test_renaming_hub_onto_component_base_series_rejected(fresh_db):
+    _hub_member(fresh_db, hub_name="HB_SOUTH")
+    _join_hub(fresh_db)
+    _vp_series(fresh_db, "HB_NORTH", "component_base")
+    with pytest.raises(sqlite3.IntegrityError, match=HUB_BID_ERROR):
+        fresh_db.execute("UPDATE trading_hubs SET name = 'HB_NORTH' WHERE id = 1")
+
+
 # unit_basis_rules seal protection
 def test_unit_basis_rules_update_blocked(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="protected against ad-hoc edits"):
