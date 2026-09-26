@@ -44,9 +44,9 @@ DEFAULT_OUTPUT = os.path.join(REPO_ROOT, "schema", "unit_registry.sql")
 
 CONVENTION_VERSION = "sienna-griddb-1.1"
 
-# Per-quantity-type pu resolution rule: how a COMPONENT_BASE value divides down
-# to a physical quantity. These are exactly the quantity kinds that ever carry
-# unit='pu' in column_conventions.json -- keep that in sync if it changes.
+# Per-quantity-type pu resolution rule: the natural value is the COMPONENT_BASE
+# value times base_expression. These are exactly the quantity kinds that ever
+# carry a pu-based unit in column_conventions.json -- keep that in sync.
 UNIT_BASIS_RULES = [
     {
         "quantity_kind": "Voltage",
@@ -87,6 +87,18 @@ UNIT_BASIS_RULES = [
         "quantity_kind": "ApparentPower",
         "base_expression": "base_power",
         "description": "Per-unit apparent power: divide by the row's base power",
+    },
+    {
+        "quantity_kind": "CostPerEnergy",
+        "base_expression": "1/base_power",
+        "description": "Per-unit cost per energy (USD/pu*h): divide by the row's base power "
+        "for USD/MWh",
+    },
+    {
+        "quantity_kind": "HeatRate",
+        "base_expression": "1/base_power",
+        "description": "Per-unit heat rate (MMBtu/pu*h): divide by the row's base power "
+        "for MMBtu/MWh",
     },
     {
         "quantity_kind": "ActivePowerChangeRate",

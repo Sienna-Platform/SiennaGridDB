@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 68
-EXPECTED_UNIT_CONVENTIONS = 405
+EXPECTED_UNIT_CONVENTIONS = 433
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -749,33 +749,34 @@ def _insert_thermal(conn, gen_id, topo_id, production_cost):
     )
 
 
-@pytest.mark.parametrize("power_units", ["COMPONENT_BASE", "BOGUS_UNITS"])
-def test_cost_relative_base_variable_rejected(fresh_db, power_units):
+@pytest.mark.parametrize("power_units", ["SYSTEM_BASE", "BOGUS_UNITS"])
+def test_cost_unknown_basis_variable_rejected(fresh_db, power_units):
     topo = _setup_topology(fresh_db)
     with pytest.raises(
-        sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
+        sqlite3.IntegrityError, match="power_units must be COMPONENT_BASE or NATURAL_UNITS"
     ):
         _insert_thermal(fresh_db, 2, topo, _thermal_production_cost(power_units))
 
 
-def test_cost_natural_units_variable_accepted(fresh_db):
+@pytest.mark.parametrize("power_units", ["COMPONENT_BASE", "NATURAL_UNITS"])
+def test_cost_variable_accepted_in_either_basis(fresh_db, power_units):
     topo = _setup_topology(fresh_db)
-    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost(power_units))
     (count,) = fresh_db.execute("SELECT COUNT(*) FROM thermal_generators").fetchone()
     assert count == 1
 
 
-def test_cost_update_relative_base_rejected(fresh_db):
-    """UPDATE that changes operation_cost's variable_operation_cost to a
-    relative-base payload is rejected; production_cost derives from it."""
+def test_cost_update_unknown_basis_rejected(fresh_db):
+    """UPDATE that changes operation_cost's variable_operation_cost to an
+    unknown basis is rejected; production_cost derives from it."""
     topo = _setup_topology(fresh_db)
     _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
     with pytest.raises(
-        sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
+        sqlite3.IntegrityError, match="power_units must be COMPONENT_BASE or NATURAL_UNITS"
     ):
         fresh_db.execute(
             "UPDATE thermal_generators SET operation_cost = ? WHERE id = 2",
-            (_thermal_operation_cost(_thermal_production_cost("COMPONENT_BASE")),),
+            (_thermal_operation_cost(_thermal_production_cost("SYSTEM_BASE")),),
         )
 
 
@@ -791,19 +792,19 @@ def test_production_cost_generated_column_rejects_direct_update(fresh_db):
         )
 
 
-def test_renewable_curtailment_cost_relative_base_rejected(fresh_db):
+def test_renewable_curtailment_cost_unknown_basis_rejected(fresh_db):
     """curtailment_cost stays inside operation_cost, so it keeps its own guard."""
     topo = _setup_topology(fresh_db)
     make_entity(fresh_db, 2, entity_table="renewable_generators")
     fresh_db.execute("INSERT INTO prime_mover_types(name) VALUES ('PV')")
     curtailment_cost = (
         '{"cost_type":"RENEWABLE","fixed":0,'
-        '"curtailment_cost":{"variable_cost_type":"COST","power_units":"COMPONENT_BASE",'
+        '"curtailment_cost":{"variable_cost_type":"COST","power_units":"SYSTEM_BASE",'
         '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
         '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}}'
     )
     with pytest.raises(
-        sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
+        sqlite3.IntegrityError, match="power_units must be COMPONENT_BASE or NATURAL_UNITS"
     ):
         fresh_db.execute(
             "INSERT INTO renewable_generators("
@@ -861,24 +862,25 @@ def _insert_storage_technology(conn, tech_id, operation_costs):
 @pytest.mark.parametrize(
     "operation_cost",
     [
-        _storage_cost(charge_pu="COMPONENT_BASE"),
-        _storage_cost(discharge_pu="COMPONENT_BASE"),
+        _storage_cost(charge_pu="SYSTEM_BASE"),
+        _storage_cost(discharge_pu="SYSTEM_BASE"),
     ],
 )
-def test_storage_unit_relative_base_cost_rejected(fresh_db, operation_cost):
-    """A relative base (COMPONENT_BASE) on either charge_pu or discharge_pu must
-    be rejected. The trigger must check both keys directly -- StorageCost's JSON
-    has no top-level `variable` key to probe generically."""
+def test_storage_unit_unknown_basis_cost_rejected(fresh_db, operation_cost):
+    """An unknown basis on either charge_pu or discharge_pu must be rejected.
+    The trigger must check both keys directly -- StorageCost's JSON has no
+    top-level `variable` key to probe generically."""
     topo = _setup_topology(fresh_db)
     with pytest.raises(
-        sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
+        sqlite3.IntegrityError, match="power_units must be COMPONENT_BASE or NATURAL_UNITS"
     ):
         _insert_storage_unit(fresh_db, 2, topo, operation_cost)
 
 
-def test_storage_unit_natural_units_cost_accepted(fresh_db):
+@pytest.mark.parametrize("power_units", ["COMPONENT_BASE", "NATURAL_UNITS"])
+def test_storage_unit_cost_accepted_in_either_basis(fresh_db, power_units):
     topo = _setup_topology(fresh_db)
-    _insert_storage_unit(fresh_db, 2, topo, _storage_cost())
+    _insert_storage_unit(fresh_db, 2, topo, _storage_cost(power_units, power_units))
     (count,) = fresh_db.execute(
         "SELECT COUNT(*) FROM storage_units"
     ).fetchone()

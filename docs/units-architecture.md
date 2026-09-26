@@ -269,14 +269,16 @@ resolved base is non-null when `parameter_units = 'COMPONENT_BASE'`, or making
 
 ### Mechanical resolution: rules + base references
 
-A sealed table, `unit_basis_rules` (5 rows), maps the five quantity kinds that ever carry pu to the
-base expression that resolves them:
+A sealed table, `unit_basis_rules`, maps each quantity kind that ever carries a pu-based unit to the
+base expression that resolves it (natural value = pu value x base expression):
 
 | quantity_kind | base_expression |
 |---|---|
 | `Voltage` | `base_voltage` |
 | `Resistance`, `Reactance` | `base_voltage^2/base_power` |
 | `Susceptance`, `Conductance` | `base_power/base_voltage^2` |
+| `ActivePower`, `ReactivePower`, `ApparentPower`, `ActivePowerChangeRate` | `base_power` |
+| `CostPerEnergy`, `HeatRate` | `1/base_power` |
 
 `unit_conventions` gained nullable `base_power_ref` / `base_voltage_ref` naming *which* bases apply.
 No arrow means a same-row column; an arrow is an FK hop, each segment after the first written
@@ -306,6 +308,24 @@ transformer tables are pu-only, with no `NATURAL_UNITS` sibling row.
 → `entities`), so no single static path applies regardless of which table is on the other end. They
 keep their inline `unit`/`quantity_kind` instead; the exemption is recorded in
 `coverage_decisions.json`.
+
+### Cost curves: the curve's own `power_units`
+
+A cost curve (`CostCurve`, `FuelCurve`, every offer curve) records its basis in its own `power_units`,
+read against the owning row's `base_power`. On `COMPONENT_BASE` the x axis is pu; the y axis keeps
+its unit when it is a cost rate (`USD/h`) and becomes `USD/pu*h` or `MMBtu/pu*h` when it is a rate per
+unit of power. Each curve row in `unit_conventions` uses the three discriminator slots the same way:
+
+| slot | discriminator | values |
+|---|---|---|
+| 1 | `<curve>.value_curve.curve_type` | `INPUT_OUTPUT`, `INCREMENTAL`, `AVERAGE_RATE` |
+| 2 | `<curve>.power_units` | `NATURAL_UNITS`, `COMPONENT_BASE` (with `base_power_ref = base_power`) |
+| 3 | `<curve>.variable_cost_type` | `COST`, `FUEL` (thermal and hydro production costs only) |
+
+`virtual_participants` and `point_to_point_bids` have no `base_power`, so their offer curves carry
+only the `NATURAL_UNITS` arm and the triggers reject `COMPONENT_BASE`; `hydro_reservoirs` and the
+investment cost tables are also `NATURAL_UNITS` only. `test_curve_basis_arms_pair_up` checks that a
+`COMPONENT_BASE` arm exists exactly on tables with a `base_power`.
 
 ### Open items
 

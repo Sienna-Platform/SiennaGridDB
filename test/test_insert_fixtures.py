@@ -35,60 +35,6 @@ def _sdk_fixtures_or_skip(prepare):
         pytest.skip("power-openapi-models checkout not found")
 
 
-def _thermal(power_units, function_data, vom=None):
-    curve = {
-        "power_units": power_units,
-        "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": function_data},
-    }
-    if vom is not None:
-        curve["vom_cost"] = vom
-    return {
-        "components": {
-            "ThermalStandard": [
-                {
-                    "id": 1,
-                    "base_power": 100.0,
-                    "operation_cost": {"variable_operation_cost": curve},
-                }
-            ]
-        }
-    }
-
-
-def test_quadratic_cost_is_rescaled_to_natural_units():
-    data = {
-        "function_type": "QUADRATIC",
-        "constant_term": 3.0,
-        "proportional_term": 200.0,
-        "quadratic_term": 50000.0,
-    }
-    vom = {
-        "curve_type": "INPUT_OUTPUT",
-        "function_data": {"function_type": "LINEAR", "proportional_term": 100.0},
-    }
-    out = _load_prepare().convert(_thermal("COMPONENT_BASE", data, vom))
-    curve = out["components"]["ThermalStandard"][0]["operation_cost"][
-        "variable_operation_cost"
-    ]
-    assert curve["power_units"] == "NATURAL_UNITS"
-    assert curve["value_curve"]["function_data"]["constant_term"] == 3.0
-    assert curve["value_curve"]["function_data"]["proportional_term"] == 2.0
-    assert curve["value_curve"]["function_data"]["quadratic_term"] == 5.0
-    assert curve["vom_cost"]["function_data"]["proportional_term"] == 1.0
-
-
-def test_natural_units_cost_is_untouched():
-    data = {"function_type": "LINEAR", "proportional_term": 7.0, "constant_term": 0.0}
-    doc = _thermal("NATURAL_UNITS", data)
-    assert _load_prepare().convert(doc) == doc
-
-
-def test_unsupported_cost_shape_raises():
-    data = {"function_type": "PIECEWISE_LINEAR", "points": []}
-    with pytest.raises(ValueError, match="PIECEWISE_LINEAR"):
-        _load_prepare().convert(_thermal("COMPONENT_BASE", data))
-
-
 def test_golden_fixtures_are_current():
     prepare = _load_prepare()
     sdk = _sdk_fixtures_or_skip(prepare)

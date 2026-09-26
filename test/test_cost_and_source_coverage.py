@@ -125,10 +125,22 @@ def test_piecewise_step_incremental_curve_is_accepted(fresh_db):
     assert json.loads(stored) == cost
 
 
-def test_relative_power_units_still_rejected_for_piecewise(fresh_db):
+def test_component_base_piecewise_cost_round_trips(fresh_db):
+    """A curve's own power_units may be COMPONENT_BASE; it is stored verbatim."""
     bus = make_bus(fresh_db, 1, "bus-1")
     cost = json.loads(json.dumps(PIECEWISE_IO_COST))
     cost["power_units"] = "COMPONENT_BASE"
+    insert_thermal(fresh_db, 2, bus, cost)
+    (stored,) = fresh_db.execute(
+        "SELECT production_cost FROM thermal_generators WHERE id = 2"
+    ).fetchone()
+    assert json.loads(stored) == cost
+
+
+def test_unknown_power_units_still_rejected_for_piecewise(fresh_db):
+    bus = make_bus(fresh_db, 1, "bus-1")
+    cost = json.loads(json.dumps(PIECEWISE_IO_COST))
+    cost["power_units"] = "SYSTEM_BASE"
     with pytest.raises(sqlite3.IntegrityError, match="power_units"):
         insert_thermal(fresh_db, 2, bus, cost)
 
@@ -140,6 +152,16 @@ CURVE_FORM_EXPECTATIONS = [
         "thermal_generators",
         "production_cost",
         "INPUT_OUTPUT",
+        "NATURAL_UNITS",
+        "COST",
+        "CostPerTime",
+        "USD/h",
+    ),
+    (
+        "thermal_generators",
+        "production_cost",
+        "INPUT_OUTPUT",
+        "COMPONENT_BASE",
         "COST",
         "CostPerTime",
         "USD/h",
@@ -148,14 +170,7 @@ CURVE_FORM_EXPECTATIONS = [
         "thermal_generators",
         "production_cost",
         "INCREMENTAL",
-        "COST",
-        "CostPerEnergy",
-        "USD/MWh",
-    ),
-    (
-        "thermal_generators",
-        "production_cost",
-        "AVERAGE_RATE",
+        "NATURAL_UNITS",
         "COST",
         "CostPerEnergy",
         "USD/MWh",
@@ -164,14 +179,43 @@ CURVE_FORM_EXPECTATIONS = [
         "thermal_generators",
         "production_cost",
         "INCREMENTAL",
+        "COMPONENT_BASE",
+        "COST",
+        "CostPerEnergy",
+        "USD/pu*h",
+    ),
+    (
+        "thermal_generators",
+        "production_cost",
+        "AVERAGE_RATE",
+        "NATURAL_UNITS",
+        "COST",
+        "CostPerEnergy",
+        "USD/MWh",
+    ),
+    (
+        "thermal_generators",
+        "production_cost",
+        "INCREMENTAL",
+        "NATURAL_UNITS",
         "FUEL",
         "HeatRate",
         "MMBtu/MWh",
     ),
     (
+        "thermal_generators",
+        "production_cost",
+        "INCREMENTAL",
+        "COMPONENT_BASE",
+        "FUEL",
+        "HeatRate",
+        "MMBtu/pu*h",
+    ),
+    (
         "hydro_generators",
         "production_cost",
         "INPUT_OUTPUT",
+        "NATURAL_UNITS",
         "COST",
         "CostPerTime",
         "USD/h",
@@ -180,6 +224,7 @@ CURVE_FORM_EXPECTATIONS = [
         "renewable_generators",
         "operation_cost.curtailment_cost",
         "INPUT_OUTPUT",
+        "NATURAL_UNITS",
         None,
         "CostPerTime",
         "USD/h",
@@ -188,6 +233,25 @@ CURVE_FORM_EXPECTATIONS = [
         "storage_units",
         "operation_cost.charge_variable_cost",
         "AVERAGE_RATE",
+        "NATURAL_UNITS",
+        None,
+        "CostPerEnergy",
+        "USD/MWh",
+    ),
+    (
+        "storage_units",
+        "operation_cost.charge_variable_cost",
+        "AVERAGE_RATE",
+        "COMPONENT_BASE",
+        None,
+        "CostPerEnergy",
+        "USD/pu*h",
+    ),
+    (
+        "sources",
+        "operation_cost.import_offer_curves",
+        "INCREMENTAL",
+        "NATURAL_UNITS",
         None,
         "CostPerEnergy",
         "USD/MWh",
@@ -196,6 +260,16 @@ CURVE_FORM_EXPECTATIONS = [
         "sources",
         "operation_cost.import_offer_curves",
         "INCREMENTAL",
+        "COMPONENT_BASE",
+        None,
+        "CostPerEnergy",
+        "USD/pu*h",
+    ),
+    (
+        "virtual_participants",
+        "operation_cost.incremental_offer_curves",
+        "INCREMENTAL",
+        "NATURAL_UNITS",
         None,
         "CostPerEnergy",
         "USD/MWh",
@@ -204,22 +278,51 @@ CURVE_FORM_EXPECTATIONS = [
 
 
 @pytest.mark.parametrize(
-    "table, column, curve_type, cost_type, quantity_kind, unit",
+    "table, column, curve_type, basis, cost_type, quantity_kind, unit",
     CURVE_FORM_EXPECTATIONS,
 )
 def test_variable_cost_convention_follows_curve_form(
-    db, table, column, curve_type, cost_type, quantity_kind, unit
+    db, table, column, curve_type, basis, cost_type, quantity_kind, unit
 ):
     row = db.execute(
-        """SELECT quantity_kind, unit, discriminator_column, discriminator_value_2
+        """SELECT quantity_kind, unit, discriminator_column, discriminator_column_2
            FROM unit_conventions
            WHERE table_name = ? AND column_name = ? AND discriminator_value = ?
-             AND (discriminator_value_2 IS ? OR discriminator_value_2 = ?)""",
-        (table, column, curve_type, cost_type, cost_type),
+             AND discriminator_value_2 = ? AND discriminator_value_3 IS ?""",
+        (table, column, curve_type, basis, cost_type),
     ).fetchone()
-    assert row is not None, f"no convention for {table}.{column} {curve_type}"
+    assert row is not None, f"no convention for {table}.{column} {curve_type} {basis}"
     assert (row[0], row[1]) == (quantity_kind, unit)
     assert row[2].endswith("value_curve.curve_type")
+    assert row[3].endswith(".power_units")
+
+
+def test_curve_basis_arms_pair_up(db):
+    """Every curve form has a NATURAL_UNITS arm. A COMPONENT_BASE arm exists
+    exactly when the table has base_power, is per-unit on it, keeps the
+    NATURAL_UNITS quantity, and swaps MWh for pu*h in a per-power-rate unit."""
+    rows = db.execute(
+        """SELECT table_name, column_name, discriminator_value, discriminator_value_3,
+                  quantity_kind, discriminator_value_2, unit, base_power_ref
+           FROM unit_conventions WHERE discriminator_column_2 LIKE '%.power_units'"""
+    ).fetchall()
+    arms = {}
+    for *key, basis, unit, ref in rows:
+        arms.setdefault(tuple(key), {})[basis] = (unit, ref)
+    assert arms, "no basis-tagged curve conventions found"
+    rules = {r[0] for r in db.execute("SELECT quantity_kind FROM unit_basis_rules")}
+    for key, by_basis in arms.items():
+        table, quantity_kind = key[0], key[4]
+        columns = {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
+        assert set(by_basis) <= {"NATURAL_UNITS", "COMPONENT_BASE"}, key
+        assert "NATURAL_UNITS" in by_basis, key
+        assert ("COMPONENT_BASE" in by_basis) == ("base_power" in columns), key
+        if "COMPONENT_BASE" in by_basis:
+            unit, ref = by_basis["COMPONENT_BASE"]
+            assert ref == "base_power", key
+            assert unit == by_basis["NATURAL_UNITS"][0].replace("/MWh", "/pu*h"), key
+            if "pu" in unit:
+                assert quantity_kind in rules, key
 
 
 def test_input_output_and_incremental_units_differ(db):
@@ -229,7 +332,8 @@ def test_input_output_and_incremental_units_differ(db):
             """SELECT discriminator_value, unit FROM unit_conventions
                WHERE table_name = 'thermal_generators'
                  AND column_name = 'production_cost'
-                 AND discriminator_value_2 = 'COST'"""
+                 AND discriminator_value_2 = 'NATURAL_UNITS'
+                 AND discriminator_value_3 = 'COST'"""
         ).fetchall()
     )
     assert units["INPUT_OUTPUT"] == "USD/h"
@@ -244,7 +348,7 @@ def test_fuel_input_output_is_deliberately_unregistered(db):
         """SELECT 1 FROM unit_conventions
            WHERE column_name = 'production_cost'
              AND discriminator_value = 'INPUT_OUTPUT'
-             AND discriminator_value_2 = 'FUEL'"""
+             AND discriminator_value_3 = 'FUEL'"""
     ).fetchone()
     assert row is None
 
@@ -324,7 +428,7 @@ def test_source_cost_units_trigger_guards_both_offer_curves(fresh_db):
             "cost_type": "IMPORTEXPORT",
             "energy_import_weekly_limit": 1.0,
             "energy_export_weekly_limit": 1.0,
-            side: {"power_units": "COMPONENT_BASE"},
+            side: {"power_units": "SYSTEM_BASE"},
         }
         with pytest.raises(sqlite3.IntegrityError, match="power_units"):
             fresh_db.execute(

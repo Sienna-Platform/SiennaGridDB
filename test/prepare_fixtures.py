@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 """Generate the golden insert fixtures from power-openapi-models' case14 fixtures.
 
-Golden inputs: GridDB's triggers require cost payloads in NATURAL_UNITS; the SDK
-fixtures carry COMPONENT_BASE cost curves. This rescales every COMPONENT_BASE
-INPUT_OUTPUT curve with LINEAR or QUADRATIC function data (the value curve and
-vom_cost) to NATURAL_UNITS using the component's own base_power:
-proportional_term / base, quadratic_term / base^2. Any other COMPONENT_BASE cost
-shape raises -- extend this script deliberately.
+Golden inputs are the SDK fixtures unchanged, COMPONENT_BASE cost curves included.
 
 Expected outputs (canonical dump + insert report per case) are produced by the
 Python runtime, the parity oracle for the Julia and TypeScript runtimes.
@@ -18,7 +13,6 @@ generated on the fly, never checked in.
 """
 
 import argparse
-import copy
 import json
 import os
 import sys
@@ -52,37 +46,6 @@ def find_sdk_fixtures():
     )
 
 
-def rescale_curve(curve, base, where):
-    if curve.get("curve_type") != "INPUT_OUTPUT":
-        raise ValueError(f"{where}: cannot rescale curve_type {curve.get('curve_type')!r}")
-    data = curve["function_data"]
-    kind = data.get("function_type")
-    if kind not in ("LINEAR", "QUADRATIC"):
-        raise ValueError(f"{where}: cannot rescale function_type {kind!r}")
-    data["proportional_term"] = data["proportional_term"] / base
-    if kind == "QUADRATIC":
-        data["quadratic_term"] = data["quadratic_term"] / (base * base)
-
-
-def convert(doc):
-    out = copy.deepcopy(doc)
-    for type_name, objs in out["components"].items():
-        for obj in objs:
-            cost = obj.get("operation_cost")
-            if not isinstance(cost, dict):
-                continue
-            curve = cost.get("variable_operation_cost")
-            if not isinstance(curve, dict) or curve.get("power_units") != "COMPONENT_BASE":
-                continue
-            where = f"{type_name} id={obj['id']}"
-            base = obj["base_power"]
-            rescale_curve(curve["value_curve"], base, where)
-            if curve.get("vom_cost") is not None:
-                rescale_curve(curve["vom_cost"], base, where + " vom_cost")
-            curve["power_units"] = "NATURAL_UNITS"
-    return out
-
-
 def render(doc):
     return json.dumps(doc, indent=1, sort_keys=True) + "\n"
 
@@ -103,7 +66,7 @@ def _expected_outputs(doc):
 
 def _case_artifacts(sdk_fixtures, case):
     src = os.path.join(sdk_fixtures, f"case14_operations.{case}.json")
-    doc = convert(load_json(src))
+    doc = load_json(src)
     dump_text, report_text = _expected_outputs(doc)
     prefix = os.path.join(OUT_DIR, f"case14_{case}")
     return {

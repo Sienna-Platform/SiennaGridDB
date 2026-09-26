@@ -99,15 +99,20 @@ def test_unsupported_type(conn):
         griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}], strict=True)
 
 
-def test_component_base_cost_is_rejected(conn):
+def test_component_base_cost_is_stored_verbatim(conn):
     raw_path = sdk_repo() / "fixtures" / "case14_operations.NATURAL_UNITS.json"
     if not raw_path.exists():
         pytest.skip("power-openapi-models checkout not found")
     raw = json.loads(raw_path.read_text("utf-8"))
     thermal = first(raw, "ThermalStandard")
+    curve = thermal["operation_cost"]["variable_operation_cost"]
+    assert curve["power_units"] == "COMPONENT_BASE"
     griddb.insert_component(conn, "ACBus", lone_bus(raw, thermal["bus"]))
-    with pytest.raises(griddb.InsertError, match="NATURAL_UNITS"):
-        griddb.insert_component(conn, "ThermalStandard", thermal)
+    griddb.insert_component(conn, "ThermalStandard", thermal)
+    (stored,) = conn.execute(
+        "SELECT production_cost FROM thermal_generators WHERE id = ?", (thermal["id"],)
+    ).fetchone()
+    assert json.loads(stored) == curve
 
 
 # Review Focus 1

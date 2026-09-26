@@ -92,8 +92,11 @@ resistances, and similar) are **stored flexibly in per-unit on a component base 
 natural units**. A per-row discriminator column, `parameter_units`
 (`COMPONENT_BASE` | `NATURAL_UNITS`), records which basis a row uses. `r`/`x` are scalar
 `REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as `json_valid`-checked text).
-Costs stay in natural currency units, and the cost JSON blobs must carry
-`NATURAL_UNITS`. The schemas' one `OperationalCost` object is stored verbatim in
+Cost curves carry their own `power_units` the same way: on a table with `base_power` a
+curve may be `COMPONENT_BASE` (x axis in pu, a per-power rate in `USD/pu*h` or
+`MMBtu/pu*h`) or `NATURAL_UNITS`, and the registry holds both arms. Tables without a
+base (`virtual_participants`, `point_to_point_bids`) and the reservoir and investment
+cost tables accept `NATURAL_UNITS` only. The schemas' one `OperationalCost` object is stored verbatim in
 `operation_cost` on the generator tables, `variable_operation_cost` member included.
 `production_cost` is a `GENERATED ALWAYS AS` column deriving
 `json_extract(operation_cost, '$.variable_operation_cost')` -- a queryable column for
@@ -383,8 +386,8 @@ written out in that file.
   At insert time it is counted in the returned report instead of being written;
   `strict` mode raises instead. Regenerating the manifest after a schema update closes
   these gaps with no runtime change.
-- **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
-  and the runtimes do not convert.
+- **Costs.** Cost curves are stored in the basis their payload declares; the runtimes do
+  not convert, and readers resolve units through `column_units`.
 - **Not supported yet.** Services, `service_associations`, `time_series_associations`,
   and `ext` have no table. They are reported, not written.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
