@@ -327,6 +327,10 @@ only the `NATURAL_UNITS` arm and the triggers reject `COMPONENT_BASE`; `hydro_re
 investment cost tables are also `NATURAL_UNITS` only. `test_curve_basis_arms_pair_up` checks that a
 `COMPONENT_BASE` arm exists exactly on tables with a `base_power`.
 
+Paired offer curves share one basis, as the modeling types carry one unit parameter for both: a
+market bid's incremental and decremental curves on the device tables, and a source's import and
+export curves. The `offer_curves_share_power_units` CHECK enforces it whenever both are present.
+
 ### Open items
 
 - `transformer_circuits.controlled_quantity_limits` resolves its pu arms against

@@ -384,7 +384,12 @@ CREATE TABLE thermal_generators (
              <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
     production_cost JSON GENERATED ALWAYS AS (
         json_extract(operation_cost, '$.variable_operation_cost')
-    ) VIRTUAL
+    ) VIRTUAL,
+    -- The market-bid sell and buy curves share one basis, as PowerSystems types them.
+    CONSTRAINT offer_curves_share_power_units CHECK (
+        json_extract(operation_cost, '$.incremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.decremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.incremental_offer_curves.power_units') = json_extract(operation_cost, '$.decremental_offer_curves.power_units'))
 );
 
 -- Existing renewable generation units (RenewableDispatch, RenewableNonDispatch).
@@ -422,7 +427,12 @@ CREATE TABLE renewable_generators (
     -- operation_cost. NULL when operation_cost is NULL (RenewableNonDispatch).
     production_cost JSON GENERATED ALWAYS AS (
         json_extract(operation_cost, '$.variable_operation_cost')
-    ) VIRTUAL
+    ) VIRTUAL,
+    -- The market-bid sell and buy curves share one basis, as PowerSystems types them.
+    CONSTRAINT offer_curves_share_power_units CHECK (
+        json_extract(operation_cost, '$.incremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.decremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.incremental_offer_curves.power_units') = json_extract(operation_cost, '$.decremental_offer_curves.power_units'))
 );
 
 -- Existing hydro generation units (HydroDispatch, HydroTurbine, HydroPumpTurbine).
@@ -469,9 +479,14 @@ CREATE TABLE hydro_generators (
              <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
     production_cost JSON GENERATED ALWAYS AS (
         json_extract(operation_cost, '$.variable_operation_cost')
-    ) VIRTUAL
+    ) VIRTUAL,
     -- efficiency (varies by type), turbine_type, and HydroPumpTurbine-specific
     -- fields (active_power_limits_pump, etc.) live in the attributes table.
+    -- The market-bid sell and buy curves share one basis, as PowerSystems types them.
+    CONSTRAINT offer_curves_share_power_units CHECK (
+        json_extract(operation_cost, '$.incremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.decremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.incremental_offer_curves.power_units') = json_extract(operation_cost, '$.decremental_offer_curves.power_units'))
 );
 
 -- Existing energy storage units, including PHES and other kinds.
@@ -510,7 +525,12 @@ CREATE TABLE storage_units (
     -- one, so neither promotes to production_cost. Paths are registered in
     -- column_conventions.json (operation_cost.charge_variable_cost /
     -- .discharge_variable_cost) and guarded by validate_storage_units_cost_units_*.
-    operation_cost JSON NOT NULL DEFAULT '{"cost_type": "STORAGE", "charge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}, "discharge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}'
+    operation_cost JSON NOT NULL DEFAULT '{"cost_type": "STORAGE", "charge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}, "discharge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}',
+    -- The market-bid sell and buy curves share one basis, as PowerSystems types them.
+    CONSTRAINT offer_curves_share_power_units CHECK (
+        json_extract(operation_cost, '$.incremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.decremental_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.incremental_offer_curves.power_units') = json_extract(operation_cost, '$.decremental_offer_curves.power_units'))
 );
 
 -- Topological hydro reservoirs
@@ -972,7 +992,12 @@ CREATE TABLE sources (
     -- offer curves and the schema's default weekly energy limits.
     operation_cost TEXT NOT NULL
         DEFAULT '{"import_offer_curves": null, "export_offer_curves": null, "energy_import_weekly_limit": 1000000.0, "energy_export_weekly_limit": 1000000.0, "ancillary_service_offers": []}'
-        CHECK (json_valid(operation_cost))
+        CHECK (json_valid(operation_cost)),
+    -- The import and export curves share one basis, as PowerSystems types them.
+    CONSTRAINT offer_curves_share_power_units CHECK (
+        json_extract(operation_cost, '$.import_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.export_offer_curves.power_units') IS NULL
+        OR json_extract(operation_cost, '$.import_offer_curves.power_units') = json_extract(operation_cost, '$.export_offer_curves.power_units'))
 ) strict;
 
 -- Named market trading hub (PSY TradingHub): a set of member buses at which

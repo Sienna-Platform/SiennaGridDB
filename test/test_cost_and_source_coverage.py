@@ -666,6 +666,40 @@ def test_market_bid_offer_curves_reject_unknown_basis(fresh_db, table, side):
         insert_market_bid_device(fresh_db, table, bases["incremental"], bases["decremental"])
 
 
+@pytest.mark.parametrize("table", sorted(MARKET_BID_DEVICES))
+def test_market_bid_offer_curves_must_share_basis(fresh_db, table):
+    with pytest.raises(sqlite3.IntegrityError, match="offer_curves_share_power_units"):
+        insert_market_bid_device(fresh_db, table, "COMPONENT_BASE", "NATURAL_UNITS")
+
+
+def insert_source(conn, import_curve, export_curve):
+    bus = make_bus(conn, 1, "bus-1")
+    make_entity(conn, 2, "sources", "Source")
+    cost = {
+        "cost_type": "IMPORTEXPORT",
+        "energy_import_weekly_limit": 1.0,
+        "energy_export_weekly_limit": 1.0,
+        "import_offer_curves": import_curve,
+        "export_offer_curves": export_curve,
+    }
+    conn.execute(
+        """INSERT INTO sources(id, name, bus, r_th, x_th, power_units, base_power, operation_cost)
+           VALUES (2, 'src', ?, 0.0, 0.0, 'NATURAL_UNITS', 100.0, ?)""",
+        (bus, json.dumps(cost)),
+    )
+
+
+def test_source_offer_curves_must_share_basis(fresh_db):
+    with pytest.raises(sqlite3.IntegrityError, match="offer_curves_share_power_units"):
+        insert_source(fresh_db, offer_curve("COMPONENT_BASE"), offer_curve("NATURAL_UNITS"))
+
+
+def test_source_with_one_offer_curve_accepted(fresh_db):
+    insert_source(fresh_db, offer_curve("COMPONENT_BASE"), None)
+    (count,) = fresh_db.execute("SELECT COUNT(*) FROM sources").fetchone()
+    assert count == 1
+
+
 def test_production_cost_cannot_be_written_directly(fresh_db):
     """One source of truth: production_cost is GENERATED from
     operation_cost.variable_operation_cost, so SQLite itself refuses a direct
