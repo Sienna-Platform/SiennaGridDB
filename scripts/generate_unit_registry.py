@@ -139,6 +139,8 @@ def load_conventions(path):
                 "discriminator_value": entry.get("discriminator_value"),
                 "discriminator_column_2": entry.get("discriminator_column_2"),
                 "discriminator_value_2": entry.get("discriminator_value_2"),
+                "discriminator_column_3": entry.get("discriminator_column_3"),
+                "discriminator_value_3": entry.get("discriminator_value_3"),
                 "base_power_ref": entry.get("base_power_ref"),
                 "base_voltage_ref": entry.get("base_voltage_ref"),
                 "description": entry.get("description"),
@@ -182,6 +184,8 @@ def canonical_repr(quantity_kinds, allowed_units, conventions, basis_rules):
             none_to_empty(r["discriminator_value"]),
             none_to_empty(r["discriminator_column_2"]),
             none_to_empty(r["discriminator_value_2"]),
+            none_to_empty(r["discriminator_column_3"]),
+            none_to_empty(r["discriminator_value_3"]),
             none_to_empty(r["base_power_ref"]),
             none_to_empty(r["base_voltage_ref"]),
             none_to_empty(r["description"]),
@@ -253,7 +257,7 @@ def emit(quantity_kinds, allowed_units, conventions, basis_rules, units_conventi
 
     lines.append("-- 3. Column unit conventions")
     lines.append(
-        "INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, base_power_ref, base_voltage_ref, description) VALUES"
+        "INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, discriminator_column, discriminator_value, discriminator_column_2, discriminator_value_2, discriminator_column_3, discriminator_value_3, base_power_ref, base_voltage_ref, description) VALUES"
     )
     uc_sorted = sorted(
         conventions,
@@ -262,12 +266,14 @@ def emit(quantity_kinds, allowed_units, conventions, basis_rules, units_conventi
             r["column_name"],
             none_to_empty(r["discriminator_value"]),
             none_to_empty(r["discriminator_value_2"]),
+            none_to_empty(r["discriminator_value_3"]),
+            r["quantity_kind"],
         ),
     )
     uc_values = []
     for r in uc_sorted:
         uc_values.append(
-            "    ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
+            "    ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
                 sql_literal(r["table_name"]),
                 sql_literal(r["column_name"]),
                 sql_literal(r["quantity_kind"]),
@@ -276,6 +282,8 @@ def emit(quantity_kinds, allowed_units, conventions, basis_rules, units_conventi
                 sql_literal(r["discriminator_value"]),
                 sql_literal(r["discriminator_column_2"]),
                 sql_literal(r["discriminator_value_2"]),
+                sql_literal(r["discriminator_column_3"]),
+                sql_literal(r["discriminator_value_3"]),
                 sql_literal(r["base_power_ref"]),
                 sql_literal(r["base_voltage_ref"]),
                 sql_literal(r["description"]),

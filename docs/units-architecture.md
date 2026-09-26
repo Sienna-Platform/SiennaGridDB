@@ -65,6 +65,10 @@ erDiagram
         text unit
         text discriminator_column
         text discriminator_value
+        text discriminator_column_2
+        text discriminator_value_2
+        text discriminator_column_3
+        text discriminator_value_3
         text base_power_ref
         text base_voltage_ref
     }

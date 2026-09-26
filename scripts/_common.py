@@ -24,6 +24,7 @@ Per-table row field order (NULLs rendered as the empty string):
     unit_conventions  : table_name, column_name, quantity_kind, unit,
                         discriminator_column, discriminator_value,
                         discriminator_column_2, discriminator_value_2,
+                        discriminator_column_3, discriminator_value_3,
                         base_power_ref, base_voltage_ref, description
     unit_basis_rules  : quantity_kind, base_expression, description
 

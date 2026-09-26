@@ -24,7 +24,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/SiennaSchemas
-          ref: v0.1.0
+          # rh/pu-cost-units (per-unit cost units); re-pin to the release that ships them.
+          ref: 7aec24d1457c3b10412f1c42e7946f08b2d624ce
           path: SiennaSchemas
 
       # TODO after psy6 merges to PowerSystems main: drop `ref`.

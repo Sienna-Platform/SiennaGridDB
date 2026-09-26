@@ -42,6 +42,7 @@ def fetch_repr(conn):
         "SELECT table_name, column_name, quantity_kind, unit, "
         "discriminator_column, discriminator_value, "
         "discriminator_column_2, discriminator_value_2, "
+        "discriminator_column_3, discriminator_value_3, "
         "base_power_ref, base_voltage_ref, description "
         "FROM unit_conventions"
     )
@@ -58,6 +59,8 @@ def fetch_repr(conn):
             none_to_empty(row[8]),
             none_to_empty(row[9]),
             none_to_empty(row[10]),
+            none_to_empty(row[11]),
+            none_to_empty(row[12]),
         )
         for row in cur.fetchall()
     )

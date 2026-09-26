@@ -22,7 +22,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
-EXPECTED_ALLOWED_UNITS = 66
+EXPECTED_ALLOWED_UNITS = 68
 EXPECTED_UNIT_CONVENTIONS = 405
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
@@ -1890,6 +1890,8 @@ def test_unit_basis_rules_post_seal_insert_blocked(fresh_db):
 def test_column_units_view_exposes_base_ref_columns(db):
     cols = [row[1] for row in db.execute("PRAGMA table_info(column_units)")]
     assert {"base_power_ref", "base_voltage_ref", "base_expression"} <= set(cols)
+    for slot in ("", "_2", "_3"):
+        assert {f"discriminator_column{slot}", f"discriminator_value{slot}"} <= set(cols)
 
 
 def test_column_units_view_row_count_matches_unit_conventions(db):

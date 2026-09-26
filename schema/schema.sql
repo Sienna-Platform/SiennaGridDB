@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 2; -- bump on every schema or registry change
+PRAGMA user_version = 3; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -1214,11 +1214,12 @@ CREATE TABLE unit_conventions (
     -- per discriminator value. Both NULL for a column with one fixed unit.
     discriminator_column TEXT NULL,
     discriminator_value TEXT NULL,
-    -- Optional second discriminator, for columns whose unit depends on a pair of
-    -- sibling columns. NULL for every current convention (single or no
-    -- discriminator); reserved for future use.
+    -- Optional second and third discriminators, for columns whose unit depends
+    -- on several sibling values (e.g. a cost curve's form, basis and cost type).
     discriminator_column_2 TEXT NULL,
     discriminator_value_2 TEXT NULL,
+    discriminator_column_3 TEXT NULL,
+    discriminator_value_3 TEXT NULL,
     -- Base reachable without leaving the database: NULL means same-row
     -- base_power/base_voltage; otherwise a same-row column name or an
     -- FK-hop path (col->table.col->table.base_col).
@@ -1228,7 +1229,8 @@ CREATE TABLE unit_conventions (
     -- Distinct units per discriminator value (and quantity_kind, for columns
     -- like admittance whose NATURAL_UNITS value is disambiguated by quantity)
     -- for a polymorphic column.
-    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2, quantity_kind)
+    UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2,
+        discriminator_value_3, quantity_kind)
 ) strict;
 
 -- For non-polymorphic columns (no discriminator) enforce one row per column.
