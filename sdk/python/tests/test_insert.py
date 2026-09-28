@@ -120,6 +120,35 @@ def test_duplicate_id_across_types_rolls_back_document(conn):
     assert count(conn, "entities") == 0
 
 
+def test_plant_attribute_association_is_stored(conn):
+    """A plant is listed in supplemental_attribute_associations like any other
+    attribute, while its row lives in plants."""
+    doc = golden()
+    thermal_id = first(doc, "ThermalStandard")["id"]
+    plant_id = 1 + max(
+        [o["id"] for objs in doc["components"].values() for o in objs]
+        + [a["id"] for a in doc["supplemental_attributes"]]
+    )
+    doc["supplemental_attributes"].append(
+        {"id": plant_id, "name": "cc1", "configuration": "SeparateShaftCombustionSteam"}
+    )
+    doc["supplemental_attribute_associations"].append(
+        {"component_id": thermal_id, "component_type": "ThermalStandard",
+         "attribute_id": plant_id, "attribute_type": "CombinedCycleBlock"}
+    )
+    doc["combined_cycle_associations"] = [
+        {"plant_id": plant_id, "entity_id": thermal_id, "role": "CT", "hrsg_index": 1}
+    ]
+    report = griddb.insert_document(conn, doc)
+    assert report.inserted["plants"] == 1
+    assert report.inserted["combined_cycle_associations"] == 1
+    (linked,) = conn.execute(
+        "SELECT count(*) FROM supplemental_attribute_associations WHERE attribute_id = ?",
+        (plant_id,),
+    ).fetchone()
+    assert linked == 1
+
+
 # Review Focus 2
 def test_dangling_bus_reference_rolls_back_document(conn):
     thermal = dict(first(golden(), "ThermalStandard"), bus=999999)
