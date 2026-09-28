@@ -126,7 +126,9 @@ def test_branch_parameter_pu_pairs_in_vocabulary(fresh_db):
     assert pairs == {
         ("Resistance", "pu"),
         ("Reactance", "pu"),
+        ("Impedance", "pu"),
         ("Susceptance", "pu"),
+        ("Admittance", "pu"),
         ("Conductance", "pu"),
         ("Voltage", "pu"),
         ("ActivePower", "pu"),
@@ -314,6 +316,10 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("r", "NATURAL_UNITS"): ("Resistance", "ohm"),
         ("x", "COMPONENT_BASE"): ("Reactance", "pu"),
         ("x", "NATURAL_UNITS"): ("Reactance", "ohm"),
+        ("load_drop_compensation_r", "COMPONENT_BASE"): ("Resistance", "pu"),
+        ("load_drop_compensation_r", "NATURAL_UNITS"): ("Resistance", "ohm"),
+        ("load_drop_compensation_x", "COMPONENT_BASE"): ("Reactance", "pu"),
+        ("load_drop_compensation_x", "NATURAL_UNITS"): ("Reactance", "ohm"),
     }
 
     assert {

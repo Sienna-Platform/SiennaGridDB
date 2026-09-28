@@ -21,9 +21,9 @@ import pytest
 from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
-EXPECTED_QUANTITY_TYPES = 41
-EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 405
+EXPECTED_QUANTITY_TYPES = 42
+EXPECTED_ALLOWED_UNITS = 69
+EXPECTED_UNIT_CONVENTIONS = 422
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1345,7 +1345,7 @@ def test_merged_hvdc_columns_registered(db):
         ("dc_current", "CurrentFlow/A"),
         ("rating_from", "ApparentPower/MVA"),
         ("reactive_power_to", "ReactivePower/MVAr"),
-        ("rmpct_from", "Fraction/1"),
+        ("power_factor_weighting_fraction_from", "Fraction/1"),
         # Unit depends on a basis choice or a sibling control mode. A convention's
         # discriminator_column names a sibling *column*, which an attributes row
         # does not have, so these stay unregistered and each row carries its own
@@ -1780,7 +1780,7 @@ def test_switched_admittance_admittance_units_conventions(db):
         "AND column_name IN ('Y_increase', 'solved_admittance', 'admittance_limits')"
     ).fetchall()
     assert set(rows) == {
-        ("Y_increase", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
+        ("Y_increase", "admittance_units", "NATURAL_UNITS", "Admittance", "S"),
         ("Y_increase", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
         ("solved_admittance", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
         ("solved_admittance", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),

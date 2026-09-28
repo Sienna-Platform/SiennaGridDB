@@ -64,6 +64,11 @@ UNIT_BASIS_RULES = [
         "description": "Per-unit reactance: base impedance is base_voltage^2/base_power",
     },
     {
+        "quantity_kind": "Impedance",
+        "base_expression": "base_voltage^2/base_power",
+        "description": "Per-unit impedance: base impedance is base_voltage^2/base_power",
+    },
+    {
         "quantity_kind": "Susceptance",
         "base_expression": "base_power/base_voltage^2",
         "description": "Per-unit susceptance: base admittance is base_power/base_voltage^2",
