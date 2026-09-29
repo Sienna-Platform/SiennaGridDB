@@ -91,6 +91,24 @@
       ],
       "row_sql": "INSERT INTO trading_hub_associations (trading_hub_id, entity_id) VALUES (?, ?)",
       "section": "trading_hub_associations"
+    },
+    {
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "service_id"
+        },
+        {
+          "encode": "int",
+          "path": "entity_id"
+        }
+      ],
+      "references": [
+        "service_id",
+        "entity_id"
+      ],
+      "row_sql": "INSERT INTO service_associations (service_id, entity_id) VALUES (?, ?)",
+      "section": "service_associations"
     }
   ],
   "attribute_sql": "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) VALUES (?, ?, ?, ?, ?, ?)",
@@ -4785,7 +4803,6 @@
   "unsupported_components": {},
   "unsupported_sections": {
     "ext": "no table in schema.sql",
-    "service_associations": "no table in schema.sql",
     "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified"
   },
   "vocabulary": {

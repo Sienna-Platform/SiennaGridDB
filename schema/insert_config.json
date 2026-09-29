@@ -4,7 +4,8 @@
     ["supplemental_attribute_associations", "Core/Associations/SupplementalAttributeAssociation.json"],
     ["plant_associations", "Operations/Associations/PlantAssociation.json"],
     ["combined_cycle_associations", "Operations/Associations/CombinedCycleAssociation.json"],
-    ["trading_hub_associations", "Operations/Associations/TradingHubAssociation.json"]
+    ["trading_hub_associations", "Operations/Associations/TradingHubAssociation.json"],
+    ["service_associations", "Operations/Associations/ServiceAssociation.json"]
   ],
   "constants": {
     "TwoTerminalGenericHVDCLine": {"converter_type": "GENERIC"},
@@ -41,7 +42,6 @@
   "unsupported_components": {},
   "unsupported_sections": {
     "ext": "no table in schema.sql",
-    "service_associations": "no table in schema.sql",
     "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified"
   },
   "vocabulary_enums": {
