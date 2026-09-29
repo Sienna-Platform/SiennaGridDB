@@ -1,0 +1,63 @@
+{
+  "description": "features_hash golden vectors, produced by infrastore itself (test/test_features_hash_oracle.py re-derives them when infrastore is installed). Every SDK hashes each map to the given lowercase hex. integral_float marks a float whose JSON token has no fraction; JSON.parse cannot tell it from an int, so the TypeScript SDK skips it.",
+  "vectors": [
+    {
+      "features": {},
+      "hash": "f0f10eb0149a8828ad7505d73262e3e4a70bfdfed90e4c2e9ce6013758296ede"
+    },
+    {
+      "features": {
+        "bus": 33081
+      },
+      "hash": "8501cadc82028b22c2f212efbb7adc49644161174a9c708b0dae85892bba5da1"
+    },
+    {
+      "features": {
+        "bus": -7
+      },
+      "hash": "1d270d8e26cc6f89da8448f59b2ccf637c32cbe51a60a6bc2f26481cf144aaf5"
+    },
+    {
+      "features": {
+        "x": 0.5
+      },
+      "hash": "71ad2279328e951e4e4f24ff0c397d969491f53ca8015afe1974bd201c8016a3"
+    },
+    {
+      "features": {
+        "w": 1.0
+      },
+      "hash": "dc9373a9dd9a53e80166f0982a213db3c6c50c328d261336d74ec2a1bfc8dbea",
+      "integral_float": true
+    },
+    {
+      "features": {
+        "flag": true
+      },
+      "hash": "d5818565d9b1854f0dc7bb30014dbd75d27d34f2c951d9055a5889bf76c4443f"
+    },
+    {
+      "features": {
+        "zone": "north"
+      },
+      "hash": "9b23a167918a869c93792d859e7eec62054dcb86e12783d826be1be0c2d1b838"
+    },
+    {
+      "features": {
+        "b": 1,
+        "a": "z",
+        "c": 2.25,
+        "d": false
+      },
+      "hash": "cf659538bc57f111088b3ad262ef70ce348118c1fe4651d9a88f4d88014c5fa8"
+    },
+    {
+      "features": {
+        "\uff5e": 1,
+        "\ud83d\ude00": 2,
+        "\u00e4": "x"
+      },
+      "hash": "90b85d80e9f4af3dce8e273ad92f2c818f282da89173c4fdea5464dc4ab25f61"
+    }
+  ]
+}

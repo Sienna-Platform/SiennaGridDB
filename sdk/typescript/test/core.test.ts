@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -11,7 +11,7 @@ import {
   openDatabase,
   seedVocabulary,
 } from "../src/index.js";
-import { canonicalJson, encode, valueAt } from "../src/encode.js";
+import { canonicalJson, encode, featuresHash, valueAt } from "../src/encode.js";
 import { EncodeError } from "../src/errors.js";
 import { loadManifest } from "../src/manifest.js";
 
@@ -36,6 +36,25 @@ describe("encodings", () => {
     expect(valueAt({ a: { b: 2 } }, "a.b")).toBe(2);
     expect(valueAt({ a: 1 }, "a.b")).toBe(undefined);
   });
+});
+
+test("featuresHash matches the golden vectors", () => {
+  const path = new URL("../../../test/features_hash_vectors.json", import.meta.url);
+  const { vectors } = JSON.parse(readFileSync(path, "utf-8"));
+  for (const v of vectors) {
+    if (v.integral_float) continue;
+    expect(featuresHash(v.features)).toBe(v.hash);
+  }
+  expect(() => featuresHash({ a: null })).toThrow(EncodeError);
+});
+
+test("featuresHash hashes a number past the safe integer range as Float", () => {
+  // Expected hashes are Python's for the float values 2^53 and the largest f64.
+  expect(featuresHash({ a: 2 ** 53 })).toBe("5998b9a1162f4b62e52b9fdb9f2740db7fb931f15a9bc0c3535baa02d6e7f896");
+  expect(featuresHash({ a: 1.7976931348623157e308 })).toBe(
+    "fb91c0084cd85f09df0b507bac0a4e7c748f5aca8aa305e846727676bdd3991e",
+  );
+  expect(featuresHash({ a: 2 ** 53 - 1 })).toBe("40b1547e51fc12634be9bd6dd98f3d4ce5ec3b0ae1dd61d524ee2225dd91cae8");
 });
 
 test("report serializes with sorted keys", () => {

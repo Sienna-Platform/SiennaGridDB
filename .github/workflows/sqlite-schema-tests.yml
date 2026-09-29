@@ -55,8 +55,9 @@ jobs:
 
       - name: Install Python dependencies
         # pydantic is power-openapi-models' only runtime dep; without it the
-        # model round-trip tests importorskip instead of running.
-        run: pip install pytest "pydantic>=2"
+        # model round-trip tests importorskip instead of running. infrastore
+        # and numpy let test_features_hash_oracle.py run instead of skipping.
+        run: pip install pytest "pydantic>=2" "infrastore>=0.14.1,<0.15" numpy
 
       - name: Build database
         run: just new-db

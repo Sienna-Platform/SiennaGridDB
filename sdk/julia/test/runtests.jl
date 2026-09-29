@@ -38,6 +38,18 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
         )
     end
 
+    @testset "features_hash" begin
+        vectors = load_json(joinpath(REPO_ROOT, "test", "features_hash_vectors.json"))
+        for v in vectors["vectors"]
+            @test G.features_hash(v["features"]) == v["hash"]
+        end
+        hashes =
+            Set(G.features_hash(Dict{String, Any}("a" => v)) for v in (1, 1.0, true, "1"))
+        @test length(hashes) == 4
+        @test_throws G.EncodeError G.features_hash(Dict{String, Any}("a" => nothing))
+        @test_throws G.EncodeError G.features_hash(Dict{String, Any}("a" => big(2)^63))
+    end
+
     @testset "create and open" begin
         mktempdir() do dir
             path = joinpath(dir, "a.sqlite")
