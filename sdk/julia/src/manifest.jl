@@ -1,15 +1,27 @@
-const SUPPORTED_MANIFEST_VERSION = 1
+const SUPPORTED_MANIFEST_VERSION = 2
 
 struct Binding
     segments::Vector{String}
     encoding::Encoding
 end
 
-struct AttributePlan
-    field::String
-    registered::Bool
+"""
+How an attribute row gets its unit: `unit` fixed, both empty for none (an identifier
+or a unit-free value), or picked from `arms` by the value of the sibling field
+`discriminator` (`default` when that field is absent; empty strings mean unset).
+"""
+struct UnitSpec
     unit::String
     quantity_kind::String
+    discriminator::String
+    default::String
+    arms::Dict{String, UnitSpec}
+end
+
+struct AttributePlan
+    field::String
+    spec::UnitSpec
+    unit_free::Bool
 end
 
 struct ComponentPlan
@@ -46,13 +58,25 @@ end
 parse_bindings(raw) =
     Binding[Binding(String.(split(b["path"], '.')), ENCODINGS[b["encode"]]) for b in raw]
 
-parse_attribute(raw, ::Nothing) = AttributePlan(raw["field"], false, "", "")
-parse_attribute(raw, unit::AbstractString) =
-    AttributePlan(raw["field"], true, unit, raw["quantity_kind"])
+function parse_unit_spec(raw::AbstractDict)
+    arms = Dict{String, UnitSpec}(
+        String(k) => parse_unit_spec(v) for (k, v) in get(raw, "arms", Dict{String, Any}())
+    )
+    return UnitSpec(
+        get(raw, "unit", ""),
+        get(raw, "quantity_kind", ""),
+        get(raw, "discriminator", ""),
+        get(raw, "default", ""),
+        arms,
+    )
+end
 
 function parse_component(type_name::String, raw::AbstractDict)
     bindings = parse_bindings(raw["bindings"])
-    attributes = AttributePlan[parse_attribute(a, a["unit"]) for a in raw["attributes"]]
+    attributes = AttributePlan[
+        AttributePlan(a["field"], parse_unit_spec(a), get(a, "unit_free", false)) for
+        a in raw["attributes"]
+    ]
     known = Set{String}()
     for b in bindings
         push!(known, first(b.segments))

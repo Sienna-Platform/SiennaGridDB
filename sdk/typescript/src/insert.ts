@@ -10,7 +10,7 @@ import {
   describe,
   type JsonObject,
 } from "./errors.js";
-import { loadManifest, type Binding, type ComponentPlan } from "./manifest.js";
+import { loadManifest, type Binding, type ComponentPlan, type UnitSpec } from "./manifest.js";
 import { InsertReport } from "./report.js";
 
 const SAVEPOINT = "sienna_griddb_tools_insert";
@@ -69,16 +69,33 @@ function params(bindings: Binding[], obj: JsonObject, what: string): SqlValue[] 
   }
 }
 
-function skip(report: InsertReport, strict: boolean, typeName: string, field: string, what: string) {
-  if (strict) {
-    throw new GapValueError(`${what}: field ${JSON.stringify(field)} has no column in GridDB`);
-  }
+function skip(
+  report: InsertReport,
+  strict: boolean,
+  typeName: string,
+  field: string,
+  what: string,
+  reason = "has no column in GridDB",
+) {
+  if (strict) throw new GapValueError(`${what}: field ${JSON.stringify(field)} ${reason}`);
   report.addSkipped(typeName, field);
 }
 
 function unsupported(report: InsertReport, strict: boolean, key: string, n: number, reason: string) {
   if (strict) throw new UnsupportedComponentError(`${key} (${n} rows): ${reason}`);
   report.addUnsupported(key, n);
+}
+
+/** The spec fixing one attribute row's unit, following discriminator arms; undefined
+ * when a discriminating field's value has no arm. */
+export function resolveUnit(spec: UnitSpec, obj: JsonObject): UnitSpec | undefined {
+  let s: UnitSpec | undefined = spec;
+  while (s?.discriminator !== undefined) {
+    const raw: unknown = isNull(obj[s.discriminator]) ? s.default : obj[s.discriminator];
+    const key: string = typeof raw === "string" ? raw : canonicalJson(raw ?? null);
+    s = s.arms && Object.hasOwn(s.arms, key) ? s.arms[key] : undefined;
+  }
+  return s;
 }
 
 function writeRow(
@@ -93,14 +110,19 @@ function writeRow(
   for (const attr of plan.attributes) {
     const value = obj[attr.field];
     if (isNull(value)) continue;
-    if (attr.unit === null && typeof value !== "string" && typeof value !== "boolean") {
-      skip(report, strict, plan.typeName, attr.field, what);
+    if (attr.unit_free && typeof value !== "string" && typeof value !== "boolean") {
+      skip(report, strict, plan.typeName, attr.field, what, "needs a string or boolean value");
+      continue;
+    }
+    const spec = resolveUnit(attr, obj);
+    if (!spec) {
+      skip(report, strict, plan.typeName, attr.field, what, "has no unit for its discriminator value");
       continue;
     }
     run(
       db,
       loadManifest().attribute_sql,
-      [BigInt(obj.id as number), plan.typeName, attr.field, canonicalJson(value), attr.unit, attr.quantity_kind],
+      [BigInt(obj.id as number), plan.typeName, attr.field, canonicalJson(value), spec.unit ?? null, spec.quantity_kind ?? null],
       what,
     );
   }

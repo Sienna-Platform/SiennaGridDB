@@ -14,6 +14,7 @@ import {
   type Connection,
   type JsonObject,
 } from "../src/index.js";
+import { resolveUnit } from "../src/insert.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../test/fixtures/insert/", import.meta.url));
 const CASES = ["NATURAL_UNITS", "COMPONENT_BASE"];
@@ -106,4 +107,95 @@ test("misspelled field", () => {
     /numbr/,
   );
   expect(insertComponent(db, "Area", { id: 902, name: "c", numbr: null }).skipped_fields).toEqual({});
+});
+
+test("attribute unit follows the discriminator", () => {
+  const spec = {
+    discriminator: "power_units",
+    arms: {
+      NATURAL_UNITS: { unit: "MW", quantity_kind: "ActivePower" },
+      COMPONENT_BASE: { unit: "pu", quantity_kind: "ActivePower" },
+    },
+  };
+  expect(resolveUnit(spec, { power_units: "COMPONENT_BASE" })?.unit).toBe("pu");
+  expect(resolveUnit(spec, { power_units: "NATURAL_UNITS" })?.unit).toBe("MW");
+  expect(resolveUnit(spec, { power_units: "DEVICE_BASE" })).toBeUndefined();
+  expect(resolveUnit(spec, { power_units: "constructor" })).toBeUndefined();
+  expect(resolveUnit(spec, {})).toBeUndefined();
+  expect(resolveUnit({ ...spec, default: "NATURAL_UNITS" }, {})?.unit).toBe("MW");
+  const byFlag = { discriminator: "mode", arms: { true: { unit: "1", quantity_kind: "Fraction" } } };
+  expect(resolveUnit(byFlag, { mode: true })?.unit).toBe("1");
+  expect(resolveUnit({ identifier: true }, {})?.unit).toBeUndefined();
+});
+
+test("attribute unit follows nested arms", () => {
+  const spec = {
+    discriminator: "ac_control_from",
+    default: "AC_VOLTAGE",
+    arms: {
+      AC_REACTIVE_POWER: { unit: "1", quantity_kind: "PowerFactor" },
+      AC_VOLTAGE: {
+        discriminator: "setpoint_voltage_units",
+        default: "NATURAL_UNITS",
+        arms: {
+          NATURAL_UNITS: { unit: "kV", quantity_kind: "Voltage" },
+          COMPONENT_BASE: { unit: "pu", quantity_kind: "Voltage" },
+        },
+      },
+    },
+  };
+  const leaf = { ac_control_from: "AC_VOLTAGE", setpoint_voltage_units: "COMPONENT_BASE" };
+  expect(resolveUnit(spec, leaf)?.unit).toBe("pu");
+  expect(resolveUnit(spec, {})?.unit).toBe("kV");
+  expect(resolveUnit(spec, { ac_control_from: "AC_REACTIVE_POWER" })?.unit).toBe("1");
+  expect(resolveUnit(spec, { setpoint_voltage_units: "DEVICE_BASE" })).toBeUndefined();
+});
+
+const insertLccEndpoints = (db: Connection, doc: JsonObject): JsonObject => {
+  const comps = doc.components as Record<string, JsonObject[]>;
+  const lcc = firstOf(doc, "TwoTerminalLCCLine");
+  const arc = comps.Arc.find((a) => a.id === lcc.arc) as JsonObject;
+  for (const busId of [arc.from_id, arc.to_id]) {
+    const bus = structuredClone(comps.ACBus.find((b) => b.id === busId) as JsonObject);
+    delete bus.area;
+    insertComponent(db, "ACBus", bus);
+  }
+  insertComponent(db, "Arc", arc);
+  return lcc;
+};
+
+// A COMPONENT_BASE VSC line: its powers are per unit on its 100 MVA base.
+const vsc = (arc: unknown, extra: JsonObject = {}): JsonObject => ({
+  id: 9101, name: "vsc", available: true, arc, base_power: 100.0,
+  power_units: "COMPONENT_BASE", active_power_flow: 1.5, rating: 2.0, ...extra,
+});
+
+test.skipIf(!hasGolden)("VSC DC power setpoints are reported, not written", () => {
+  const db = fresh();
+  const obj = vsc(insertLccEndpoints(db, golden()).arc, {
+    dc_control_from: "DC_POWER", dc_setpoint_from: 1.5, dc_setpoint_to: 1.0,
+  });
+  expect(() => insertComponent(db, "TwoTerminalVSCLine", obj, { strict: true })).toThrow(/dc_setpoint_from/);
+  const report = insertComponent(db, "TwoTerminalVSCLine", obj);
+  expect(report.skipped_fields).toEqual({ TwoTerminalVSCLine: { dc_setpoint_from: 1, dc_setpoint_to: 1 } });
+  const rows = db.prepare("SELECT name, unit FROM attributes WHERE entity_id = 9101").all() as { name: string; unit: unknown }[];
+  const stored = Object.fromEntries(rows.map((r) => [r.name, r.unit]));
+  expect(stored).not.toHaveProperty("dc_setpoint_from");
+  expect(stored.rating).toBe("pu");
+});
+
+test.skipIf(!hasGolden)("unit-free field holding a number is reported or raises", () => {
+  const db = fresh();
+  const obj = vsc(insertLccEndpoints(db, golden()).arc, { dc_control_from: 1.0 });
+  expect(() => insertComponent(db, "TwoTerminalVSCLine", obj, { strict: true })).toThrow(/dc_control_from/);
+  const report = insertComponent(db, "TwoTerminalVSCLine", obj);
+  expect(report.skipped_fields).toEqual({ TwoTerminalVSCLine: { dc_control_from: 1 } });
+});
+
+test.skipIf(!hasGolden)("unknown discriminator value is reported or raises", () => {
+  const db = fresh();
+  const lcc = { ...insertLccEndpoints(db, golden()), parameter_units: "BOGUS" };
+  expect(() => insertComponent(db, "TwoTerminalLCCLine", lcc, { strict: true })).toThrow(/discriminator/);
+  const report = insertComponent(db, "TwoTerminalLCCLine", lcc);
+  expect((report.skipped_fields as Record<string, Record<string, number>>).TwoTerminalLCCLine.r).toBe(1);
 });

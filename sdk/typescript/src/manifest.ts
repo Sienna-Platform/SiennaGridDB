@@ -4,10 +4,20 @@ import { ManifestMismatchError } from "./errors.js";
 import type { Encoding } from "./encode.js";
 
 export const DATA_DIR = fileURLToPath(new URL("../data/", import.meta.url));
-const SUPPORTED_MANIFEST_VERSION = 1;
+const SUPPORTED_MANIFEST_VERSION = 2;
 
 export interface Binding { path: string; encode: Encoding }
-export interface AttributePlan { field: string; unit: string | null; quantity_kind: string | null }
+/** A fixed unit, none (identifier or unit-free value), or arms picked by a sibling field. */
+export interface UnitSpec {
+  unit?: string;
+  quantity_kind?: string;
+  discriminator?: string;
+  default?: string;
+  arms?: Record<string, UnitSpec>;
+  identifier?: boolean;
+  unit_free?: boolean;
+}
+export interface AttributePlan extends UnitSpec { field: string }
 export interface ComponentPlan {
   typeName: string;
   rank: number;

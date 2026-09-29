@@ -283,8 +283,8 @@
       "attributes": [
         {
           "field": "unserved_demand_curve",
-          "quantity_kind": null,
-          "unit": null
+          "quantity_kind": "CostPerEnergy",
+          "unit": "USD/MWh"
         },
         {
           "field": "value_of_lost_load",
@@ -720,9 +720,18 @@
     "HydroPumpTurbine": {
       "attributes": [
         {
-          "field": "active_power_limits_pump",
-          "quantity_kind": "ActivePower",
-          "unit": "MW"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_limits_pump"
         },
         {
           "field": "efficiency",
@@ -913,8 +922,7 @@
         },
         {
           "field": "turbine_type",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         }
       ],
       "bindings": [
@@ -2182,9 +2190,18 @@
     "ThermalMultiStart": {
       "attributes": [
         {
-          "field": "power_trajectory",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "power_trajectory"
         },
         {
           "field": "start_time_limits",
@@ -2574,8 +2591,7 @@
       "attributes": [
         {
           "field": "loss",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         }
       ],
       "bindings": [
@@ -2634,9 +2650,19 @@
     "TwoTerminalLCCLine": {
       "attributes": [
         {
-          "field": "compounding_resistance",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "compounding_resistance"
         },
         {
           "field": "inverter_base_voltage",
@@ -2649,9 +2675,19 @@
           "unit": "1"
         },
         {
-          "field": "inverter_capacitor_reactance",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "inverter_capacitor_reactance"
         },
         {
           "field": "inverter_extinction_angle",
@@ -2664,9 +2700,19 @@
           "unit": "rad"
         },
         {
-          "field": "inverter_rc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "inverter_rc"
         },
         {
           "field": "inverter_tap_limits",
@@ -2689,29 +2735,57 @@
           "unit": "1"
         },
         {
-          "field": "inverter_xc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "inverter_xc"
         },
         {
           "field": "loss",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
-          "field": "min_compounding_voltage",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "dc_voltage_units",
+          "field": "min_compounding_voltage"
         },
         {
           "field": "power_mode",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
-          "field": "r",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "r"
         },
         {
           "field": "rectifier_base_voltage",
@@ -2724,9 +2798,19 @@
           "unit": "1"
         },
         {
-          "field": "rectifier_capacitor_reactance",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "rectifier_capacitor_reactance"
         },
         {
           "field": "rectifier_delay_angle",
@@ -2739,9 +2823,19 @@
           "unit": "rad"
         },
         {
-          "field": "rectifier_rc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "rectifier_rc"
         },
         {
           "field": "rectifier_tap_limits",
@@ -2764,24 +2858,49 @@
           "unit": "1"
         },
         {
-          "field": "rectifier_xc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "rectifier_xc"
         },
         {
-          "field": "scheduled_dc_voltage",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "dc_voltage_units",
+          "field": "scheduled_dc_voltage"
         },
         {
-          "field": "switch_mode_voltage",
-          "quantity_kind": null,
-          "unit": null
-        },
-        {
-          "field": "transfer_setpoint",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "dc_voltage_units",
+          "field": "switch_mode_voltage"
         }
       ],
       "bindings": [
@@ -2831,7 +2950,9 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalLCCLine')",
-      "gaps": [],
+      "gaps": [
+        "transfer_setpoint"
+      ],
       "rank": 1,
       "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, active_power_limits_from, active_power_limits_to, reactive_power_limits_from, reactive_power_limits_to, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), 'LCC')",
       "skip": [
@@ -2844,43 +2965,77 @@
       "attributes": [
         {
           "field": "ac_control_from",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
           "field": "ac_control_to",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
-          "field": "ac_setpoint_from",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "AC_REACTIVE_POWER": {
+              "quantity_kind": "PowerFactor",
+              "unit": "1"
+            },
+            "AC_VOLTAGE": {
+              "arms": {
+                "COMPONENT_BASE": {
+                  "quantity_kind": "Voltage",
+                  "unit": "pu"
+                },
+                "NATURAL_UNITS": {
+                  "quantity_kind": "Voltage",
+                  "unit": "kV"
+                }
+              },
+              "default": "NATURAL_UNITS",
+              "discriminator": "setpoint_voltage_units"
+            }
+          },
+          "default": "AC_VOLTAGE",
+          "discriminator": "ac_control_from",
+          "field": "ac_setpoint_from"
         },
         {
-          "field": "ac_setpoint_to",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "AC_REACTIVE_POWER": {
+              "quantity_kind": "PowerFactor",
+              "unit": "1"
+            },
+            "AC_VOLTAGE": {
+              "arms": {
+                "COMPONENT_BASE": {
+                  "quantity_kind": "Voltage",
+                  "unit": "pu"
+                },
+                "NATURAL_UNITS": {
+                  "quantity_kind": "Voltage",
+                  "unit": "kV"
+                }
+              },
+              "default": "NATURAL_UNITS",
+              "discriminator": "setpoint_voltage_units"
+            }
+          },
+          "default": "AC_VOLTAGE",
+          "discriminator": "ac_control_to",
+          "field": "ac_setpoint_to"
         },
         {
           "field": "converter_loss_from",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "converter_loss_to",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "dc_control_from",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
           "field": "dc_control_to",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
           "field": "dc_current",
@@ -2888,29 +3043,33 @@
           "unit": "A"
         },
         {
-          "field": "dc_setpoint_from",
-          "quantity_kind": null,
-          "unit": null
-        },
-        {
-          "field": "dc_setpoint_to",
-          "quantity_kind": null,
-          "unit": null
-        },
-        {
           "field": "dc_voltage_droop_from",
-          "quantity_kind": null,
-          "unit": null
+          "quantity_kind": "Resistance",
+          "unit": "pu"
         },
         {
           "field": "dc_voltage_droop_to",
-          "quantity_kind": null,
-          "unit": null
+          "quantity_kind": "Resistance",
+          "unit": "pu"
         },
         {
-          "field": "g",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Conductance",
+              "unit": "pu"
+            },
+            "COMPONENT_MVAR": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Conductance",
+              "unit": "S"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "admittance_units",
+          "field": "g"
         },
         {
           "field": "max_dc_current_from",
@@ -2948,39 +3107,82 @@
           "unit": "kV"
         },
         {
-          "field": "rating",
-          "quantity_kind": "ApparentPower",
-          "unit": "MVA"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating"
         },
         {
-          "field": "rating_from",
-          "quantity_kind": "ApparentPower",
-          "unit": "MVA"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_from"
         },
         {
-          "field": "rating_to",
-          "quantity_kind": "ApparentPower",
-          "unit": "MVA"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_to"
         },
         {
-          "field": "reactive_power_from",
-          "quantity_kind": "ReactivePower",
-          "unit": "MVAr"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_from"
         },
         {
-          "field": "reactive_power_to",
-          "quantity_kind": "ReactivePower",
-          "unit": "MVAr"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_to"
         },
         {
           "field": "remote_bus_control_from",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "remote_bus_control_to",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "rmpct_from",
@@ -2993,14 +3195,34 @@
           "unit": "1"
         },
         {
-          "field": "voltage_limits_from",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "voltage_units",
+          "field": "voltage_limits_from"
         },
         {
-          "field": "voltage_limits_to",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "voltage_units",
+          "field": "voltage_limits_to"
         }
       ],
       "bindings": [
@@ -3050,7 +3272,10 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalVSCLine')",
-      "gaps": [],
+      "gaps": [
+        "dc_setpoint_from",
+        "dc_setpoint_to"
+      ],
       "rank": 1,
       "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, active_power_limits_from, active_power_limits_to, reactive_power_limits_from, reactive_power_limits_to, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), 'VSC')",
       "skip": [
@@ -3133,8 +3358,8 @@
       "table": "virtual_participants"
     }
   },
-  "manifest_version": 1,
-  "schema_user_version": 3,
+  "manifest_version": 2,
+  "schema_user_version": 4,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",

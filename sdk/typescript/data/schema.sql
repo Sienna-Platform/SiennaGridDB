@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 3; -- bump on every schema or registry change
+PRAGMA user_version = 4; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -632,6 +632,8 @@ CREATE TABLE attributes (
 -- numbers, node references, zone ids). Unit-validation triggers otherwise
 -- classify any numeric JSON value as physical and demand a unit; listing the
 -- pair here exempts it, instead of inventing a Dimensionless unit for a key.
+-- Self-describing payloads (loss and cost curves that carry their own
+-- power_units) are exempt the same way: no single unit fits the whole value.
 -- Scoped by TYPE: a name is not an identifier on every component type.
 CREATE TABLE attribute_identifiers (
     TYPE TEXT NOT NULL,
@@ -654,7 +656,13 @@ VALUES
     ('NodalACTransportTechnology', 'start_node', 'Transport technology from-node reference'),
     ('NodalHVDCTransportTechnology', 'start_node', 'Transport technology from-node reference'),
     ('NodalACTransportTechnology', 'end_node', 'Transport technology to-node reference'),
-    ('NodalHVDCTransportTechnology', 'end_node', 'Transport technology to-node reference');
+    ('NodalHVDCTransportTechnology', 'end_node', 'Transport technology to-node reference'),
+    ('TwoTerminalVSCLine', 'remote_bus_control_from', 'Remotely regulated bus reference'),
+    ('TwoTerminalVSCLine', 'remote_bus_control_to', 'Remotely regulated bus reference'),
+    ('TwoTerminalGenericHVDCLine', 'loss', 'Loss curve payload with its own power_units'),
+    ('TwoTerminalLCCLine', 'loss', 'Loss curve payload with its own power_units'),
+    ('TwoTerminalVSCLine', 'converter_loss_from', 'Loss curve payload with its own power_units'),
+    ('TwoTerminalVSCLine', 'converter_loss_to', 'Loss curve payload with its own power_units');
 
 -- Optional entity data not required for modeling (geolocation, outages, ...).
 CREATE TABLE supplemental_attributes (
