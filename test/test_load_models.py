@@ -55,7 +55,6 @@ def test_thermal_standard():
                     function_type="LINEAR", proportional_term=1, constant_term=0
                 ),
             ),
-            power_units="NATURAL_UNITS",
             variable_cost_type="COST",
             vom_cost=InputOutputCurve(
                 curve_type="INPUT_OUTPUT",
