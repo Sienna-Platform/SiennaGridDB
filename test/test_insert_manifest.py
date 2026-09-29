@@ -153,6 +153,13 @@ def test_unsupported_entries(manifest):
     }
 
 
+def test_association_references_are_the_foreign_key_columns(manifest):
+    """SDKs skip a row whose reference names a component with no table."""
+    refs = {a["section"]: a["references"] for a in manifest["associations"]}
+    assert refs["supplemental_attribute_associations"] == ["component_id", "attribute_id"]
+    assert refs["combined_cycle_associations"] == ["plant_id", "entity_id"]
+
+
 def test_render_is_deterministic():
     assert render(build_manifest(str(SCHEMAS_PATH))) == render(
         build_manifest(str(SCHEMAS_PATH))

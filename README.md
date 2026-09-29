@@ -385,8 +385,8 @@ written out in that file.
   these gaps with no runtime change.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
-- **Not supported yet.** `LoadZone`, services, `service_associations`,
-  `time_series_associations`, and `ext` have no table. They are reported, not written.
+- **Not supported yet.** A component type with no table (such as `AGC`, `HybridSystem`, the dynamics components and the investment requirements) and a section listed under `unsupported_sections` in `schema/insert_config.json` (such as `time_series_associations` and `ext`) are reported under `unsupported`, not written.
+  So is an association row that names a component of such a type.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. CI builds a database from them with each runtime and requires identical

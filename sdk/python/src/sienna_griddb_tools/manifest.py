@@ -6,7 +6,7 @@ from importlib import resources
 
 from .errors import ManifestMismatchError
 
-SUPPORTED_MANIFEST_VERSION = 1
+SUPPORTED_MANIFEST_VERSION = 2
 
 
 def data_text(name):

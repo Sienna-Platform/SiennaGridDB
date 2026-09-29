@@ -99,6 +99,63 @@ def test_unsupported_type(conn):
         griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}], strict=True)
 
 
+def test_rows_naming_an_unsupported_component_are_reported_not_written(conn):
+    """AGC has no table, so an association row naming one, on either side, is
+    counted under its section instead of failing the document."""
+    doc = golden()
+    thermal = first(doc, "ThermalStandard")["id"]
+    agc, plant = 9001, 9002
+    doc["components"]["AGC"] = [{"id": agc, "name": "agc"}]
+    doc["supplemental_attributes"].append(
+        {"id": plant, "name": "cc1", "configuration": "SeparateShaftCombustionSteam"}
+    )
+    doc["supplemental_attribute_associations"] += [
+        {"component_id": c, "component_type": t, "attribute_id": plant,
+         "attribute_type": "CombinedCycleBlock"}
+        for c, t in [(thermal, "ThermalStandard"), (agc, "AGC")]
+    ]
+    doc["combined_cycle_associations"] = [
+        {"plant_id": plant, "entity_id": e, "role": "CT", "hrsg_index": i}
+        for i, e in enumerate([thermal, agc], start=1)
+    ]
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["AGC"] == 1
+    assert report.unsupported["supplemental_attribute_associations"] == 1
+    assert report.unsupported["combined_cycle_associations"] == 1
+    assert count(conn, "combined_cycle_associations") == 1
+
+
+# The skip reads ids by the int encoder's rule, so the three SDKs agree on odd ids.
+@pytest.mark.parametrize(
+    "agc_id, ref, skipped",
+    [
+        (9001, 9001.0, True),
+        ("9001", "9001", False),
+        (1, True, False),
+        (1e20, 1e20, False),
+        (9001, [9001], False),
+        (9001, {"id": 9001}, False),
+    ],
+)
+def test_unsupported_reference_ids_follow_the_int_rule(conn, agc_id, ref, skipped):
+    doc = golden()
+    doc["components"]["AGC"] = [{"id": agc_id, "name": "agc"}]
+    rows = doc["supplemental_attribute_associations"]
+    rows.append(dict(rows[0], component_id=ref, component_type="AGC"))
+    if skipped:
+        report = griddb.insert_document(conn, doc)
+        assert report.unsupported["supplemental_attribute_associations"] == 1
+    else:
+        with pytest.raises(griddb.InsertError, match="expected an integer"):
+            griddb.insert_document(conn, doc)
+
+
+def test_non_object_entries_of_an_unsupported_type_are_counted(conn):
+    doc = golden()
+    doc["components"]["AGC"] = [None, 5, [1]]
+    assert griddb.insert_document(conn, doc).unsupported["AGC"] == 3
+
+
 def test_component_base_cost_is_rejected(conn):
     raw_path = sdk_repo() / "fixtures" / "case14_operations.NATURAL_UNITS.json"
     if not raw_path.exists():

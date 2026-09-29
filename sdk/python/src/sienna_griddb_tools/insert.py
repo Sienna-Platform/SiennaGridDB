@@ -4,7 +4,7 @@ import sqlite3
 from contextlib import contextmanager
 
 from .db import seed_vocabulary
-from .encode import EncodeError, canonical_json, encode, value_at
+from .encode import EncodeError, canonical_json, encode, is_int, value_at
 from .errors import GapValueError, InsertError, UnsupportedComponentError, describe
 from .manifest import load_manifest
 from .report import InsertReport
@@ -133,17 +133,27 @@ def _attribute_types(doc):
     return types
 
 
+def _names_unsupported(row, references, ids):
+    """Whether a reference names a component the insert does not write; ids follow
+    the int encoder's rule, so any other value reaches the encoder and fails there."""
+    return any(is_int(v) and v in ids for v in (value_at(row, r) for r in references))
+
+
 def insert_document(conn, doc, *, strict=False):
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
     components = doc.get("components") or {}
     plans = []
+    unsupported_ids = set()
     for type_name in sorted(components):
         objs = [as_json_data(o) for o in components[type_name]]
         plan = _plan_for(type_name, len(objs), report, strict)
         if plan is not None:
             plans.append((plan, objs))
+        else:
+            ids = (o.get("id") for o in objs if isinstance(o, dict))
+            unsupported_ids.update(i for i in ids if is_int(i))
     plans.sort(key=lambda p: (p[0].rank, p[0].type_name))
     for section, reason in sorted(manifest.unsupported_sections.items()):
         rows = doc.get(section) or []
@@ -191,6 +201,10 @@ def insert_document(conn, doc, *, strict=False):
         for section in manifest.associations:
             name = section["section"]
             for row in doc.get(name) or []:
+                # A row naming a component that has no table is not written either.
+                if _names_unsupported(row, section["references"], unsupported_ids):
+                    report.add_unsupported(name, 1)
+                    continue
                 what = f"{name} row {row}"
                 _execute(
                     conn, section["row_sql"], _params(section["bindings"], row, what), what
