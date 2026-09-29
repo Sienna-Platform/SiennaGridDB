@@ -43,6 +43,16 @@ struct AssociationPlan
     references::Vector{String}
 end
 
+struct TimeSeriesPlan
+    section::String
+    row_sql::String
+    bindings::Vector{Binding}
+    feature_sql::String
+    value_sql::String
+    unsupported_types::Dict{String, String}
+    unsupported_dtypes::Dict{String, String}
+end
+
 struct Manifest
     schema_user_version::Int
     vocabulary::Dict{String, Any}
@@ -53,6 +63,7 @@ struct Manifest
     plant_sql::String
     supplemental_attribute_sql::String
     associations::Vector{AssociationPlan}
+    time_series::TimeSeriesPlan
     unsupported_sections::Dict{String, String}
 end
 
@@ -119,6 +130,16 @@ function parse_manifest(raw::AbstractDict)
             String.(a["references"]),
         ) for a in raw["associations"]
     ]
+    ts = raw["time_series"]
+    time_series = TimeSeriesPlan(
+        ts["section"],
+        ts["row_sql"],
+        parse_bindings(ts["bindings"]),
+        ts["feature_sql"],
+        ts["value_sql"],
+        Dict{String, String}(ts["unsupported_types"]),
+        Dict{String, String}(ts["unsupported_dtypes"]),
+    )
     return Manifest(
         raw["schema_user_version"],
         raw["vocabulary"],
@@ -129,6 +150,7 @@ function parse_manifest(raw::AbstractDict)
         supplemental["plant_sql"],
         supplemental["attribute_sql"],
         associations,
+        time_series,
         Dict{String, String}(raw["unsupported_sections"]),
     )
 end

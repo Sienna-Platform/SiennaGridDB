@@ -2,8 +2,9 @@
 """Language-neutral dump of a GridDB database, for cross-runtime parity checks.
 
 Every user table except the sealed unit registry, non-hidden columns only. A table's
-`id` is dropped when it is a local surrogate (not a foreign key to entities), since
-runtimes may assign surrogates in a different order. JSON text is parsed and
+`id` is dropped when it is a local surrogate (not a foreign key to entities, and not
+a document-carried association id), since runtimes may assign surrogates in a
+different order. JSON text is parsed and
 re-rendered with sorted keys and every number as a float, so `1` and `1.0` compare
 equal. Rows are sorted.
 
@@ -43,8 +44,12 @@ def normalize(value):
     return value
 
 
+# Ids a document carries and payloads reference, never minted by the inserter.
+CARRIED_IDS = {"entities", "time_series_associations"}
+
+
 def keeps_id(conn, table):
-    if table == "entities":
+    if table in CARRIED_IDS:
         return True
     for row in conn.execute(f"PRAGMA foreign_key_list('{table}')"):
         if row[3] == "id" and row[2] == "entities":

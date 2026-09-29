@@ -3,12 +3,14 @@ Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database.
 
 All mapping lives in the bundled `data/insert_manifest.json`; this package only binds
 values into the manifest's SQL. Load `PowerOpenAPIModels` as well to insert SDK models
-and `SystemDocument`s directly.
+and `SystemDocument`s directly, and `InfraStore` to insert time series from a
+document's HDF5 sidecar.
 """
 module SiennaGridDBTools
 
 import DBInterface
 import JSON
+import SHA
 import SQLite
 
 export create_database,
@@ -34,5 +36,6 @@ include("encode.jl")
 include("manifest.jl")
 include("db.jl")
 include("insert.jl")
+include("time_series.jl")
 
 end

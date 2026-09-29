@@ -22,6 +22,9 @@ function connect(path: string): Connection {
     throw new SQLiteVersionError(`SQLite ${found.v} is older than the required 3.45.0`);
   }
   db.pragma("foreign_keys = ON");
+  // A document inserts in one savepoint, so every row opens a statement journal;
+  // on disk that file I/O dominates the insert. Set at open: no temp tables yet.
+  db.pragma("temp_store = MEMORY");
   return db;
 }
 

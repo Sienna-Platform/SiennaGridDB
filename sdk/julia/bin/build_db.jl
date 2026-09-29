@@ -1,6 +1,8 @@
 # CLI: julia --project=sdk/julia sdk/julia/bin/build_db.jl <document.json> <out.sqlite> [--strict]
 import JSON
 using SiennaGridDBTools
+# Time series need InfraStore.jl: load it when the active environment provides it.
+isnothing(Base.find_package("InfraStore")) || @eval import InfraStore
 
 function main(args::Vector{String})
     strict = "--strict" in args
@@ -9,9 +11,8 @@ function main(args::Vector{String})
         println(stderr, "usage: build_db.jl <document.json> <out.sqlite> [--strict]")
         return 2
     end
-    doc = JSON.parsefile(positional[1]; dicttype=Dict{String, Any})
     db = create_database(positional[2])
-    report = insert_document!(db, doc; strict=strict)
+    report = insert_document!(db, positional[1]; strict=strict)
     close(db)
     JSON.print(stdout, SiennaGridDBTools.report_dict(report), 2)
     println(stdout)

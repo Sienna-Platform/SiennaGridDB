@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,7 @@ from sienna_griddb_tools import (
     open_database,
     seed_vocabulary,
 )
-from sienna_griddb_tools.encode import EncodeError, encode, value_at
+from sienna_griddb_tools.encode import EncodeError, encode, features_hash, value_at
 from sienna_griddb_tools.manifest import load_manifest
 
 
@@ -77,6 +78,7 @@ def test_create_database_seeds_vocabulary(tmp_path):
     n = conn.execute("SELECT count(*) FROM entity_types").fetchone()[0]
     assert n == len(load_manifest().vocabulary["entity_types"])
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    assert conn.execute("PRAGMA temp_store").fetchone()[0] == 2
     seed_vocabulary(conn)
     assert conn.execute("SELECT count(*) FROM entity_types").fetchone()[0] == n
 
@@ -99,3 +101,18 @@ def test_open_database_checks_user_version(tmp_path):
     raw.close()
     with pytest.raises(ManifestMismatchError):
         open_database(path)
+
+
+def test_features_hash_matches_golden_vectors():
+    path = Path(__file__).resolve().parents[3] / "test" / "features_hash_vectors.json"
+    for vector in json.loads(path.read_text(encoding="utf-8"))["vectors"]:
+        assert features_hash(vector["features"]) == vector["hash"], vector
+
+
+def test_features_hash_tells_int_from_float_and_bool():
+    hashes = {features_hash({"a": v}) for v in (1, 1.0, True, "1")}
+    assert len(hashes) == 4
+    with pytest.raises(EncodeError):
+        features_hash({"a": None})
+    with pytest.raises(EncodeError):
+        features_hash({"a": 2**63})

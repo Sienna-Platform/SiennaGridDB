@@ -201,6 +201,14 @@ def test_non_object_entries_raise_insert_error(conn, where, value):
     assert count(conn, "entities") == 0
 
 
+def test_time_series_without_a_sidecar_are_unsupported(conn):
+    doc = {"time_series_associations": [{"association_id": 1}]}
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported == {"time_series_associations": 1}
+    with pytest.raises(griddb.UnsupportedComponentError, match="sidecar"):
+        griddb.insert_document(conn, doc, strict=True)
+
+
 def test_component_base_cost_is_rejected(conn):
     raw_path = sdk_repo() / "fixtures" / "case14_operations.NATURAL_UNITS.json"
     if not raw_path.exists():

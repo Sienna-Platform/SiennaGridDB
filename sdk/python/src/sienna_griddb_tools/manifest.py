@@ -45,6 +45,7 @@ class Manifest:
         self.attribute_sql = raw["attribute_sql"]
         self.supplemental = raw["supplemental_attributes"]
         self.associations = raw["associations"]
+        self.time_series = raw["time_series"]
         self.unsupported_sections = raw["unsupported_sections"]
 
 

@@ -450,6 +450,20 @@ if HAS_GOLDEN
     end
 end
 
+@testset "time series without a sidecar are unsupported" begin
+    mktempdir() do dir
+        fresh(dir) do db
+            doc = Dict{String, Any}(
+                "time_series_associations" =>
+                    Any[Dict{String, Any}("association_id" => 1)],
+            )
+            report = insert_document!(db, doc)
+            @test report.unsupported == Dict("time_series_associations" => 1)
+            @test_throws r"sidecar" insert_document!(db, doc; strict=true)
+        end
+    end
+end
+
 # Review Focus 5
 @testset "misspelled field" begin
     mktempdir() do dir

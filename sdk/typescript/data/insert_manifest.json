@@ -4800,10 +4800,136 @@
       "ThermalPowerPlant"
     ]
   },
+  "time_series": {
+    "bindings": [
+      {
+        "encode": "int",
+        "path": "association_id"
+      },
+      {
+        "encode": "int",
+        "path": "owner_id"
+      },
+      {
+        "encode": "text",
+        "path": "owner_type"
+      },
+      {
+        "encode": "text",
+        "path": "owner_category"
+      },
+      {
+        "encode": "text",
+        "path": "time_series_type"
+      },
+      {
+        "encode": "text",
+        "path": "name"
+      },
+      {
+        "encode": "text",
+        "path": "initial_timestamp"
+      },
+      {
+        "encode": "text",
+        "path": "resolution"
+      },
+      {
+        "encode": "int",
+        "path": "length"
+      },
+      {
+        "encode": "text",
+        "path": "horizon"
+      },
+      {
+        "encode": "text",
+        "path": "interval"
+      },
+      {
+        "encode": "int",
+        "path": "count"
+      },
+      {
+        "encode": "int",
+        "path": "scenario_count"
+      },
+      {
+        "encode": "text",
+        "path": "units"
+      },
+      {
+        "encode": "text",
+        "path": "quantity_kind"
+      },
+      {
+        "encode": "text",
+        "path": "unit_system"
+      },
+      {
+        "encode": "text",
+        "path": "time_reference"
+      },
+      {
+        "encode": "text",
+        "path": "component_field"
+      },
+      {
+        "encode": "json",
+        "path": "percentiles"
+      },
+      {
+        "encode": "text",
+        "path": "element_type"
+      },
+      {
+        "encode": "json",
+        "path": "element_shape"
+      },
+      {
+        "encode": "json",
+        "path": "array_shape"
+      },
+      {
+        "encode": "text",
+        "path": "application_data"
+      },
+      {
+        "encode": "text",
+        "path": "uri"
+      },
+      {
+        "encode": "text",
+        "path": "data_hash"
+      },
+      {
+        "encode": "features_hash",
+        "path": "features"
+      }
+    ],
+    "feature_sql": "INSERT INTO feature_sets (features_hash, key, value_kind, value_int, value_float, value_bool, value_str) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (features_hash, key) DO NOTHING",
+    "row_sql": "INSERT INTO time_series_associations (id, owner_id, owner_type, owner_category, time_series_type, name, initial_timestamp, resolution, length, horizon, interval, count, scenario_count, units, quantity_kind, unit_system, time_reference, component_field, percentiles_json, element_type, element_shape, array_shape, application_data, uri, data_hash, features_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "section": "time_series_associations",
+    "unsupported_dtypes": {
+      "bool": "static_time_series stores f64 values only",
+      "f32": "static_time_series stores f64 values only",
+      "i16": "static_time_series stores f64 values only",
+      "i32": "static_time_series stores f64 values only",
+      "i64": "static_time_series stores f64 values only",
+      "i8": "static_time_series stores f64 values only",
+      "u16": "static_time_series stores f64 values only",
+      "u32": "static_time_series stores f64 values only",
+      "u64": "static_time_series stores f64 values only",
+      "u8": "static_time_series stores f64 values only"
+    },
+    "unsupported_types": {
+      "NonSequentialTimeSeries": "GridDB has no table for its explicit timestamp vector"
+    },
+    "value_sql": "INSERT INTO static_time_series (uri, timestep, element, value) VALUES (?, ?, ?, ?)"
+  },
   "unsupported_components": {},
   "unsupported_sections": {
-    "ext": "no table in schema.sql",
-    "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified"
+    "ext": "no table in schema.sql"
   },
   "vocabulary": {
     "entity_types": [

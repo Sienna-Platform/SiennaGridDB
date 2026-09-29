@@ -1,5 +1,5 @@
 {
-  "description": "Hand-written, inserter-owned mapping additions consumed by scripts/insert_manifest.py. Holds only what schema_map.json and sql_codegen_map.json do not: extra component->table maps, entity-type flags, per-component constant columns, columns derived from a JSON path, and the component types / document sections the inserter cannot store (with the reason).",
+  "description": "Hand-written, inserter-owned mapping additions consumed by scripts/insert_manifest.py. Holds only what schema_map.json and sql_codegen_map.json do not: extra component->table maps, entity-type flags, per-component constant columns, columns derived from a JSON path, the time series association mapping (wire property renames, encodings, SQL placeholders, and the series types and element dtypes GridDB cannot store), and the component types / document sections the inserter cannot store (with the reason).",
   "association_sections": [
     ["supplemental_attribute_associations", "Core/Associations/SupplementalAttributeAssociation.json"],
     ["plant_associations", "Operations/Associations/PlantAssociation.json"],
@@ -39,10 +39,31 @@
     "ThermalPowerPlant"
   ],
   "supplemental_attribute_dirs": ["Core/SupplementalAttributes", "Operations/SupplementalAttributes"],
+  "time_series": {
+    "section": "time_series_associations",
+    "file": "TimeSeries/TimeSeriesAssociation.json",
+    "columns": {"association_id": "id", "features": "features_hash", "percentiles": "percentiles_json"},
+    "encodings": {"features": "features_hash"},
+    "placeholders": {"unit_system": "lower(?)"},
+    "unsupported_types": {
+      "NonSequentialTimeSeries": "GridDB has no table for its explicit timestamp vector"
+    },
+    "unsupported_dtypes": {
+      "bool": "static_time_series stores f64 values only",
+      "f32": "static_time_series stores f64 values only",
+      "i8": "static_time_series stores f64 values only",
+      "i16": "static_time_series stores f64 values only",
+      "i32": "static_time_series stores f64 values only",
+      "i64": "static_time_series stores f64 values only",
+      "u8": "static_time_series stores f64 values only",
+      "u16": "static_time_series stores f64 values only",
+      "u32": "static_time_series stores f64 values only",
+      "u64": "static_time_series stores f64 values only"
+    }
+  },
   "unsupported_components": {},
   "unsupported_sections": {
-    "ext": "no table in schema.sql",
-    "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified"
+    "ext": "no table in schema.sql"
   },
   "vocabulary_enums": {
     "fuels": "Core/common.json#/$defs/ThermalFuels",

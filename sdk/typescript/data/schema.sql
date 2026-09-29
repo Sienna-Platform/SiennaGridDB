@@ -1244,17 +1244,22 @@ CREATE TABLE interconnecting_converters (
 CREATE TABLE static_time_series (
     id INTEGER PRIMARY KEY,
     uri TEXT NOT NULL,
-    -- The timestep's ordinal position within the array named by `uri`, 0-based
-    -- (confirmed by test_static_time_series_rejects_duplicate_timepoint, whose
-    -- first inserted timestep uses timestep = 0). Enforced unique per array by
-    -- the (uri, timestep) index below.
+    -- 0-based row-major index over every axis of the stored array (array_shape)
+    -- but its last: a static series' time step; a Deterministic [H, count, k]
+    -- puts window w at horizon step h at h * count + w.
     timestep INTEGER NOT NULL,
-    value REAL NOT NULL
+    -- 0-based index on the stored array's last axis, 0 for a one-axis array: a
+    -- composite element's raw slot (decoding is the consumer's, per element_type)
+    -- or a scalar forecast's window. Byte-identical arrays share one split.
+    element INTEGER NOT NULL DEFAULT 0,
+    -- NULL means NaN: SQLite has no NaN and binds one as NULL. Infinities stay REAL.
+    value REAL
 ) strict;
 
--- UNIQUE: one value per (array, timepoint); loader double-inserts must fail
+-- UNIQUE: one value per (array, step, slot); loader double-inserts must fail
 -- loudly rather than silently duplicate timepoints.
-CREATE UNIQUE INDEX uq_static_time_series_uri_timestep ON static_time_series (uri, timestep);
+CREATE UNIQUE INDEX uq_static_time_series_uri_timestep_element
+    ON static_time_series (uri, timestep, element);
 
 CREATE INDEX idx_arcs_from ON arcs (from_id);
 

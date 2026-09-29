@@ -330,7 +330,7 @@ def test_feature_set_key_check_matches_wire_reservation(db):
 
 
 def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
-    """One value per (uri, timestep): a loader double-insert must fail loudly
+    """One value per (uri, timestep, element): a loader double-insert must fail loudly
     instead of silently duplicating timepoints."""
     make_entity(fresh_db, 1)
     fresh_db.execute(

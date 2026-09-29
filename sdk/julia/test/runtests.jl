@@ -1,6 +1,7 @@
 using Test
 using SiennaGridDBTools
 import DBInterface
+import InfraStore
 import JSON
 import SQLite
 
@@ -42,6 +43,18 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
         )
     end
 
+    @testset "features_hash" begin
+        vectors = load_json(joinpath(REPO_ROOT, "test", "features_hash_vectors.json"))
+        for v in vectors["vectors"]
+            @test G.features_hash(v["features"]) == v["hash"]
+        end
+        hashes =
+            Set(G.features_hash(Dict{String, Any}("a" => v)) for v in (1, 1.0, true, "1"))
+        @test length(hashes) == 4
+        @test_throws G.EncodeError G.features_hash(Dict{String, Any}("a" => nothing))
+        @test_throws G.EncodeError G.features_hash(Dict{String, Any}("a" => big(2)^63))
+    end
+
     @testset "create and open" begin
         mktempdir() do dir
             path = joinpath(dir, "a.sqlite")
@@ -54,6 +67,7 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
             @test_throws DatabaseExistsError create_database(path)
             db = open_database(path)
             @test first(DBInterface.execute(db, "PRAGMA foreign_keys"))[1] == 1
+            @test first(DBInterface.execute(db, "PRAGMA temp_store"))[1] == 2
             DBInterface.execute(db, "PRAGMA user_version = 99")
             close(db)
             @test_throws ManifestMismatchError open_database(path)
@@ -61,4 +75,5 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
     end
 
     include("insert_tests.jl")
+    include("time_series_tests.jl")
 end

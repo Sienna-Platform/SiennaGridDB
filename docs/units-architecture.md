@@ -98,6 +98,7 @@ erDiagram
     static_time_series {
         text uri
         int timestep
+        int element
         real value
     }
 ```
@@ -165,7 +166,7 @@ sequenceDiagram
     App->>Assoc: INSERT (owner, name, units, quantity_kind, uri, ...)
     Assoc->>Reg: trigger checks units against allowed_units when quantity_kind is registered
     Reg-->>Assoc: OK or ABORT
-    App->>Data: INSERT (uri, timestep, value)
+    App->>Data: INSERT (uri, timestep, element, value)
     Data->>Assoc: trigger checks uri exists on some association
     Assoc-->>Data: OK or ABORT
 ```
@@ -190,6 +191,28 @@ required locator; here it keys `static_time_series` directly): inserts are rejec
 association declares the `uri`, so associations load first and arrays shared by many associations
 are stored once. The association's optional `data_hash` is an integrity hash of the array, not the
 key.
+
+**Value layout: the stored array's geometry.**
+Each stored value is one row `(uri, timestep, element, value)`, and every slot of the stored array is kept exactly as infrastore holds it.
+The split comes from the stored array alone, never from an association: infrastore's content hash covers an array's bytes, dtype and shape but not its `element_type`, so one `uri` can serve associations that read it differently, and they must all find one layout.
+`element` is the 0-based index on the stored array's last axis, 0 for a one-axis array, and `timestep` is the 0-based row-major index over every axis before it.
+For a static series those are the time step and the slot within a composite element.
+A forecast follows the geometry `array_shape` records: infrastore stores a `Deterministic` as `[horizon_steps, count, *element_shape]`, and a `Probabilistic` or `Scenarios` forecast puts its percentile or scenario axis in front of that.
+So a scalar `Deterministic` stores window `w` at horizon step `h` as `(timestep h, element w)`, and a composite one stores slot `e` of that window and step as `(h * count + w, e)`.
+Composite elements (`tuple(N,dtype)` and the function-data kinds) keep every raw slot, including a piecewise row's leading used-count slot; decoding them is the consumer's job, per `element_type`.
+A NaN is stored as a NULL `value`, because SQLite has no NaN and binds one as NULL; infinities stay REAL.
+The layout reads neither `element_type` nor `element_shape`, so a `DeterministicSingleTimeSeries` row carrying `element_shape` `[]` for a composite source changes nothing; every association that declares an `array_shape` must declare the stored one, and the inserters check that against the sidecar, even for an array the database already holds.
+
+**Arrays are shared, and cleaned up with their last association.**
+The inserters store an array's values only the first time its `uri` appears in the database.
+Deleting an association, directly or through its owner's cascade, deletes the `uri`'s values only when no remaining association names it (`delete_orphan_static_time_series`, and its twin for a `uri` update).
+Two writes bypass that cleanup: an `INSERT OR REPLACE` conflict delete fires no trigger (`recursive_triggers` is off), and a one-statement `uri` swap across rows drops the array the second row then names.
+The `orphaned_time_series` view lists what either leaves behind: values no association names, and associations whose `uri` has no values.
+`feature_sets` rows are shared the same way and are never deleted.
+
+**Every reference must resolve.**
+The `dangling_time_series_references` view walks every payload column that can carry a time series reference (`association_id`, `*_association_id`, `FuelCurve.fuel_cost_time_series`) and lists the ids no `time_series_associations` row resolves; a bare integer payload is matched by its column or attribute name.
+It is empty after a complete insert; `test_dangling_view_covers_every_reference_column` walks the SiennaSchemas components so a new reference-bearing column cannot be missed.
 
 ## 5. Basis: per-unit vs. natural units, and where the base number lives
 
@@ -355,21 +378,22 @@ GridDB follows the schemas: `uri` is NOT NULL and keys `static_time_series`, `el
 NOT NULL (default `'[]'` = scalar), `data_hash` is nullable. A row deserializing into a store that
 demands a hash computes it from the dense values at ingest.
 
-**Two shape columns describe two different things.** `element_shape` is the shape of *one
-timestep's* element — the trailing dims after the time axis, `'[]'` for scalar steps — and pairs
-with `element_type`, which says what that element means (`f64`, `tuple(N,dtype)`, a function-data
-kind). `array_shape` is the *whole stored array's* native geometry, whose trailing axes end with
-`element_shape`: `[length, *element_shape]` for static types, with forecasts prepending their
-window/percentile/scenario axes. It exists because a forecast's layout is a producer convention
-that cannot be reconstructed from `horizon`/`count`/`percentiles`/`scenario_count`; it is nullable
-(and wire-only for now — infrastore's catalog has no counterpart yet, same as `scenario_count`).
+**`features_hash` follows infrastore's hashing contract.**
+The inserters compute it as infrastore does (`crates/infrastore-core/src/hash.rs`): SHA-256 over `b"features\0"`, the map's length as `u64` little-endian, then for each key in UTF-8 byte order its length and bytes followed by a tagged value.
+The tags are `i` with an `i64`, `f` with the `f64` bit pattern (any NaN as Rust's canonical `f64::NAN`), `b` with one byte, and `s` with a length-prefixed UTF-8 string.
+A JSON integer is an Int and a number with a fraction or exponent is a Float, as Python and Julia parse them; TypeScript's `JSON.parse` cannot tell `1.0` from `1`, so it hashes a safe integer (`|x| < 2^53`) as an Int and every other number as a Float.
+`test/features_hash_vectors.json` holds golden vectors that `test/test_features_hash_oracle.py` re-derives from infrastore itself; the empty map hashes to `f0f10eb0149a8828ad7505d73262e3e4a70bfdfed90e4c2e9ce6013758296ede`.
+Each distinct map gets its `feature_sets` rows once (`ON CONFLICT (features_hash, key) DO NOTHING`, not `OR IGNORE`, which would also swallow the reserved-key CHECK).
 
-**`unit_system` uses infrastore's spelling, not the component tables'.** Lowercase
-`'natural_units'` / `'component_base'`, NULL meaning unspecified, and deliberately no CHECK — a
-third basis must land without a format bump. Same two-valued concept as §5's `unit_basis`, a
-different vocabulary on purpose: infrastore validates only these two spellings and passes the
-value through untouched — it is the producing application that decides which basis a series
-uses, and both infrastore and GridDB just relay its choice.
+**Two shape columns describe two different things.**
+`element_shape` is the shape of *one timestep's* element - the trailing dims after the time axis, `'[]'` for scalar steps - and pairs with `element_type`, which says what that element means (`f64`, `tuple(N,dtype)`, a function-data kind).
+`array_shape` is the *whole stored array's* native geometry, whose trailing axes end with `element_shape`: `[length, *element_shape]` for static types, and for forecasts the stored geometry §4's value layout follows.
+It exists because a forecast's layout is a producer convention that cannot be reconstructed from `horizon`/`count`/`percentiles`/`scenario_count`; it is nullable (and wire-only for now - infrastore's catalog has no counterpart yet, same as `scenario_count`).
+
+**`unit_system` uses infrastore's spelling, not the component tables'.**
+Lowercase `'natural_units'` / `'component_base'`, NULL meaning unspecified, and deliberately no CHECK - a third basis must land without a format bump.
+The wire's `UnitSystem` spells them uppercase; the insert manifest binds the value through `lower(?)`.
+Same two-valued concept as §5's `unit_basis`, a different vocabulary on purpose: infrastore validates only these two spellings and passes the value through untouched - it is the producing application that decides which basis a series uses, and both infrastore and GridDB just relay its choice.
 
 **`quantity_kind` is free-form; the registry guards only registered names.** Infrastore leaves the
 column unconstrained so composite economic quantities never force a migration. GridDB adds one

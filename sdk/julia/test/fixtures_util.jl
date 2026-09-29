@@ -26,3 +26,39 @@ function ensure_golden_fixtures()
     end
     return true
 end
+
+# The time series case needs infrastore: prefer the repo's .venv, which the README
+# setup installs it into, unless SIENNA_GRIDDB_PYTHON names another interpreter.
+const PYTHON = get(ENV, "SIENNA_GRIDDB_PYTHON") do
+    venv = joinpath(FIXTURES_UTIL_REPO_ROOT, ".venv", "bin", "python")
+    return isfile(venv) ? venv : "python3"
+end
+
+function python_dump(db_path)
+    script = joinpath(FIXTURES_UTIL_REPO_ROOT, "scripts", "canonical_dump.py")
+    return read(`$PYTHON $script $db_path`, String)
+end
+
+function infrastore_importable()
+    probe = pipeline(`$PYTHON -c "import infrastore"`; stdout=devnull, stderr=devnull)
+    try
+        return success(probe)
+    catch  # no such interpreter
+        return false
+    end
+end
+
+"""
+Build the synthetic time series case (test/time_series_case.py) into `dir`; false,
+with a warning, only when `PYTHON` cannot import infrastore, and never under CI.
+"""
+function build_time_series_case(dir::AbstractString)
+    if !infrastore_importable()
+        haskey(ENV, "CI") && error("$PYTHON cannot import infrastore, which CI installs")
+        @warn "$PYTHON cannot import infrastore; time series parity testsets are skipped"
+        return false
+    end
+    script = joinpath(FIXTURES_UTIL_REPO_ROOT, "test", "time_series_case.py")
+    run(`$PYTHON $script $dir`)
+    return true
+end

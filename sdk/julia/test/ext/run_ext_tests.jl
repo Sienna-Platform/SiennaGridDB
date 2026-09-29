@@ -25,5 +25,5 @@ const SUBPACKAGES = [
 Pkg.activate(; temp=true)
 Pkg.develop([PackageSpec(; path=joinpath(SDK, p)) for p in SUBPACKAGES])
 Pkg.develop(; path=PKG_ROOT)
-Pkg.add("Test")
+Pkg.add(["Test", "InfraStore"])
 include(joinpath(HERE, "ext_tests.jl"))

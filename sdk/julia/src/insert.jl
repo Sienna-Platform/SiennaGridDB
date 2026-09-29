@@ -272,13 +272,36 @@ function write_supplemental!(cache, table::AbstractString, attr_type, attr, what
 end
 
 """
-    insert_document!(db, doc; strict=false) -> InsertReport
+    insert_document!(db, doc; strict=false, time_series=nothing) -> InsertReport
 
 Insert a whole `SystemDocument` (as parsed JSON) in one savepoint: vocabulary, every
-entity row, typed rows in foreign-key rank order, supplemental attributes, associations.
-Any failure rolls back the whole document.
+entity row, typed rows in foreign-key rank order, supplemental attributes, associations,
+then time series associations and their arrays, read from the HDF5 sidecar
+`time_series` (only ever read, must exist; needs InfraStore.jl loaded). Any failure
+rolls back the whole document.
 """
-function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
+function insert_document!(
+    db::SQLite.DB,
+    doc::AbstractDict;
+    strict::Bool=false,
+    time_series::Union{Nothing, AbstractString}=nothing,
+)
+    return insert_parsed_document!(db, doc, strict, time_series, NO_SIDECAR)
+end
+
+const NO_SIDECAR = "no time series sidecar given"
+
+# `no_sidecar` is why time series are unsupported when `time_series` is nothing.
+function insert_parsed_document!(
+    db::SQLite.DB,
+    doc::AbstractDict,
+    strict::Bool,
+    time_series::Union{Nothing, AbstractString},
+    no_sidecar::AbstractString,
+)
+    if !isnothing(time_series) && !isfile(time_series)
+        throw(InsertError("time series sidecar $time_series does not exist"))
+    end
     m = manifest()
     report = InsertReport()
     components = something(get(doc, "components", nothing), Dict{String, Any}())
@@ -302,6 +325,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             mark_unsupported!(report, strict, section, n, m.unsupported_sections[section])
         end
     end
+    series = storable_time_series(doc, time_series, no_sidecar, report, strict)
     attr_types = attribute_types(doc)
     with_statements(db) do cache
         seed_vocabulary!(db)
@@ -357,6 +381,35 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
                 add_inserted!(report, section.section)
             end
         end
+        if !isempty(series)
+            insert_time_series!(cache, m.time_series, series, time_series, report)
+        end
     end
     return report
+end
+
+"""
+    insert_document!(db, path::AbstractString; strict=false, time_series=nothing)
+
+Parse the document at `path`; `time_series` defaults to its `time_series_storage_file`,
+resolved beside it (reported unsupported when that file does not exist).
+"""
+function insert_document!(
+    db::SQLite.DB,
+    path::AbstractString;
+    strict::Bool=false,
+    time_series::Union{Nothing, AbstractString}=nothing,
+)
+    doc = JSON.parsefile(path; dicttype=Dict{String, Any})
+    stored = get(doc, "time_series_storage_file", nothing)
+    no_sidecar = NO_SIDECAR
+    if isnothing(time_series) && stored isa AbstractString && !isempty(stored)
+        default = joinpath(dirname(abspath(path)), stored)
+        if isfile(default)
+            time_series = default
+        else
+            no_sidecar = "time series sidecar $default does not exist"
+        end
+    end
+    return insert_parsed_document!(db, doc, strict, time_series, no_sidecar)
 end

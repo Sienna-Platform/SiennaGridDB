@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: pip install -e "sdk/python[test]" "pydantic>=2" -e power-openapi-models/python
+        run: pip install -e "sdk/python[test,time-series]" "pydantic>=2" -e power-openapi-models/python
       # Golden fixtures are generated on the fly and gitignored, never checked in.
       - name: Generate golden fixtures
         run: python3 test/prepare_fixtures.py
@@ -59,6 +59,12 @@ jobs:
         with:
           version: "1.12"
       - uses: julia-actions/cache@v2
+      # The time series parity testset builds its case with infrastore.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install infrastore
+        run: pip install "infrastore>=0.14.1,<0.15"
       - name: Generate golden fixtures
         run: python3 test/prepare_fixtures.py
       - name: Test
