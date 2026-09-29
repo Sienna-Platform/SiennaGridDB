@@ -514,7 +514,12 @@
       "table": "discrete_controlled_ac_branches"
     },
     "EnergyReservoirStorage": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -622,9 +627,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'storage_units', 'EnergyReservoirStorage')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO storage_units (id, name, prime_mover_type, storage_technology_type, balancing_topology, rating, base_power, power_units, storage_capacity, energy_units, storage_level_limits, initial_storage_capacity_level, input_active_power_limits, output_active_power_limits, efficiency, reactive_power_limits, active_power, reactive_power, available, conversion_factor, storage_target, cycle_limits, ramp_limits, self_discharge, standing_loss, operation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'MWH'), ?, ?, ?, ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, TRUE), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 10000), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"STORAGE\", \"charge_variable_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}, \"discharge_variable_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
@@ -663,6 +666,10 @@
         {
           "field": "conformity",
           "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "arms": {
@@ -730,9 +737,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'ExponentialLoad')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
@@ -747,6 +752,10 @@
         {
           "field": "control_mode",
           "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "arms": {
@@ -811,16 +820,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'facts_control_devices', 'FACTSControlDevice')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO facts_control_devices (id, name, bus, voltage_setpoint, parameter_units, base_power, power_units, max_reactive_power, shunt_control_type, regulated_bus_number) VALUES (?, ?, ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 9999.0), COALESCE(?, 'STATCOM'), COALESCE(?, 0))",
       "skip": [],
       "table": "facts_control_devices"
     },
     "FixedAdmittance": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -853,13 +865,15 @@
       ],
       "rank": 2,
       "row_sql": "INSERT INTO fixed_admittance (id, name, bus, available, admittance_units, base_power) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 'COMPONENT_MVAR'), ?)",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "skip": [],
       "table": "fixed_admittance"
     },
     "HydroDispatch": {
       "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
         {
           "field": "time_at_status",
           "quantity_kind": "OperationalDuration",
@@ -933,9 +947,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroDispatch')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, active_power, reactive_power, operation_cost) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
@@ -970,6 +982,10 @@
           },
           "discriminator": "power_units",
           "field": "active_power_pump"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "field": "efficiency",
@@ -1083,9 +1099,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroPumpTurbine')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, operating_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost) VALUES (?, ?, COALESCE(?, 'PS'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 'OFF'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
@@ -1173,6 +1187,10 @@
     },
     "HydroTurbine": {
       "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
         {
           "field": "efficiency",
           "quantity_kind": "Fraction",
@@ -1275,9 +1293,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroTurbine')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
@@ -1321,6 +1337,10 @@
           "field": "dc_voltage_droop",
           "quantity_kind": "Resistance",
           "unit": "pu"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "field": "loss_function",
@@ -1420,7 +1440,6 @@
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'interconnecting_converters', 'InterconnectingConverter')",
       "gaps": [
         "dc_current",
-        "dynamic_injector",
         "max_dc_current"
       ],
       "rank": 2,
@@ -1451,6 +1470,10 @@
         {
           "field": "conformity",
           "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "arms": {
@@ -1522,9 +1545,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'InterruptiblePowerLoad')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
@@ -1595,6 +1616,10 @@
           },
           "discriminator": "power_units",
           "field": "current_reactive_power"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "arms": {
@@ -1736,9 +1761,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'InterruptibleStandardLoad')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
@@ -2078,6 +2101,10 @@
           "unit_free": true
         },
         {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
           "arms": {
             "COMPONENT_BASE": {
               "quantity_kind": "ActivePower",
@@ -2161,9 +2188,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'MotorLoad')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
@@ -2367,6 +2392,10 @@
           "unit_free": true
         },
         {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
           "arms": {
             "COMPONENT_BASE": {
               "quantity_kind": "ActivePower",
@@ -2432,16 +2461,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'PowerLoad')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "RenewableDispatch": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2497,16 +2529,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'renewable_generators', 'RenewableDispatch')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO renewable_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, power_factor, reactive_power_limits, available, active_power, reactive_power, operation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1.0), ?, COALESCE(?, TRUE), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"RENEWABLE\",\"fixed\":0,\"curtailment_cost\":{\"variable_cost_type\":\"COST\",\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}},\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}}},\"variable_operation_cost\":{\"variable_cost_type\":\"COST\",\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}},\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}}}}'))",
       "skip": [],
       "table": "renewable_generators"
     },
     "RenewableNonDispatch": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2554,9 +2589,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'renewable_generators', 'RenewableNonDispatch')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO renewable_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, power_factor, available, active_power, reactive_power) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1.0), COALESCE(?, TRUE), COALESCE(?, 0.0), COALESCE(?, 0.0))",
       "skip": [],
@@ -2595,6 +2628,10 @@
         {
           "field": "available",
           "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "field": "load_balance_time_horizon",
@@ -2671,16 +2708,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'ShiftablePowerLoad')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "Source": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2755,9 +2795,7 @@
       "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO sources (id, name, bus, available, base_voltage, base_power, power_units, active_power, reactive_power, active_power_limits, reactive_power_limits, internal_voltage, internal_angle, r_th, x_th, parameter_units, operation_cost) VALUES (?, ?, ?, COALESCE(?, 1), ?, COALESCE(?, 100.0), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_BASE'), COALESCE(?, '{\"cost_type\":\"IMPORTEXPORT\",\"energy_export_weekly_limit\":1000000.0,\"energy_import_weekly_limit\":1000000.0,\"export_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}},\"import_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'))",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "skip": [],
       "table": "sources"
     },
     "StandardLoad": {
@@ -2825,6 +2863,10 @@
           },
           "discriminator": "power_units",
           "field": "current_reactive_power"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "arms": {
@@ -2962,9 +3004,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'StandardLoad')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
@@ -3155,7 +3195,12 @@
       "table": "supply_technologies"
     },
     "SwitchedAdmittance": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -3210,13 +3255,16 @@
       "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO switched_admittance (id, name, bus, available, admittance_units, Y_increase, number_engaged, number_of_steps, solved_admittance, admittance_limits, control_mode, regulated_bus_number) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 'COMPONENT_MVAR'), ?, ?, ?, ?, COALESCE(?, '{\"max\":1.0,\"min\":1.0}'), COALESCE(?, 'FIXED'), COALESCE(?, 0))",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "skip": [],
       "table": "switched_admittance"
     },
     "SynchronousCondenser": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -3263,9 +3311,7 @@
       "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO synchronous_condensers (id, name, bus, available, reactive_power, rating, base_power, power_units, reactive_power_limits, active_power_losses) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), ?, ?, ?, ?, COALESCE(?, 0.0))",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "skip": [],
       "table": "synchronous_condensers"
     },
     "TModelHVDCLine": {
@@ -3335,6 +3381,10 @@
     },
     "ThermalMultiStart": {
       "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
         {
           "arms": {
             "COMPONENT_BASE": {
@@ -3440,9 +3490,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'thermal_generators', 'ThermalMultiStart')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO thermal_generators (id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, operation_cost) VALUES (?, ?, ?, COALESCE(?, 'OTHER'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), ?, COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
@@ -3450,6 +3498,10 @@
     },
     "ThermalStandard": {
       "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
         {
           "field": "time_at_status",
           "quantity_kind": "OperationalDuration",
@@ -3531,9 +3583,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'thermal_generators', 'ThermalStandard')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO thermal_generators (id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, operation_cost) VALUES (?, ?, COALESCE(?, 'OT'), COALESCE(?, 'OTHER'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), ?, COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
