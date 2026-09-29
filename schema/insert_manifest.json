@@ -139,7 +139,26 @@
       "table": "balancing_topologies"
     },
     "AggregateTransportTechnology": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "capacity_limits",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "end_region",
+          "identifier": true
+        },
+        {
+          "field": "line_loss",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "start_region",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -171,12 +190,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'AggregateTransportTechnology')",
-      "gaps": [
-        "capacity_limits",
-        "end_region",
-        "line_loss",
-        "start_region"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, ?)",
       "skip": [],
@@ -382,6 +396,25 @@
     "DemandRequirement": {
       "attributes": [
         {
+          "field": "conformity",
+          "unit_free": true
+        },
+        {
+          "field": "growth_rate",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "new_construction_year",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "new_demand_mw",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
           "field": "unserved_demand_curve",
           "quantity_kind": "CostPerEnergy",
           "unit": "USD/MWh"
@@ -415,12 +448,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'demand_technologies', 'DemandRequirement')",
-      "gaps": [
-        "conformity",
-        "growth_rate",
-        "new_construction_year",
-        "new_demand_mw"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO demand_technologies (id, name, available, region, power_systems_type) VALUES (?, ?, COALESCE(?, TRUE), ?, ?)",
       "skip": [],
@@ -2142,7 +2170,36 @@
       "table": "loads"
     },
     "NodalACTransportTechnology": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "capacity_limits",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "end_node",
+          "identifier": true
+        },
+        {
+          "field": "reactance",
+          "quantity_kind": "Reactance",
+          "unit": "ohm"
+        },
+        {
+          "field": "resistance",
+          "quantity_kind": "Resistance",
+          "unit": "ohm"
+        },
+        {
+          "field": "start_node",
+          "identifier": true
+        },
+        {
+          "field": "voltage",
+          "quantity_kind": "Voltage",
+          "unit": "kV"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2174,21 +2231,33 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'NodalACTransportTechnology')",
-      "gaps": [
-        "capacity_limits",
-        "end_node",
-        "reactance",
-        "resistance",
-        "start_node",
-        "voltage"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, COALESCE(?, 0.0))",
       "skip": [],
       "table": "transport_technologies"
     },
     "NodalHVDCTransportTechnology": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "capacity_limits",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "end_node",
+          "identifier": true
+        },
+        {
+          "field": "line_loss",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "start_node",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2220,12 +2289,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'NodalHVDCTransportTechnology')",
-      "gaps": [
-        "capacity_limits",
-        "end_node",
-        "line_loss",
-        "start_node"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, ?)",
       "skip": [],
