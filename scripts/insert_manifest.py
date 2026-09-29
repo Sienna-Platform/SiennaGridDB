@@ -16,7 +16,7 @@ from generate_sql_schema import RefResolver, sql_type_for
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 
 ENCODING_BY_SQL_TYPE = {
     "INTEGER": "int",
@@ -61,13 +61,78 @@ def component_tables(inputs):
     return tables
 
 
-def attribute_units(conventions):
-    """{attribute name: (unit, quantity_kind)} from the attributes.* conventions."""
-    units = {}
+def attribute_registry(conn, conventions):
+    """What decides attribute units: the registered attributes.* pairs per name, the
+    allowed (quantity_kind, unit) vocabulary, and the (TYPE, name) identifier pairs."""
+    pairs = {}
     for entry in conventions:
         if entry["table"] == "attributes":
-            units[entry["column"]] = (entry["unit"], entry["quantity_kind"])
-    return units
+            pairs.setdefault(entry["column"], set()).add(
+                (entry["unit"], entry["quantity_kind"])
+            )
+    return {
+        "pairs": pairs,
+        "allowed": set(conn.execute("SELECT unit, quantity_kind FROM allowed_units")),
+        "identifiers": set(conn.execute("SELECT TYPE, name FROM attribute_identifiers")),
+    }
+
+
+def leaf_unit(unit, quantity, where, pairs, allowed):
+    """One arm's (unit, quantity_kind). The schema x-quantity names the kind when it
+    forms an allowed pair with the unit; otherwise the registry's only kind for it."""
+    kind = quantity.get(unit) if isinstance(quantity, dict) else quantity
+    if (unit, kind) not in allowed:
+        kinds = {k for u, k in pairs if u == unit}
+        if len(kinds) != 1:
+            raise ManifestError(
+                f"{where}: unit {unit!r} needs exactly one registered attributes "
+                f"quantity_kind, found {sorted(kinds)}"
+            )
+        kind = kinds.pop()
+    if (unit, kind) not in pairs:
+        raise ManifestError(f"{where}: register the attributes convention {kind}/{unit}")
+    return {"unit": unit, "quantity_kind": kind}
+
+
+def unit_tree(node, quantity, where, props, pairs, allowed):
+    """A fixed unit, or one arm per value of the sibling field that discriminates it."""
+    if "x-units" not in node:
+        return leaf_unit(node["x-unit"], quantity, where, pairs, allowed)
+    disc = node.get("x-unit-discriminator")
+    if disc not in props:
+        raise ManifestError(f"{where}: x-units discriminator {disc!r} is not a sibling field")
+    arms = {}
+    for value, arm in sorted(node["x-units"].items()):
+        child = arm if isinstance(arm, dict) else {"x-unit": arm}
+        arms[value] = unit_tree(child, quantity, f"{where}[{value}]", props, pairs, allowed)
+    spec = {"discriminator": disc, "arms": arms}
+    default = props[disc].get("default")
+    if default is not None:
+        # Arm keys are strings; a non-string value keys by its JSON text (true, false).
+        spec["default"] = default if isinstance(default, str) else json.dumps(default)
+    return spec
+
+
+def attribute_spec(name, field, props, sql_type, registry):
+    """How the SDK picks one attribute row's unit; fails rather than guess."""
+    where = f"{name}.{field}"
+    pairs = registry["pairs"].get(field, set())
+    prop = props[field]
+    if (name, field) in registry["identifiers"]:
+        if pairs:
+            raise ManifestError(f"{where}: an attribute identifier cannot have a registered unit")
+        return {"identifier": True}
+    if "x-unit" in prop or "x-units" in prop:
+        return unit_tree(prop, prop.get("x-quantity"), where, props, pairs, registry["allowed"])
+    if len(pairs) == 1:
+        unit, kind = next(iter(pairs))
+        return {"unit": unit, "quantity_kind": kind}
+    if not pairs and sql_type in ("TEXT", "BOOLEAN"):
+        return {"unit_free": True}
+    raise ManifestError(
+        f"{where}: no unit annotation and {len(pairs)} attributes conventions; register "
+        "one or list the field in attribute_identifiers"
+    )
 
 
 def compute_ranks(conn, tables):
@@ -102,7 +167,7 @@ def default_literal(prop, column):
     return column["default"]
 
 
-def component_entry(conn, resolver, inputs, table, comp, rank, units):
+def component_entry(conn, resolver, inputs, table, comp, rank, registry):
     cfg = inputs["codegen"].get(table, {})
     config = inputs["config"]
     renames = cfg.get("renames", {})
@@ -133,10 +198,9 @@ def component_entry(conn, resolver, inputs, table, comp, rank, units):
         elif prop_name in derived_sources:
             continue
         elif prop_name in attribute_channel:
-            unit, quantity_kind = units.get(prop_name, (None, None))
-            attributes.append(
-                {"field": prop_name, "unit": unit, "quantity_kind": quantity_kind}
-            )
+            sql_type = sql_type_for(prop, resolver, comp["file"])[0]
+            spec = attribute_spec(name, prop_name, props, sql_type, registry)
+            attributes.append({"field": prop_name, **spec})
         elif prop_name in skip:
             skipped.append(prop_name)
         else:
@@ -241,12 +305,12 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
     conn = build_db(schema_dir)
     tables = component_tables(inputs)
     ranks = compute_ranks(conn, tables)
-    units = attribute_units(inputs["conventions"])
+    registry = attribute_registry(conn, inputs["conventions"])
     components = {}
     for table in sorted(tables):
         for comp in tables[table]:
             components[comp["component"]] = component_entry(
-                conn, resolver, inputs, table, comp, ranks[table], units
+                conn, resolver, inputs, table, comp, ranks[table], registry
             )
     for entry in components.values():
         sql = entry["row_sql"]

@@ -12,6 +12,8 @@ from check_units_sync import build_db
 from insert_manifest import (
     ManifestError,
     RefResolver,
+    attribute_registry,
+    attribute_spec,
     build_manifest,
     component_entry,
     component_tables,
@@ -110,6 +112,12 @@ def test_derived_columns_bind_json_paths(manifest):
     paths = [b["path"] for b in manifest["components"]["AreaInterchange"]["bindings"]]
     assert "flow_limits.from_to" in paths
     assert "flow_limits.to_from" in paths
+    shunt = manifest["components"]["FixedAdmittance"]
+    columns = shunt["row_sql"].split("(", 1)[1].split(")", 1)[0].split(", ")
+    assert len(columns) == len(shunt["bindings"])
+    bound = dict(zip(columns, (b["path"] for b in shunt["bindings"]), strict=True))
+    assert (bound["y_g"], bound["y_b"]) == ("Y.real", "Y.imag")
+    assert "Y" not in shunt["gaps"]
 
 
 def test_not_null_column_without_source_blocks_generation():
@@ -121,18 +129,86 @@ def test_not_null_column_without_source_blocks_generation():
         "component": "AreaInterchange",
         "file": "Operations/Branch/AreaInterchange.json",
     }
+    registry = attribute_registry(conn, inputs["conventions"])
     with pytest.raises(ManifestError, match="max_flow_from"):
-        component_entry(conn, resolver, inputs, "transmission_interchanges", comp, 0, {})
+        component_entry(conn, resolver, inputs, "transmission_interchanges", comp, 0, registry)
 
 
-def test_attribute_units(manifest):
-    lcc = {
-        a["field"]: a for a in manifest["components"]["TwoTerminalLCCLine"]["attributes"]
+def attributes_of(manifest, type_name):
+    attributes = manifest["components"][type_name]["attributes"]
+    return {a["field"]: {k: v for k, v in a.items() if k != "field"} for a in attributes}
+
+
+def test_fixed_attribute_unit(manifest):
+    hydro = attributes_of(manifest, "HydroTurbine")
+    assert hydro["efficiency"] == {"unit": "1", "quantity_kind": "Fraction"}
+    assert hydro["turbine_type"] == {"unit_free": True}
+
+
+def test_discriminated_attribute_unit_has_one_arm_per_value(manifest):
+    vsc = attributes_of(manifest, "TwoTerminalVSCLine")
+    assert vsc["rating"] == {
+        "discriminator": "power_units",
+        "arms": {
+            "COMPONENT_BASE": {"unit": "pu", "quantity_kind": "ApparentPower"},
+            "NATURAL_UNITS": {"unit": "MVA", "quantity_kind": "ApparentPower"},
+        },
     }
-    assert lcc["rectifier_rc"]["unit"] is None
-    hydro = {a["field"]: a for a in manifest["components"]["HydroTurbine"]["attributes"]}
-    assert hydro["efficiency"]["unit"] == "1"
-    assert hydro["efficiency"]["quantity_kind"] == "Fraction"
+    # A nested discriminator; x-quantity names no kind for kV, the registry does.
+    setpoint = vsc["ac_setpoint_from"]
+    assert setpoint["discriminator"] == "ac_control_from"
+    assert setpoint["arms"]["AC_REACTIVE_POWER"] == {"unit": "1", "quantity_kind": "PowerFactor"}
+    voltage = setpoint["arms"]["AC_VOLTAGE"]
+    assert voltage["discriminator"] == "setpoint_voltage_units"
+    assert voltage["arms"]["NATURAL_UNITS"] == {"unit": "kV", "quantity_kind": "Voltage"}
+
+
+def test_discriminator_default_is_an_arm_key(manifest):
+    lcc = attributes_of(manifest, "TwoTerminalLCCLine")
+    assert lcc["r"]["default"] == "NATURAL_UNITS"
+    assert set(lcc["r"]["arms"]) == {"COMPONENT_BASE", "NATURAL_UNITS"}
+
+
+def test_attribute_identifier_is_flagged(manifest):
+    vsc = attributes_of(manifest, "TwoTerminalVSCLine")
+    assert vsc["remote_bus_control_from"] == {"identifier": True}
+    assert vsc["converter_loss_from"] == {"identifier": True}
+
+
+REGISTRY = {
+    "pairs": {"p": {("MW", "ActivePower")}},
+    "allowed": {("MW", "ActivePower"), ("pu", "ActivePower")},
+    "identifiers": {("T", "id_ref")},
+}
+
+
+@pytest.mark.parametrize(
+    "prop,sql_type,match",
+    [
+        ({"type": "number"}, "REAL", "no unit annotation"),
+        ({"type": "number", "x-unit": "MW"}, "REAL", "needs exactly one"),
+        ({"type": "array"}, "JSON", "no unit annotation"),
+    ],
+)
+def test_unclassifiable_attribute_fails_generation(prop, sql_type, match):
+    with pytest.raises(ManifestError, match=match):
+        attribute_spec("T", "f", {"f": prop}, sql_type, REGISTRY)
+
+
+def test_unregistered_arm_fails_generation():
+    props = {
+        "power_units": {"type": "string"},
+        "p": {"x-unit-discriminator": "power_units", "x-units": {"A": "MW", "B": "pu"},
+              "x-quantity": "ActivePower"},
+    }
+    with pytest.raises(ManifestError, match=r"p\[B\]: register .*ActivePower/pu"):
+        attribute_spec("T", "p", props, "REAL", REGISTRY)
+
+
+def test_identifier_with_a_registered_unit_fails_generation():
+    registry = dict(REGISTRY, identifiers={("T", "p")})
+    with pytest.raises(ManifestError, match="identifier"):
+        attribute_spec("T", "p", {"p": {"type": "integer"}}, "INTEGER", registry)
 
 
 def test_vocabulary(manifest):
@@ -181,6 +257,11 @@ def test_checked_in_manifest_is_current():
 
 
 def test_gap_file_lists_known_gaps():
+    """Each remaining gap waits on a schema decision, so a new one is a deliberate edit."""
     gaps = json.loads((SCHEMA_DIR / "insert_gaps.json").read_text(encoding="utf-8"))["gaps"]
-    assert "number" in gaps["ACBus"]
-    assert "available" in gaps["Line"]
+    assert gaps == {
+        "InterconnectingConverter": ["dc_current", "max_dc_current"],
+        "StorageTechnology": ["capital_costs"],
+        "TwoTerminalLCCLine": ["transfer_setpoint"],
+        "TwoTerminalVSCLine": ["dc_setpoint_from", "dc_setpoint_to"],
+    }

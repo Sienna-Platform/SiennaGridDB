@@ -66,9 +66,16 @@ function bound_params(bindings::Vector{Binding}, obj::AbstractDict, what::Abstra
     end
 end
 
-function skip_field!(report::InsertReport, strict::Bool, type_name, field, what)
+function skip_field!(
+    report::InsertReport,
+    strict::Bool,
+    type_name,
+    field,
+    what,
+    reason="has no column in GridDB",
+)
     if strict
-        throw(GapValueError("$what: field $(repr(field)) has no column in GridDB"))
+        throw(GapValueError("$what: field $(repr(field)) $reason"))
     end
     add_skipped!(report, type_name, field)
     return nothing
@@ -82,21 +89,31 @@ function mark_unsupported!(report::InsertReport, strict::Bool, key, n::Int, reas
     return nothing
 end
 
-function unit_columns(attr::AttributePlan)
-    if attr.registered
-        return Any[attr.unit, attr.quantity_kind]
+discriminator_key(value::AbstractString, ::String) = String(value)
+discriminator_key(::Nothing, default::String) = default
+discriminator_key(value, ::String) = canonical_json(value)
+
+"""
+The spec that fixes one attribute row's unit, following discriminator arms; `nothing`
+when a discriminating field's value has no arm.
+"""
+function resolve_unit(spec::UnitSpec, obj::AbstractDict)
+    while !isempty(spec.discriminator)
+        key = discriminator_key(get(obj, spec.discriminator, nothing), spec.default)
+        arm = get(spec.arms, key, nothing)
+        if isnothing(arm)
+            return nothing
+        end
+        spec = arm
     end
-    return Any[missing, missing]
+    return spec
 end
 
-function attribute_params(attr::AttributePlan, plan::ComponentPlan, obj, value)
-    return Any[
-        obj["id"],
-        plan.type_name,
-        attr.field,
-        canonical_json(value),
-        unit_columns(attr)...,
-    ]
+function unit_columns(spec::UnitSpec)
+    if isempty(spec.unit)
+        return Any[missing, missing]
+    end
+    return Any[spec.unit, spec.quantity_kind]
 end
 
 function write_attribute!(cache, report, strict, plan, attr::AttributePlan, obj, what)
@@ -104,11 +121,20 @@ function write_attribute!(cache, report, strict, plan, attr::AttributePlan, obj,
     if isnothing(value)
         return nothing
     end
-    if !attr.registered && !unit_free_value(value)
-        skip_field!(report, strict, plan.type_name, attr.field, what)
+    if attr.unit_free && !(value isa Union{AbstractString, Bool})
+        reason = "needs a string or boolean value"
+        skip_field!(report, strict, plan.type_name, attr.field, what, reason)
         return nothing
     end
-    run_sql(cache, manifest().attribute_sql, attribute_params(attr, plan, obj, value), what)
+    spec = resolve_unit(attr.spec, obj)
+    if isnothing(spec)
+        reason = "has no unit for its discriminator value"
+        skip_field!(report, strict, plan.type_name, attr.field, what, reason)
+        return nothing
+    end
+    params = Any[obj["id"], plan.type_name, attr.field, canonical_json(value)]
+    append!(params, unit_columns(spec))
+    run_sql(cache, manifest().attribute_sql, params, what)
     return nothing
 end
 

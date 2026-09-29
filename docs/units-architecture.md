@@ -107,9 +107,19 @@ Two ways a column gets its unit:
 - **Fixed schema column** (`transmission_lines.continuous_rating`) — one `unit_conventions` row,
   joined for display through the `column_units` view.
 - **Polymorphic column** (`transformer_circuits.r`, whose unit depends on `parameter_units`) — one
-  `unit_conventions` row per discriminator value. `attributes` rows follow the same idea but carry
-  their own `unit`/`quantity_kind` inline, because the sibling discriminator doesn't exist in the
-  generic attribute table.
+  `unit_conventions` row per discriminator value.
+
+`attributes` rows follow the same per-row basis rule and also state their `unit`/`quantity_kind` inline.
+An attribute name registers one `attributes` convention per arm: a field annotated `x-units` per `power_units` (say `active_power`) registers both `ActivePower`/`MW` for `NATURAL_UNITS` and `ActivePower`/`pu` for `COMPONENT_BASE`, and its `discriminator_column` names the owning component's own field, not a column of `attributes`.
+The insert manifest carries each attribute field's arms, and the SDK writes a row with the arm matching that component's own discriminator value; the trigger accepts any registered arm of the name.
+An attribute name means one quantity everywhere it appears, across every component type that stores it.
+The exception is a name whose arm a control mode picks: `g` (by `admittance_units`) and the VSC `ac_setpoint_*` (by `ac_control_*`) hold a different quantity in each mode.
+
+Two kinds of attribute carry no unit at all:
+
+- **Identifiers and self-describing payloads.** `attribute_identifiers` lists the `(TYPE, name)` pairs whose value is a reference (bus `number`, `load_zone`, area and region references, the reservoirs' turbine lists, `dynamic_injector`) or a payload carrying its own `power_units` (the loads' `operation_cost`, loss curves).
+  The trigger exempts them from needing a unit.
+- **Unit-free values.** Strings, booleans and enums (`available`, `bustype`, `conformity`) never need a unit.
 
 Time series don't use either — see §4. `parameter_units` and the pu resolution mechanism are §5.
 
@@ -287,8 +297,8 @@ base_voltage_ref = 'arc_id->arcs.from_id->balancing_topologies.base_voltage'  --
 The rule: a base must be reachable **without leaving the database** — same-row and FK-path both
 satisfy that; only "in the modeling application" doesn't. `balancing_topologies.base_voltage` is new
 — bus base voltage previously lived only as an `attributes` row — and is the target of most
-two-winding and line paths. `transmission_lines`, `fixed_admittance`, `switched_admittance`, and
-`tmodel_hvdc_lines` also gained their own same-row `base_power`.
+two-winding and line paths.
+`transmission_lines` and `fixed_admittance` also gained their own same-row `base_power`.
 
 Together these give one invariant, checked by `test_pu_conventions_have_resolvable_basis`: every
 `unit='pu'` convention has a `unit_basis_rules` row for its quantity kind, and every base reference
@@ -299,9 +309,13 @@ column carries a `parameter_units` discriminator, though — the `magnetizing_sh
 transformer tables are pu-only, with no `NATURAL_UNITS` sibling row.
 
 `attributes` rows are exempt from base references: an attribute's owner is polymorphic (`entity_id`
-→ `entities`), so no single static path applies regardless of which table is on the other end. They
-keep their inline `unit`/`quantity_kind` instead; the exemption is recorded in
-`coverage_decisions.json`.
+→ `entities`), so no single static path applies regardless of which table is on the other end.
+A `pu` attributes row resolves by its quantity kind's `unit_basis_rules` row, like a typed column: power against the owner's `base_power`, voltage against a base voltage, impedance and admittance against both.
+The owner's `base_power` is a column of its table, except on `Area` and `LoadZone`, which store it as an attribute.
+The base voltage depends on the field: the terminal bus it names (the bus's own `base_voltage` for a bus's `magnitude` and `voltage_limits`), or a rated voltage its owner carries for that terminal (for example VSC `rated_ac_voltage_from`, LCC `rectifier_base_voltage`).
+Nothing in the database records which; a reader applies the field's definition.
+`TModelHVDCLine` `l` and `c` are `pu` with no resolvable base: the line carries only `base_current`, and no basis rule builds an impedance base from a current.
+The invariant test still requires a `unit_basis_rules` row for its quantity kind and forbids a same-row base reference on it.
 
 ### Open items
 

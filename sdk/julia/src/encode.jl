@@ -56,10 +56,3 @@ function bound_value(encoding::Encoding, obj::AbstractDict, segments::Vector{Str
     end
     return bind_value(encoding, node)
 end
-
-"""
-Values GridDB accepts in an attribute row without a registered unit.
-"""
-unit_free_value(::AbstractString) = true
-unit_free_value(::Bool) = true
-unit_free_value(_) = false

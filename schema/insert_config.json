@@ -15,6 +15,10 @@
     "AreaInterchange": {
       "max_flow_from": {"path": "flow_limits.from_to", "encode": "real"},
       "max_flow_to": {"path": "flow_limits.to_from", "encode": "real"}
+    },
+    "FixedAdmittance": {
+      "y_g": {"path": "Y.real", "encode": "real"},
+      "y_b": {"path": "Y.imag", "encode": "real"}
     }
   },
   "entity_type_flags": {

@@ -550,6 +550,16 @@ def test_identifier_attribute_needs_no_unit(fresh_db, name, entity_type):
     )
 
 
+def test_self_describing_payload_needs_no_unit(fresh_db):
+    owner = _attr_owner(fresh_db, "TwoTerminalLCCLine")
+    loss = '{"power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT"}}'
+    fresh_db.execute(
+        "INSERT INTO attributes(entity_id, TYPE, name, value) "
+        "VALUES (?, 'TwoTerminalLCCLine', 'loss', ?)",
+        (owner, loss),
+    )
+
+
 def test_non_identifier_numeric_attribute_still_needs_a_unit(fresh_db):
     """The exemption is scoped to the listed (TYPE, name) pairs, not to integers in general."""
     owner = _attr_owner(fresh_db, "ACBus")

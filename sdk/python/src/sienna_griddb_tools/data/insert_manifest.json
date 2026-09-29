@@ -80,7 +80,39 @@
   "attribute_sql": "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) VALUES (?, ?, ?, ?, ?, ?)",
   "components": {
     "ACBus": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "angle",
+          "quantity_kind": "Angle",
+          "unit": "rad"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "bustype",
+          "unit_free": true
+        },
+        {
+          "field": "load_zone",
+          "identifier": true
+        },
+        {
+          "field": "magnitude",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        },
+        {
+          "field": "number",
+          "identifier": true
+        },
+        {
+          "field": "voltage_limits",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -100,22 +132,33 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'ACBus')",
-      "gaps": [
-        "angle",
-        "available",
-        "bustype",
-        "load_zone",
-        "magnitude",
-        "number",
-        "voltage_limits"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO balancing_topologies (id, name, area, base_voltage) VALUES (?, ?, ?, ?)",
       "skip": [],
       "table": "balancing_topologies"
     },
     "AggregateTransportTechnology": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "capacity_limits",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "end_region",
+          "identifier": true
+        },
+        {
+          "field": "line_loss",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "start_region",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -147,12 +190,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'AggregateTransportTechnology')",
-      "gaps": [
-        "capacity_limits",
-        "end_region",
-        "line_loss",
-        "start_region"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, ?)",
       "skip": [],
@@ -182,7 +220,50 @@
       "table": "arcs"
     },
     "Area": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "base_power",
+          "quantity_kind": "ApparentPower",
+          "unit": "MVA"
+        },
+        {
+          "field": "load_response",
+          "quantity_kind": "PowerPerFrequency",
+          "unit": "MW/Hz"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_reactive_power"
+        },
+        {
+          "field": "power_units",
+          "unit_free": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -194,20 +275,41 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'planning_regions', 'Area')",
-      "gaps": [
-        "base_power",
-        "load_response",
-        "peak_active_power",
-        "peak_reactive_power",
-        "power_units"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO planning_regions (id, name) VALUES (?, ?)",
       "skip": [],
       "table": "planning_regions"
     },
     "AreaInterchange": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_flow"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "from_area",
+          "identifier": true
+        },
+        {
+          "field": "to_area",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -235,19 +337,37 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_interchanges', 'AreaInterchange')",
-      "gaps": [
-        "active_power_flow",
-        "available",
-        "from_area",
-        "to_area"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO transmission_interchanges (id, name, max_flow_from, max_flow_to, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?)",
       "skip": [],
       "table": "transmission_interchanges"
     },
     "DCBus": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "load_zone",
+          "identifier": true
+        },
+        {
+          "field": "magnitude",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        },
+        {
+          "field": "number",
+          "identifier": true
+        },
+        {
+          "field": "voltage_limits",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -267,13 +387,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'DCBus')",
-      "gaps": [
-        "available",
-        "load_zone",
-        "magnitude",
-        "number",
-        "voltage_limits"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO balancing_topologies (id, name, area, base_voltage) VALUES (?, ?, ?, ?)",
       "skip": [],
@@ -282,9 +396,28 @@
     "DemandRequirement": {
       "attributes": [
         {
+          "field": "conformity",
+          "unit_free": true
+        },
+        {
+          "field": "growth_rate",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "new_construction_year",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "new_demand_mw",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
           "field": "unserved_demand_curve",
-          "quantity_kind": null,
-          "unit": null
+          "quantity_kind": "CostPerEnergy",
+          "unit": "USD/MWh"
         },
         {
           "field": "value_of_lost_load",
@@ -315,12 +448,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'demand_technologies', 'DemandRequirement')",
-      "gaps": [
-        "conformity",
-        "growth_rate",
-        "new_construction_year",
-        "new_demand_mw"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO demand_technologies (id, name, available, region, power_systems_type) VALUES (?, ?, COALESCE(?, TRUE), ?, ?)",
       "skip": [],
@@ -386,7 +514,12 @@
       "table": "discrete_controlled_ac_branches"
     },
     "EnergyReservoirStorage": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -494,16 +627,93 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'storage_units', 'EnergyReservoirStorage')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO storage_units (id, name, prime_mover_type, storage_technology_type, balancing_topology, rating, base_power, power_units, storage_capacity, energy_units, storage_level_limits, initial_storage_capacity_level, input_active_power_limits, output_active_power_limits, efficiency, reactive_power_limits, active_power, reactive_power, available, conversion_factor, storage_target, cycle_limits, ramp_limits, self_discharge, standing_loss, operation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'MWH'), ?, ?, ?, ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, TRUE), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 10000), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"STORAGE\", \"charge_variable_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}, \"discharge_variable_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
       "table": "storage_units"
     },
     "ExponentialLoad": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power"
+        },
+        {
+          "field": "alpha",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "beta",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "field": "conformity",
+          "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -527,24 +737,46 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'ExponentialLoad')",
-      "gaps": [
-        "active_power",
-        "alpha",
-        "available",
-        "beta",
-        "conformity",
-        "dynamic_injector",
-        "max_active_power",
-        "max_reactive_power",
-        "reactive_power"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "FACTSControlDevice": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "control_mode",
+          "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_shunt_current"
+        },
+        {
+          "field": "reactive_power_required",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -588,20 +820,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'facts_control_devices', 'FACTSControlDevice')",
-      "gaps": [
-        "available",
-        "control_mode",
-        "dynamic_injector",
-        "max_shunt_current",
-        "reactive_power_required"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO facts_control_devices (id, name, bus, voltage_setpoint, parameter_units, base_power, power_units, max_reactive_power, shunt_control_type, regulated_bus_number) VALUES (?, ?, ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 9999.0), COALESCE(?, 'STATCOM'), COALESCE(?, 0))",
       "skip": [],
       "table": "facts_control_devices"
     },
     "FixedAdmittance": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -620,6 +851,14 @@
           "path": "available"
         },
         {
+          "encode": "real",
+          "path": "Y.real"
+        },
+        {
+          "encode": "real",
+          "path": "Y.imag"
+        },
+        {
           "encode": "text",
           "path": "admittance_units"
         },
@@ -629,18 +868,24 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'fixed_admittance', 'FixedAdmittance')",
-      "gaps": [
-        "Y"
-      ],
+      "gaps": [],
       "rank": 2,
-      "row_sql": "INSERT INTO fixed_admittance (id, name, bus, available, admittance_units, base_power) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 'COMPONENT_MVAR'), ?)",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "row_sql": "INSERT INTO fixed_admittance (id, name, bus, available, y_g, y_b, admittance_units, base_power) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_MVAR'), ?)",
+      "skip": [],
       "table": "fixed_admittance"
     },
     "HydroDispatch": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "field": "time_at_status",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -708,10 +953,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroDispatch')",
-      "gaps": [
-        "dynamic_injector",
-        "time_at_status"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, active_power, reactive_power, operation_cost) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
@@ -720,14 +962,56 @@
     "HydroPumpTurbine": {
       "attributes": [
         {
-          "field": "active_power_limits_pump",
-          "quantity_kind": "ActivePower",
-          "unit": "MW"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_limits_pump"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_pump"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
         },
         {
           "field": "efficiency",
           "quantity_kind": "Fraction",
           "unit": "1"
+        },
+        {
+          "field": "minimum_time",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
+        },
+        {
+          "field": "time_at_status",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
+        },
+        {
+          "field": "transition_time",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
         }
       ],
       "bindings": [
@@ -821,20 +1105,27 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroPumpTurbine')",
-      "gaps": [
-        "active_power_pump",
-        "dynamic_injector",
-        "minimum_time",
-        "time_at_status",
-        "transition_time"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, operating_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost) VALUES (?, ?, COALESCE(?, 'PS'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 'OFF'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
       "table": "hydro_generators"
     },
     "HydroReservoir": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "downstream_turbines",
+          "identifier": true
+        },
+        {
+          "field": "upstream_reservoirs",
+          "identifier": true
+        },
+        {
+          "field": "upstream_turbines",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -894,11 +1185,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_reservoirs', 'HydroReservoir')",
-      "gaps": [
-        "downstream_turbines",
-        "upstream_reservoirs",
-        "upstream_turbines"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO hydro_reservoirs (id, name, available, storage_level_limits, initial_level, spillage_limits, inflow, outflow, level_targets, intake_elevation, head_to_volume_factor, operation_cost, level_data_type, evaporative_loss) VALUES (?, ?, COALESCE(?, TRUE), ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 0.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_RES\", \"level_shortage_cost\": 0.0, \"level_surplus_cost\": 0.0, \"spillage_cost\": 0.0}'), COALESCE(?, 'USABLE_VOLUME'), COALESCE(?, 0.0))",
       "skip": [],
@@ -907,14 +1194,22 @@
     "HydroTurbine": {
       "attributes": [
         {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
           "field": "efficiency",
           "quantity_kind": "Fraction",
           "unit": "1"
         },
         {
+          "field": "time_at_status",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
+        },
+        {
           "field": "turbine_type",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         }
       ],
       "bindings": [
@@ -1004,17 +1299,88 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroTurbine')",
-      "gaps": [
-        "dynamic_injector",
-        "time_at_status"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\": \"HYDRO_GEN\", \"fixed\": 0.0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
       "table": "hydro_generators"
     },
     "InterconnectingConverter": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_limits"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "dc_voltage_droop",
+          "quantity_kind": "Resistance",
+          "unit": "pu"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "field": "loss_function",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_limits"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1079,16 +1445,8 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'interconnecting_converters', 'InterconnectingConverter')",
       "gaps": [
-        "active_power",
-        "active_power_limits",
-        "available",
         "dc_current",
-        "dc_voltage_droop",
-        "dynamic_injector",
-        "loss_function",
-        "max_dc_current",
-        "rating",
-        "reactive_power_limits"
+        "max_dc_current"
       ],
       "rank": 2,
       "row_sql": "INSERT INTO interconnecting_converters (id, name, bus, dc_bus, dc_setpoint, dc_control, ac_setpoint, ac_control, parameter_units, base_power, power_units, remote_bus_control, rmpct, power_factor_weighting_fraction, voltage_limits) VALUES (?, ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 'DC_VOLTAGE'), COALESCE(?, 1.0), COALESCE(?, 'AC_REACTIVE_POWER'), COALESCE(?, 'COMPONENT_BASE'), ?, ?, ?, COALESCE(?, 100.0), COALESCE(?, 1.0), COALESCE(?, '{\"max\":999.9,\"min\":0.0}'))",
@@ -1096,7 +1454,80 @@
       "table": "interconnecting_converters"
     },
     "InterruptiblePowerLoad": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "conformity",
+          "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_reactive_power"
+        },
+        {
+          "field": "operation_cost",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1120,23 +1551,199 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'InterruptiblePowerLoad')",
-      "gaps": [
-        "active_power",
-        "available",
-        "conformity",
-        "dynamic_injector",
-        "max_active_power",
-        "max_reactive_power",
-        "operation_cost",
-        "reactive_power"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "InterruptibleStandardLoad": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "conformity",
+          "unit_free": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "constant_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "constant_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "current_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "current_reactive_power"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "impedance_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "impedance_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_constant_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_constant_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_current_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_current_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_impedance_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_impedance_reactive_power"
+        },
+        {
+          "field": "operation_cost",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1160,31 +1767,80 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'InterruptibleStandardLoad')",
-      "gaps": [
-        "available",
-        "conformity",
-        "constant_active_power",
-        "constant_reactive_power",
-        "current_active_power",
-        "current_reactive_power",
-        "dynamic_injector",
-        "impedance_active_power",
-        "impedance_reactive_power",
-        "max_constant_active_power",
-        "max_constant_reactive_power",
-        "max_current_active_power",
-        "max_current_reactive_power",
-        "max_impedance_active_power",
-        "max_impedance_reactive_power",
-        "operation_cost"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "Line": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_flow"
+        },
+        {
+          "field": "angle_limits",
+          "quantity_kind": "Angle",
+          "unit": "rad"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_b"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_c"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_flow"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1232,21 +1888,52 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_lines', 'Line')",
-      "gaps": [
-        "active_power_flow",
-        "angle_limits",
-        "available",
-        "rating_b",
-        "rating_c",
-        "reactive_power_flow"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0.0,\"to\":0.0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?)",
       "skip": [],
       "table": "transmission_lines"
     },
     "LoadZone": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "base_power",
+          "quantity_kind": "ApparentPower",
+          "unit": "MVA"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_reactive_power"
+        },
+        {
+          "field": "power_units",
+          "unit_free": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1258,19 +1945,94 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'LoadZone')",
-      "gaps": [
-        "base_power",
-        "peak_active_power",
-        "peak_reactive_power",
-        "power_units"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO balancing_topologies (id, name) VALUES (?, ?)",
       "skip": [],
       "table": "balancing_topologies"
     },
     "MonitoredLine": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_flow"
+        },
+        {
+          "field": "angle_limits",
+          "quantity_kind": "Angle",
+          "unit": "rad"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "flow_limits"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_b"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_c"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_flow"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1318,22 +2080,97 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_lines', 'MonitoredLine')",
-      "gaps": [
-        "active_power_flow",
-        "angle_limits",
-        "available",
-        "flow_limits",
-        "rating_b",
-        "rating_c",
-        "reactive_power_flow"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0.0,\"to\":0.0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?)",
       "skip": [],
       "table": "transmission_lines"
     },
     "MotorLoad": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_active_power"
+        },
+        {
+          "field": "motor_technology",
+          "unit_free": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_limits"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1357,23 +2194,43 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'MotorLoad')",
-      "gaps": [
-        "active_power",
-        "available",
-        "dynamic_injector",
-        "max_active_power",
-        "motor_technology",
-        "rating",
-        "reactive_power",
-        "reactive_power_limits"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "NodalACTransportTechnology": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "capacity_limits",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "end_node",
+          "identifier": true
+        },
+        {
+          "field": "reactance",
+          "quantity_kind": "Reactance",
+          "unit": "ohm"
+        },
+        {
+          "field": "resistance",
+          "quantity_kind": "Resistance",
+          "unit": "ohm"
+        },
+        {
+          "field": "start_node",
+          "identifier": true
+        },
+        {
+          "field": "voltage",
+          "quantity_kind": "Voltage",
+          "unit": "kV"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1405,21 +2262,33 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'NodalACTransportTechnology')",
-      "gaps": [
-        "capacity_limits",
-        "end_node",
-        "reactance",
-        "resistance",
-        "start_node",
-        "voltage"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, COALESCE(?, 0.0))",
       "skip": [],
       "table": "transport_technologies"
     },
     "NodalHVDCTransportTechnology": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "capacity_limits",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "end_node",
+          "identifier": true
+        },
+        {
+          "field": "line_loss",
+          "quantity_kind": "Fraction",
+          "unit": "1"
+        },
+        {
+          "field": "start_node",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1451,12 +2320,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transport_technologies', 'NodalHVDCTransportTechnology')",
-      "gaps": [
-        "capacity_limits",
-        "end_node",
-        "line_loss",
-        "start_node"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, ?)",
       "skip": [],
@@ -1510,7 +2374,76 @@
       "table": "point_to_point_bids"
     },
     "PowerLoad": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "conformity",
+          "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1534,22 +2467,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'PowerLoad')",
-      "gaps": [
-        "active_power",
-        "available",
-        "conformity",
-        "dynamic_injector",
-        "max_active_power",
-        "max_reactive_power",
-        "reactive_power"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "RenewableDispatch": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1605,16 +2535,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'renewable_generators', 'RenewableDispatch')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO renewable_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, power_factor, reactive_power_limits, available, active_power, reactive_power, operation_cost) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1.0), ?, COALESCE(?, TRUE), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"RENEWABLE\",\"fixed\":0,\"curtailment_cost\":{\"variable_cost_type\":\"COST\",\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}},\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}}},\"variable_operation_cost\":{\"variable_cost_type\":\"COST\",\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}},\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}}}}'))",
       "skip": [],
       "table": "renewable_generators"
     },
     "RenewableNonDispatch": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1662,16 +2595,102 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'renewable_generators', 'RenewableNonDispatch')",
-      "gaps": [
-        "dynamic_injector"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO renewable_generators (id, name, prime_mover_type, balancing_topology, rating, base_power, power_units, power_factor, available, active_power, reactive_power) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1.0), COALESCE(?, TRUE), COALESCE(?, 0.0), COALESCE(?, 0.0))",
       "skip": [],
       "table": "renewable_generators"
     },
     "ShiftablePowerLoad": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_limits"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "field": "load_balance_time_horizon",
+          "quantity_kind": "Dimensionless",
+          "unit": "1"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_reactive_power"
+        },
+        {
+          "field": "operation_cost",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1695,24 +2714,19 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'ShiftablePowerLoad')",
-      "gaps": [
-        "active_power",
-        "active_power_limits",
-        "available",
-        "dynamic_injector",
-        "load_balance_time_horizon",
-        "max_active_power",
-        "max_reactive_power",
-        "operation_cost",
-        "reactive_power"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
       "table": "loads"
     },
     "Source": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1787,13 +2801,192 @@
       "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO sources (id, name, bus, available, base_voltage, base_power, power_units, active_power, reactive_power, active_power_limits, reactive_power_limits, internal_voltage, internal_angle, r_th, x_th, parameter_units, operation_cost) VALUES (?, ?, ?, COALESCE(?, 1), ?, COALESCE(?, 100.0), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_BASE'), COALESCE(?, '{\"cost_type\":\"IMPORTEXPORT\",\"energy_export_weekly_limit\":1000000.0,\"energy_import_weekly_limit\":1000000.0,\"export_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}},\"import_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'))",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "skip": [],
       "table": "sources"
     },
     "StandardLoad": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "conformity",
+          "unit_free": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "constant_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "constant_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "current_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "current_reactive_power"
+        },
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "impedance_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "impedance_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_constant_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_constant_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_current_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_current_reactive_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_impedance_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "max_impedance_reactive_power"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1817,23 +3010,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'loads', 'StandardLoad')",
-      "gaps": [
-        "available",
-        "conformity",
-        "constant_active_power",
-        "constant_reactive_power",
-        "current_active_power",
-        "current_reactive_power",
-        "dynamic_injector",
-        "impedance_active_power",
-        "impedance_reactive_power",
-        "max_constant_active_power",
-        "max_constant_reactive_power",
-        "max_current_active_power",
-        "max_current_reactive_power",
-        "max_impedance_active_power",
-        "max_impedance_reactive_power"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO loads (id, name, balancing_topology, base_power, power_units) VALUES (?, ?, ?, ?, ?)",
       "skip": [],
@@ -2024,7 +3201,12 @@
       "table": "supply_technologies"
     },
     "SwitchedAdmittance": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2079,13 +3261,16 @@
       "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO switched_admittance (id, name, bus, available, admittance_units, Y_increase, number_engaged, number_of_steps, solved_admittance, admittance_limits, control_mode, regulated_bus_number) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 'COMPONENT_MVAR'), ?, ?, ?, ?, COALESCE(?, '{\"max\":1.0,\"min\":1.0}'), COALESCE(?, 'FIXED'), COALESCE(?, 0))",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "skip": [],
       "table": "switched_admittance"
     },
     "SynchronousCondenser": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2132,13 +3317,41 @@
       "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO synchronous_condensers (id, name, bus, available, reactive_power, rating, base_power, power_units, reactive_power_limits, active_power_losses) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), ?, ?, ?, ?, COALESCE(?, 0.0))",
-      "skip": [
-        "dynamic_injector"
-      ],
+      "skip": [],
       "table": "synchronous_condensers"
     },
     "TModelHVDCLine": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "active_power_flow",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "active_power_limits_from",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "active_power_limits_to",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "c",
+          "quantity_kind": "Susceptance",
+          "unit": "pu"
+        },
+        {
+          "field": "l",
+          "quantity_kind": "Reactance",
+          "unit": "pu"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2166,14 +3379,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'tmodel_hvdc_lines', 'TModelHVDCLine')",
-      "gaps": [
-        "active_power_flow",
-        "active_power_limits_from",
-        "active_power_limits_to",
-        "available",
-        "c",
-        "l"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO tmodel_hvdc_lines (id, name, arc_id, r, parameter_units, base_current) VALUES (?, ?, ?, ?, COALESCE(?, 'NATURAL_UNITS'), ?)",
       "skip": [],
@@ -2182,9 +3388,22 @@
     "ThermalMultiStart": {
       "attributes": [
         {
-          "field": "power_trajectory",
-          "quantity_kind": null,
-          "unit": null
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "power_trajectory"
         },
         {
           "field": "start_time_limits",
@@ -2195,6 +3414,11 @@
           "field": "start_types",
           "quantity_kind": "Dimensionless",
           "unit": "1"
+        },
+        {
+          "field": "time_at_status",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
         }
       ],
       "bindings": [
@@ -2272,17 +3496,24 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'thermal_generators', 'ThermalMultiStart')",
-      "gaps": [
-        "dynamic_injector",
-        "time_at_status"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO thermal_generators (id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, operation_cost) VALUES (?, ?, ?, COALESCE(?, 'OTHER'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), ?, COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
       "table": "thermal_generators"
     },
     "ThermalStandard": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "dynamic_injector",
+          "identifier": true
+        },
+        {
+          "field": "time_at_status",
+          "quantity_kind": "OperationalDuration",
+          "unit": "min"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2358,10 +3589,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'thermal_generators', 'ThermalStandard')",
-      "gaps": [
-        "dynamic_injector",
-        "time_at_status"
-      ],
+      "gaps": [],
       "rank": 2,
       "row_sql": "INSERT INTO thermal_generators (id, name, prime_mover_type, fuel, balancing_topology, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, operation_cost) VALUES (?, ?, COALESCE(?, 'OT'), COALESCE(?, 'OTHER'), ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), ?, COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\": \"THERMAL\", \"fixed\": 0, \"shut_down\": 0, \"start_up\": 0, \"variable_operation_cost\": {\"variable_cost_type\": \"COST\", \"power_units\": \"NATURAL_UNITS\", \"value_curve\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}, \"vom_cost\": {\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}}}'))",
       "skip": [],
@@ -2574,8 +3802,7 @@
       "attributes": [
         {
           "field": "loss",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         }
       ],
       "bindings": [
@@ -2634,9 +3861,19 @@
     "TwoTerminalLCCLine": {
       "attributes": [
         {
-          "field": "compounding_resistance",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "compounding_resistance"
         },
         {
           "field": "inverter_base_voltage",
@@ -2649,24 +3886,44 @@
           "unit": "1"
         },
         {
-          "field": "inverter_capacitor_reactance",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "inverter_capacitor_reactance"
         },
         {
           "field": "inverter_extinction_angle",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
           "field": "inverter_extinction_angle_limits",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
-          "field": "inverter_rc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "inverter_rc"
         },
         {
           "field": "inverter_tap_limits",
@@ -2689,29 +3946,57 @@
           "unit": "1"
         },
         {
-          "field": "inverter_xc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "inverter_xc"
         },
         {
           "field": "loss",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
-          "field": "min_compounding_voltage",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "dc_voltage_units",
+          "field": "min_compounding_voltage"
         },
         {
           "field": "power_mode",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
-          "field": "r",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "r"
         },
         {
           "field": "rectifier_base_voltage",
@@ -2724,24 +4009,44 @@
           "unit": "1"
         },
         {
-          "field": "rectifier_capacitor_reactance",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "rectifier_capacitor_reactance"
         },
         {
           "field": "rectifier_delay_angle",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
           "field": "rectifier_delay_angle_limits",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
-          "field": "rectifier_rc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Resistance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Resistance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "rectifier_rc"
         },
         {
           "field": "rectifier_tap_limits",
@@ -2764,24 +4069,49 @@
           "unit": "1"
         },
         {
-          "field": "rectifier_xc",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Reactance",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Reactance",
+              "unit": "ohm"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "parameter_units",
+          "field": "rectifier_xc"
         },
         {
-          "field": "scheduled_dc_voltage",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "dc_voltage_units",
+          "field": "scheduled_dc_voltage"
         },
         {
-          "field": "switch_mode_voltage",
-          "quantity_kind": null,
-          "unit": null
-        },
-        {
-          "field": "transfer_setpoint",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "dc_voltage_units",
+          "field": "switch_mode_voltage"
         }
       ],
       "bindings": [
@@ -2831,7 +4161,9 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalLCCLine')",
-      "gaps": [],
+      "gaps": [
+        "transfer_setpoint"
+      ],
       "rank": 1,
       "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, active_power_limits_from, active_power_limits_to, reactive_power_limits_from, reactive_power_limits_to, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), 'LCC')",
       "skip": [
@@ -2844,43 +4176,77 @@
       "attributes": [
         {
           "field": "ac_control_from",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
           "field": "ac_control_to",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
-          "field": "ac_setpoint_from",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "AC_REACTIVE_POWER": {
+              "quantity_kind": "PowerFactor",
+              "unit": "1"
+            },
+            "AC_VOLTAGE": {
+              "arms": {
+                "COMPONENT_BASE": {
+                  "quantity_kind": "Voltage",
+                  "unit": "pu"
+                },
+                "NATURAL_UNITS": {
+                  "quantity_kind": "Voltage",
+                  "unit": "kV"
+                }
+              },
+              "default": "NATURAL_UNITS",
+              "discriminator": "setpoint_voltage_units"
+            }
+          },
+          "default": "AC_VOLTAGE",
+          "discriminator": "ac_control_from",
+          "field": "ac_setpoint_from"
         },
         {
-          "field": "ac_setpoint_to",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "AC_REACTIVE_POWER": {
+              "quantity_kind": "PowerFactor",
+              "unit": "1"
+            },
+            "AC_VOLTAGE": {
+              "arms": {
+                "COMPONENT_BASE": {
+                  "quantity_kind": "Voltage",
+                  "unit": "pu"
+                },
+                "NATURAL_UNITS": {
+                  "quantity_kind": "Voltage",
+                  "unit": "kV"
+                }
+              },
+              "default": "NATURAL_UNITS",
+              "discriminator": "setpoint_voltage_units"
+            }
+          },
+          "default": "AC_VOLTAGE",
+          "discriminator": "ac_control_to",
+          "field": "ac_setpoint_to"
         },
         {
           "field": "converter_loss_from",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "converter_loss_to",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "dc_control_from",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
           "field": "dc_control_to",
-          "quantity_kind": null,
-          "unit": null
+          "unit_free": true
         },
         {
           "field": "dc_current",
@@ -2888,29 +4254,33 @@
           "unit": "A"
         },
         {
-          "field": "dc_setpoint_from",
-          "quantity_kind": null,
-          "unit": null
-        },
-        {
-          "field": "dc_setpoint_to",
-          "quantity_kind": null,
-          "unit": null
-        },
-        {
           "field": "dc_voltage_droop_from",
-          "quantity_kind": null,
-          "unit": null
+          "quantity_kind": "Resistance",
+          "unit": "pu"
         },
         {
           "field": "dc_voltage_droop_to",
-          "quantity_kind": null,
-          "unit": null
+          "quantity_kind": "Resistance",
+          "unit": "pu"
         },
         {
-          "field": "g",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Conductance",
+              "unit": "pu"
+            },
+            "COMPONENT_MVAR": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Conductance",
+              "unit": "S"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "admittance_units",
+          "field": "g"
         },
         {
           "field": "max_dc_current_from",
@@ -2948,39 +4318,82 @@
           "unit": "kV"
         },
         {
-          "field": "rating",
-          "quantity_kind": "ApparentPower",
-          "unit": "MVA"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating"
         },
         {
-          "field": "rating_from",
-          "quantity_kind": "ApparentPower",
-          "unit": "MVA"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_from"
         },
         {
-          "field": "rating_to",
-          "quantity_kind": "ApparentPower",
-          "unit": "MVA"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_to"
         },
         {
-          "field": "reactive_power_from",
-          "quantity_kind": "ReactivePower",
-          "unit": "MVAr"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_from"
         },
         {
-          "field": "reactive_power_to",
-          "quantity_kind": "ReactivePower",
-          "unit": "MVAr"
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_to"
         },
         {
           "field": "remote_bus_control_from",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "remote_bus_control_to",
-          "quantity_kind": null,
-          "unit": null
+          "identifier": true
         },
         {
           "field": "rmpct_from",
@@ -2993,14 +4406,34 @@
           "unit": "1"
         },
         {
-          "field": "voltage_limits_from",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "voltage_units",
+          "field": "voltage_limits_from"
         },
         {
-          "field": "voltage_limits_to",
-          "quantity_kind": null,
-          "unit": null
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "Voltage",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "default": "NATURAL_UNITS",
+          "discriminator": "voltage_units",
+          "field": "voltage_limits_to"
         }
       ],
       "bindings": [
@@ -3050,7 +4483,10 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalVSCLine')",
-      "gaps": [],
+      "gaps": [
+        "dc_setpoint_from",
+        "dc_setpoint_to"
+      ],
       "rank": 1,
       "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, active_power_limits_from, active_power_limits_to, reactive_power_limits_from, reactive_power_limits_to, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), 'VSC')",
       "skip": [
@@ -3133,8 +4569,8 @@
       "table": "virtual_participants"
     }
   },
-  "manifest_version": 1,
-  "schema_user_version": 3,
+  "manifest_version": 2,
+  "schema_user_version": 4,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",

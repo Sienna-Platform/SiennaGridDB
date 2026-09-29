@@ -220,10 +220,8 @@ def emit_table(table, components, table_cfg, resolver):
     comp_names = ", ".join(c["component"] for c in components)
     lines = [f"-- {table}: generated from {comp_names}"]
     if attribute_channel:
-        lines.append(
-            "-- Stored via the generic `attributes` table (registered attribute-name"
-        )
-        lines.append(f"-- conventions), not as columns: {', '.join(attribute_channel)}")
+        lines.append("-- Stored via the generic `attributes` table, not as columns:")
+        lines.append(f"-- {', '.join(attribute_channel)}")
     lines.append(f"CREATE TABLE {table} (")
 
     col_lines = []
