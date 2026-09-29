@@ -13,8 +13,8 @@
 -- current) and --diff (drift report, gating only on type contradictions).
 
 -- thermal_generators: generated from ThermalStandard, ThermalMultiStart
--- Stored via the generic `attributes` table (registered attribute-name
--- conventions), not as columns: power_trajectory, start_time_limits, start_types
+-- Stored via the generic `attributes` table, not as columns:
+-- power_trajectory, start_time_limits, start_types
 CREATE TABLE thermal_generators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -57,8 +57,8 @@ CREATE TABLE renewable_generators (
 );
 
 -- hydro_generators: generated from HydroDispatch, HydroTurbine, HydroPumpTurbine
--- Stored via the generic `attributes` table (registered attribute-name
--- conventions), not as columns: efficiency, active_power_limits_pump, turbine_type
+-- Stored via the generic `attributes` table, not as columns:
+-- efficiency, active_power_limits_pump, turbine_type
 CREATE TABLE hydro_generators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -285,8 +285,8 @@ CREATE TABLE three_winding_transformers (
 );
 
 -- two_terminal_hvdc_lines: generated from TwoTerminalGenericHVDCLine, TwoTerminalLCCLine, TwoTerminalVSCLine
--- Stored via the generic `attributes` table (registered attribute-name
--- conventions), not as columns: loss, r, transfer_setpoint, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_capacitor_reactance, inverter_bridges, inverter_extinction_angle, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_capacitor_reactance, power_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rating, rating_from, rating_to, g, dc_current, rated_dc_voltage, reactive_power_from, reactive_power_to, dc_control_from, dc_control_to, ac_control_from, ac_control_to, dc_setpoint_from, dc_setpoint_to, ac_setpoint_from, ac_setpoint_to, converter_loss_from, converter_loss_to, max_dc_current_from, max_dc_current_to, power_factor_weighting_fraction_from, power_factor_weighting_fraction_to, voltage_limits_from, voltage_limits_to, dc_voltage_droop_from, dc_voltage_droop_to, remote_bus_control_from, remote_bus_control_to, rated_ac_voltage_from, rated_ac_voltage_to, rmpct_from, rmpct_to
+-- Stored via the generic `attributes` table, not as columns:
+-- loss, r, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_capacitor_reactance, inverter_bridges, inverter_extinction_angle, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_capacitor_reactance, power_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rating, rating_from, rating_to, g, dc_current, rated_dc_voltage, reactive_power_from, reactive_power_to, dc_control_from, dc_control_to, ac_control_from, ac_control_to, ac_setpoint_from, ac_setpoint_to, converter_loss_from, converter_loss_to, max_dc_current_from, max_dc_current_to, power_factor_weighting_fraction_from, power_factor_weighting_fraction_to, voltage_limits_from, voltage_limits_to, dc_voltage_droop_from, dc_voltage_droop_to, remote_bus_control_from, remote_bus_control_to, rated_ac_voltage_from, rated_ac_voltage_to, rmpct_from, rmpct_to
 CREATE TABLE two_terminal_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -298,7 +298,10 @@ CREATE TABLE two_terminal_hvdc_lines (
     reactive_power_limits_from JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     reactive_power_limits_to JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     base_power REAL NOT NULL, -- Units: MVA
-    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    transfer_setpoint REAL NULL, -- Units: per power_mode (false: A, true: MW)
+    dc_setpoint_from REAL NULL DEFAULT 0.0, -- Units: per dc_control_from (DC_POWER: MW; DC_VOLTAGE: per setpoint_voltage_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV]; DC_VOLTAGE_DROOP: per setpoint_voltage_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
+    dc_setpoint_to REAL NULL DEFAULT 0.0 -- Units: per dc_control_to (DC_POWER: MW; DC_VOLTAGE: per setpoint_voltage_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV]; DC_VOLTAGE_DROOP: per setpoint_voltage_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])
 );
 
 -- tmodel_hvdc_lines: generated from TModelHVDCLine
@@ -512,8 +515,8 @@ CREATE TABLE transport_technologies (
 );
 
 -- demand_technologies: generated from DemandRequirement
--- Stored via the generic `attributes` table (registered attribute-name
--- conventions), not as columns: peak_demand_mw, value_of_lost_load, unserved_demand_curve
+-- Stored via the generic `attributes` table, not as columns:
+-- peak_demand_mw, value_of_lost_load, unserved_demand_curve
 CREATE TABLE demand_technologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,

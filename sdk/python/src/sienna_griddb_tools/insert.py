@@ -46,9 +46,9 @@ def _params(bindings, obj, what):
         raise InsertError(f"{what}: {exc}") from exc
 
 
-def _skip(report, strict, type_name, field_name, what):
+def _skip(report, strict, type_name, field_name, what, reason="has no column in GridDB"):
     if strict:
-        raise GapValueError(f"{what}: field {field_name!r} has no column in GridDB")
+        raise GapValueError(f"{what}: field {field_name!r} {reason}")
     report.add_skipped(type_name, field_name)
 
 
@@ -56,6 +56,20 @@ def _unsupported(report, strict, key, n, reason):
     if strict:
         raise UnsupportedComponentError(f"{key} ({n} rows): {reason}")
     report.add_unsupported(key, n)
+
+
+def attribute_unit(spec, obj):
+    """(unit, quantity_kind) of one attribute row, following the discriminator arms of
+    its unit spec; None when a discriminating field's value has no arm."""
+    while "discriminator" in spec:
+        value = obj.get(spec["discriminator"])
+        if value is None:
+            value = spec.get("default")
+        key = value if isinstance(value, str) else canonical_json(value)
+        spec = spec["arms"].get(key)
+        if spec is None:
+            return None
+    return spec.get("unit"), spec.get("quantity_kind")
 
 
 def _write_row(conn, plan, obj, report, strict):
@@ -66,22 +80,17 @@ def _write_row(conn, plan, obj, report, strict):
         value = obj.get(attribute["field"])
         if value is None:
             continue
-        if attribute["unit"] is None and not isinstance(value, (str, bool)):
-            _skip(report, strict, plan.type_name, attribute["field"], what)
+        if attribute.get("unit_free") and not isinstance(value, (str, bool)):
+            reason = "needs a string or boolean value"
+            _skip(report, strict, plan.type_name, attribute["field"], what, reason)
             continue
-        _execute(
-            conn,
-            attribute_sql,
-            [
-                obj["id"],
-                plan.type_name,
-                attribute["field"],
-                canonical_json(value),
-                attribute["unit"],
-                attribute["quantity_kind"],
-            ],
-            what,
-        )
+        unit = attribute_unit(attribute, obj)
+        if unit is None:
+            reason = "has no unit for its discriminator value"
+            _skip(report, strict, plan.type_name, attribute["field"], what, reason)
+            continue
+        params = [obj["id"], plan.type_name, attribute["field"], canonical_json(value), *unit]
+        _execute(conn, attribute_sql, params, what)
     for gap in plan.gaps:
         if obj.get(gap) is not None:
             _skip(report, strict, plan.type_name, gap, what)

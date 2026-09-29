@@ -234,6 +234,13 @@
     "ThermalStandard": [
       "dynamic_injector",
       "time_at_status"
+    ],
+    "TwoTerminalLCCLine": [
+      "transfer_setpoint"
+    ],
+    "TwoTerminalVSCLine": [
+      "dc_setpoint_from",
+      "dc_setpoint_to"
     ]
   }
 }

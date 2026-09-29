@@ -6,8 +6,8 @@ whole document (lenient by default, `--strict` to fail on the first gap), then
 cross-checks the InsertReport against the manifest and the actual table contents:
 
 - every skipped field is classified as a *tracked gap* (listed in the manifest), an
-  *attribute-channel unit gap* (unregistered structured value), or *unknown* (absent
-  from the manifest entirely — schema-version drift or a manifest bug);
+  *attribute-channel unit gap* (a discriminator value with no unit arm), or *unknown*
+  (absent from the manifest entirely - schema-version drift or a manifest bug);
 - table row counts are reconciled against what the report claims was inserted.
 
 Exits 1 on InsertError (the document is rolled back; the DB is left for inspection).
@@ -61,11 +61,11 @@ def classify_skips(report, manifest):
             unknown[type_name] = fields
             continue
         gaps = set(entry["gaps"])
-        unregistered = {a["field"] for a in entry["attributes"] if a["unit"] is None}
+        attribute_fields = {a["field"] for a in entry["attributes"]}
         for field_name, n in fields.items():
             if field_name in gaps:
                 tracked.setdefault(type_name, {})[field_name] = n
-            elif field_name in unregistered:
+            elif field_name in attribute_fields:
                 unit_gaps.setdefault(type_name, {})[field_name] = n
             else:
                 unknown.setdefault(type_name, {})[field_name] = n
@@ -126,7 +126,7 @@ def print_gap_summary(report, manifest):
     print(f"\nskipped field values: {total_skipped}")
     for label, group in (
         ("tracked gaps (manifest lists them; schema update closes them)", tracked),
-        ("attribute-channel unit gaps (no registered unit)", unit_gaps),
+        ("attribute-channel unit gaps (discriminator value with no unit arm)", unit_gaps),
         ("UNKNOWN keys (not in manifest — drift or manifest bug)", unknown),
     ):
         n_total = sum(n for fields in group.values() for n in fields.values())
