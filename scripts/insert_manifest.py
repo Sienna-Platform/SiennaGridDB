@@ -16,7 +16,7 @@ from generate_sql_schema import RefResolver, sql_type_for
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
-MANIFEST_VERSION = 2
+MANIFEST_VERSION = 3
 
 ENCODING_BY_SQL_TYPE = {
     "INTEGER": "int",
@@ -295,7 +295,9 @@ def association_entry(conn, resolver, section, rel_file):
         for p in names
     ]
     row_sql = f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join('?' for _ in names)})"
-    return {"section": section, "row_sql": row_sql, "bindings": bindings}
+    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
+    references = [p for p in names if p in fk_columns]
+    return {"section": section, "row_sql": row_sql, "bindings": bindings, "references": references}
 
 
 def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):

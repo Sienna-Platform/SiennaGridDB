@@ -81,6 +81,71 @@ test("unsupported type", () => {
   );
 });
 
+// AGC has no table, so an association row naming one, on either side, is counted
+// under its section instead of failing the document.
+test.skipIf(!hasGolden)("rows naming an unsupported component are reported, not written", () => {
+  const db = fresh();
+  const doc = golden();
+  const thermal = firstOf(doc, "ThermalStandard").id as number;
+  const [agc, plant] = [9001, 9002];
+  (doc.components as Record<string, JsonObject[]>).AGC = [{ id: agc, name: "agc" }];
+  (doc.supplemental_attributes as JsonObject[]).push({
+    id: plant,
+    name: "cc1",
+    configuration: "SeparateShaftCombustionSteam",
+  });
+  for (const [c, t] of [
+    [thermal, "ThermalStandard"],
+    [agc, "AGC"],
+  ]) {
+    (doc.supplemental_attribute_associations as JsonObject[]).push({
+      component_id: c,
+      component_type: t,
+      attribute_id: plant,
+      attribute_type: "CombinedCycleBlock",
+    });
+  }
+  doc.combined_cycle_associations = [thermal, agc].map((e, i) => ({
+    plant_id: plant,
+    entity_id: e,
+    role: "CT",
+    hrsg_index: i + 1,
+  }));
+  const report = insertDocument(db, doc);
+  expect(report.unsupported.AGC).toBe(1);
+  expect(report.unsupported.supplemental_attribute_associations).toBe(1);
+  expect(report.unsupported.combined_cycle_associations).toBe(1);
+  expect(count(db, "combined_cycle_associations")).toBe(1);
+});
+
+// The skip reads ids by the int encoder's rule, so the three SDKs agree on odd ids.
+test.skipIf(!hasGolden).each([
+  [9001, 9001.0, true],
+  ["9001", "9001", false],
+  [1, true, false],
+  [1e20, 1e20, false],
+  [9001, [9001], false],
+  [9001, { id: 9001 }, false],
+])("unsupported reference id %j -> %j", (agcId, ref, skipped) => {
+  const db = fresh();
+  const doc = golden();
+  (doc.components as Record<string, JsonObject[]>).AGC = [{ id: agcId, name: "agc" }];
+  const rows = doc.supplemental_attribute_associations as JsonObject[];
+  rows.push({ ...rows[0], component_id: ref, component_type: "AGC" });
+  if (skipped) {
+    expect(insertDocument(db, doc).unsupported.supplemental_attribute_associations).toBe(1);
+  } else {
+    expect(() => insertDocument(db, doc)).toThrow(InsertError);
+    expect(() => insertDocument(db, doc)).toThrow(/expected an integer/);
+  }
+});
+
+test.skipIf(!hasGolden)("non-object entries of an unsupported type are counted", () => {
+  const doc = golden();
+  (doc.components as Record<string, unknown[]>).AGC = [null, 5, [1]];
+  expect(insertDocument(fresh(), doc).unsupported.AGC).toBe(3);
+});
+
 // Review Focus 1
 test.skipIf(!hasGolden)("duplicate id across types rolls back the document", () => {
   const db = fresh();

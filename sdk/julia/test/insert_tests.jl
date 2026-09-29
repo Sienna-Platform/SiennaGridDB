@@ -150,6 +150,88 @@ end
 end
 
 if HAS_GOLDEN
+    # AGC has no table, so an association row naming one, on either side, is counted
+    # under its section instead of failing the document.
+    @testset "rows naming an unsupported component" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                thermal = first_of(doc, "ThermalStandard")["id"]
+                agc, plant = 9001, 9002
+                doc["components"]["AGC"] =
+                    Any[Dict{String, Any}("id" => agc, "name" => "agc")]
+                cc = Dict{String, Any}(
+                    "id" => plant,
+                    "name" => "cc1",
+                    "configuration" => "SeparateShaftCombustionSteam",
+                )
+                push!(doc["supplemental_attributes"], cc)
+                for (c, t) in ((thermal, "ThermalStandard"), (agc, "AGC"))
+                    row = Dict{String, Any}(
+                        "component_id" => c,
+                        "component_type" => t,
+                        "attribute_id" => plant,
+                        "attribute_type" => "CombinedCycleBlock",
+                    )
+                    push!(doc["supplemental_attribute_associations"], row)
+                end
+                doc["combined_cycle_associations"] = Any[
+                    Dict{String, Any}(
+                        "plant_id" => plant,
+                        "entity_id" => e,
+                        "role" => "CT",
+                        "hrsg_index" => i,
+                    ) for (i, e) in enumerate((thermal, agc))
+                ]
+                report = insert_document!(db, doc)
+                @test report.unsupported["AGC"] == 1
+                @test report.unsupported["supplemental_attribute_associations"] == 1
+                @test report.unsupported["combined_cycle_associations"] == 1
+                @test count_rows(db, "combined_cycle_associations") == 1
+            end
+        end
+    end
+
+    # The skip reads ids by the int encoder's rule, so the three SDKs agree on odd ids.
+    @testset "unsupported reference id $(repr(ref))" for (agc_id, ref, skipped) in (
+        (9001, 9001.0, true),
+        ("9001", "9001", false),
+        (1, true, false),
+        (1e20, 1e20, false),
+        (9001, Any[9001], false),
+        (9001, Dict{String, Any}("id" => 9001), false),
+    )
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                agc = Dict{String, Any}("id" => agc_id, "name" => "agc")
+                doc["components"]["AGC"] = Any[agc]
+                rows = doc["supplemental_attribute_associations"]
+                push!(
+                    rows,
+                    merge(rows[1], Dict("component_id" => ref, "component_type" => "AGC")),
+                )
+                if skipped
+                    report = insert_document!(db, doc)
+                    @test report.unsupported["supplemental_attribute_associations"] == 1
+                else
+                    @test_throws InsertError insert_document!(db, doc)
+                    @test_throws r"expected an integer" insert_document!(db, doc)
+                end
+            end
+        end
+    end
+
+    @testset "non-object entries of an unsupported type are counted" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                doc["components"]["AGC"] = Any[nothing, 5, Any[1]]
+                @test insert_document!(db, doc).unsupported["AGC"] == 3
+            end
+        end
+    end
+
     # Review Focus 1
     @testset "duplicate id across types" begin
         mktempdir() do dir

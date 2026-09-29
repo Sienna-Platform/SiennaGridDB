@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import type { Connection } from "./db.js";
 import { seedVocabulary } from "./db.js";
-import { canonicalJson, encode, isNull, valueAt, type SqlValue } from "./encode.js";
+import { canonicalJson, encode, isInt, isNull, valueAt, type SqlValue } from "./encode.js";
 import {
   EncodeError,
   GapValueError,
@@ -192,9 +192,13 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   const report = new InsertReport();
   const components = (doc.components ?? {}) as Record<string, JsonObject[]>;
   const plans: [ComponentPlan, JsonObject[]][] = [];
+  // Ids follow the int encoder's rule, so any other value reaches the encoder and fails there.
+  // A non-object entry (schema-invalid) has no id and is only counted.
+  const unsupportedIds = new Set<number>();
   for (const typeName of Object.keys(components).sort()) {
     const plan = planFor(typeName, components[typeName].length, report, strict);
     if (plan) plans.push([plan, components[typeName]]);
+    else for (const obj of components[typeName]) if (isInt(obj?.id)) unsupportedIds.add(obj.id);
   }
   plans.sort((a, b) => a[0].rank - b[0].rank || (a[0].typeName < b[0].typeName ? -1 : 1));
   for (const section of Object.keys(m.unsupported_sections).sort()) {
@@ -240,6 +244,12 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     }
     for (const section of m.associations) {
       for (const row of (doc[section.section] ?? []) as JsonObject[]) {
+        // A row naming a component that has no table is not written either.
+        const refs = section.references.map((r) => valueAt(row, r));
+        if (refs.some((id) => isInt(id) && unsupportedIds.has(id))) {
+          report.addUnsupported(section.section, 1);
+          continue;
+        }
         const what = `${section.section} row ${JSON.stringify(row)}`;
         run(db, section.row_sql, params(section.bindings, row, what), what);
         report.addInserted(section.section);

@@ -224,6 +224,21 @@ end
 section_size(rows) = length(rows)
 section_size(::Nothing) = 0
 
+# Ids of components the insert does not write. Ids follow the int encoder's rule, so
+# any other value is never skipped: it reaches the encoder and fails there.
+function push_id!(ids::Set{Int}, id)
+    if is_int_value(id)
+        push!(ids, Int(id))
+    end
+    return ids
+end
+
+names_unsupported(row::AbstractDict, references::Vector{String}, ids::Set{Int}) =
+    any(references) do r
+        id = get(row, r, nothing)
+        return is_int_value(id) && Int(id) in ids
+    end
+
 function supplemental_table(attr_type::AbstractString)
     if attr_type in manifest().plant_types
         return "plants"
@@ -257,12 +272,16 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
     report = InsertReport()
     components = something(get(doc, "components", nothing), Dict{String, Any}())
     plans = Tuple{ComponentPlan, Vector{Any}}[]
+    unsupported_ids = Set{Int}()
     for type_name in sort!(collect(keys(components)))
         objs = components[type_name]
         if haskey(m.components, type_name)
             push!(plans, (m.components[type_name], collect(Any, objs)))
         else
             note_unsupported!(report, strict, type_name, length(objs))
+            for obj in objs
+                obj isa AbstractDict && push_id!(unsupported_ids, get(obj, "id", nothing))
+            end
         end
     end
     sort!(plans; by=p -> (p[1].rank, p[1].type_name))
@@ -312,6 +331,11 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
         end
         for section in m.associations
             for row in section_rows(doc, section.section)
+                # A row naming a component that has no table is not written either.
+                if names_unsupported(row, section.references, unsupported_ids)
+                    add_unsupported!(report, section.section, 1)
+                    continue
+                end
                 what = "$(section.section) row $(JSON.json(row))"
                 run_sql(
                     cache,
