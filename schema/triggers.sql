@@ -1813,6 +1813,160 @@ SELECT
 END;
 
 -- =============================================================================
+-- Service Association Domain Triggers
+-- service_id must be a service row, and each member must fit its kind: branches
+-- for an interface, reserves for a group, static-injection devices for a reserve.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_service_associations_domain_insert BEFORE
+INSERT
+    ON service_associations
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'service_associations.service_id must exist in reserves or transmission_interfaces.'
+    )
+WHERE
+    NOT EXISTS (
+        SELECT
+            1
+        FROM
+            reserves
+        WHERE
+            id = NEW.service_id
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interfaces
+        WHERE
+            id = NEW.service_id
+    );
+
+SELECT
+    CASE
+        WHEN s.entity_type = 'GroupReserve'
+        AND m.entity_table <> 'reserves' THEN RAISE(
+            ABORT,
+            'A GroupReserve''s members must be reserves.'
+        )
+        WHEN s.entity_table = 'transmission_interfaces'
+        AND m.entity_table NOT IN (
+                'transmission_lines',
+                'discrete_controlled_ac_branches',
+                'two_winding_transformers',
+                'three_winding_transformers',
+                'transmission_interchanges',
+                'two_terminal_hvdc_lines',
+                'tmodel_hvdc_lines'
+            ) THEN RAISE(
+            ABORT,
+            'A TransmissionInterface''s members must be branches.'
+        )
+        WHEN s.entity_type IN ('OnlineReserve', 'OfflineReserve')
+        AND m.entity_table NOT IN (
+                'thermal_generators',
+                'renewable_generators',
+                'hydro_generators',
+                'storage_units',
+                'loads',
+                'sources',
+                'synchronous_condensers',
+                'fixed_admittance',
+                'switched_admittance',
+                'facts_control_devices',
+                'interconnecting_converters'
+            ) THEN RAISE(
+            ABORT,
+            'An OnlineReserve''s or OfflineReserve''s members must be devices, not services or branches.'
+        )
+    END
+FROM
+    entities s,
+    entities m
+WHERE
+    s.id = NEW.service_id
+    AND m.id = NEW.entity_id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_service_associations_domain_update BEFORE
+UPDATE
+    OF service_id,
+    entity_id ON service_associations
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'service_associations.service_id must exist in reserves or transmission_interfaces.'
+    )
+WHERE
+    NOT EXISTS (
+        SELECT
+            1
+        FROM
+            reserves
+        WHERE
+            id = NEW.service_id
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interfaces
+        WHERE
+            id = NEW.service_id
+    );
+
+SELECT
+    CASE
+        WHEN s.entity_type = 'GroupReserve'
+        AND m.entity_table <> 'reserves' THEN RAISE(
+            ABORT,
+            'A GroupReserve''s members must be reserves.'
+        )
+        WHEN s.entity_table = 'transmission_interfaces'
+        AND m.entity_table NOT IN (
+                'transmission_lines',
+                'discrete_controlled_ac_branches',
+                'two_winding_transformers',
+                'three_winding_transformers',
+                'transmission_interchanges',
+                'two_terminal_hvdc_lines',
+                'tmodel_hvdc_lines'
+            ) THEN RAISE(
+            ABORT,
+            'A TransmissionInterface''s members must be branches.'
+        )
+        WHEN s.entity_type IN ('OnlineReserve', 'OfflineReserve')
+        AND m.entity_table NOT IN (
+                'thermal_generators',
+                'renewable_generators',
+                'hydro_generators',
+                'storage_units',
+                'loads',
+                'sources',
+                'synchronous_condensers',
+                'fixed_admittance',
+                'switched_admittance',
+                'facts_control_devices',
+                'interconnecting_converters'
+            ) THEN RAISE(
+            ABORT,
+            'An OnlineReserve''s or OfflineReserve''s members must be devices, not services or branches.'
+        )
+    END
+FROM
+    entities s,
+    entities m
+WHERE
+    s.id = NEW.service_id
+    AND m.id = NEW.entity_id;
+
+END;
+
+-- =============================================================================
 -- Time Series Association Owner-Domain Triggers
 -- owner_id references entities (both categories share the entities id-space
 -- here, unlike infrastore's independent streams), but a 'SupplementalAttribute'
