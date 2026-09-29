@@ -119,7 +119,7 @@ A field only some variants carry goes through `sql_codegen_map.json`'s `attribut
 Each attribute row states its own `unit`/`quantity_kind`, following the same per-row basis rule as typed columns: the name registers one `attributes.<name>` convention per arm (for example `active_power` as `ActivePower`/`MW` for `NATURAL_UNITS` and `ActivePower`/`pu` for `COMPONENT_BASE`), and each row uses the arm matching its own component's `power_units` (or `parameter_units`, a control mode, and so on).
 References and self-describing payloads listed in `attribute_identifiers` (bus `number`, `load_zone`, `dynamic_injector`, the loads' `operation_cost`, loss curves) and string, boolean or enum values carry no unit.
 
-Current registry: **41 quantity kinds, 66 allowed units, 411 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 414 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`

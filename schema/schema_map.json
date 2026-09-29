@@ -41,6 +41,9 @@
       {"component": "OfflineReserve", "file": "Operations/Service/OfflineReserve.json", "is_psy": true},
       {"component": "GroupReserve", "file": "Operations/Service/GroupReserve.json", "is_psy": true}
     ],
+    "transmission_interfaces": [
+      {"component": "TransmissionInterface", "file": "Operations/Service/TransmissionInterface.json", "is_psy": true}
+    ],
     "discrete_controlled_ac_branches": [
       {"component": "DiscreteControlledACBranch", "file": "Operations/Branch/DiscreteControlledACBranch.json", "is_psy": true}
     ],
