@@ -208,6 +208,8 @@ WITH
         SELECT id, 'renewable_generators', 'operation_cost', operation_cost
         FROM renewable_generators
         UNION ALL
+        SELECT id, 'reserves', 'variable', variable FROM reserves
+        UNION ALL
         SELECT id, 'sources', 'operation_cost', operation_cost FROM sources
         UNION ALL
         SELECT id, 'storage_technologies', 'operation_costs', operation_costs

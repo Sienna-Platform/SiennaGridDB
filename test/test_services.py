@@ -8,6 +8,7 @@ import pytest
 from conftest import make_entity
 from test_cost_and_source_coverage import insert_thermal
 from test_schema_integrity import make_arc, make_bus, make_circuit
+from test_time_series_storage import add_association
 
 CURVE = (
     '{"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": '
@@ -433,3 +434,12 @@ def test_offer_without_membership_is_a_violation(system):
     assert rows(system, "SELECT * FROM service_offer_violations") == [(11, 2)]
     join(system, 2, 11)
     assert rows(system, "SELECT * FROM service_offer_violations") == []
+
+
+def test_a_reserve_demand_curve_reference_must_resolve(fresh_db):
+    add_reserve(fresh_db, 1, "OnlineReserve")
+    view = "SELECT * FROM dangling_time_series_references"
+    path = '$."value_curve"."function_data"."association_id"'
+    assert rows(fresh_db, view) == [(1, "reserves", "variable", path, 7)]
+    add_association(fresh_db, 1, "u1", name="variable_cost", assoc_id=7)
+    assert rows(fresh_db, view) == []
