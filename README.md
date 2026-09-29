@@ -128,7 +128,7 @@ it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_traject
 unregistered, basis-dependent on the attribute `power_units`, same as VSC's
 `dc_setpoint_*`).
 
-Current registry: **41 quantity kinds, 66 allowed units, 405 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 451 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`

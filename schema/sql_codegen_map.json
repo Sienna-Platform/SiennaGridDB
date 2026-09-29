@@ -125,7 +125,6 @@
       "attribute_channel": [
         "loss",
         "r",
-        "transfer_setpoint",
         "scheduled_dc_voltage",
         "rectifier_bridges",
         "rectifier_delay_angle",
@@ -165,8 +164,6 @@
         "dc_control_to",
         "ac_control_from",
         "ac_control_to",
-        "dc_setpoint_from",
-        "dc_setpoint_to",
         "ac_setpoint_from",
         "ac_setpoint_to",
         "converter_loss_from",
