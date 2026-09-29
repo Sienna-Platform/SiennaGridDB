@@ -136,6 +136,8 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'active_power_limits_pump', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'HydroPumpTurbine pump limits, per-unit on the component''s base_power'),
     ('attributes', 'active_power_limits_pump', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'HydroPumpTurbine pump limits'),
     ('attributes', 'active_power_limits_to', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'TModelHVDCLine active power limits at the to node'),
+    ('attributes', 'active_power_pump', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'HydroPumpTurbine initial pump active power, per-unit on the component''s base_power'),
+    ('attributes', 'active_power_pump', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'HydroPumpTurbine initial pump active power'),
     ('attributes', 'alpha', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'ExponentialLoad active power voltage exponent'),
     ('attributes', 'angle', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'Bus voltage angle'),
     ('attributes', 'angle_limits', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'Branch phase-angle-difference limits'),
@@ -154,6 +156,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'current_reactive_power', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'ZIP load constant-current reactive power, per-unit on the component''s base_power'),
     ('attributes', 'current_reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'ZIP load constant-current reactive power'),
     ('attributes', 'dc_current', 'CurrentFlow', 'A', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC DC current'),
+    ('attributes', 'dc_voltage_droop', 'Resistance', 'pu', NULL, NULL, NULL, NULL, NULL, NULL, 'InterconnectingConverter DC voltage droop, per-unit on the component''s base'),
     ('attributes', 'dc_voltage_droop_from', 'Resistance', 'pu', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC from-converter DC voltage droop, per-unit on the component''s base'),
     ('attributes', 'dc_voltage_droop_to', 'Resistance', 'pu', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC to-converter DC voltage droop, per-unit on the component''s base'),
     ('attributes', 'efficiency', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Efficiency'),
@@ -202,8 +205,11 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'max_impedance_reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'ZIP load maximum constant-impedance reactive power'),
     ('attributes', 'max_reactive_power', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'Maximum reactive power demand, per-unit on the component''s base_power'),
     ('attributes', 'max_reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Maximum reactive power demand'),
+    ('attributes', 'max_shunt_current', 'ApparentPower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'FACTSControlDevice maximum shunt current, as apparent power, per-unit on the component''s base_power'),
+    ('attributes', 'max_shunt_current', 'ApparentPower', 'MVA', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'FACTSControlDevice maximum shunt current, as apparent power'),
     ('attributes', 'min_compounding_voltage', 'Voltage', 'pu', 'dc_voltage_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'LCC minimum compounding voltage, per-unit on the component''s base'),
     ('attributes', 'min_compounding_voltage', 'Voltage', 'kV', 'dc_voltage_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'LCC minimum compounding voltage'),
+    ('attributes', 'minimum_time', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'HydroPumpTurbine minimum time in turbine and pump modes'),
     ('attributes', 'peak_active_power', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Area/zone peak active power'),
     ('attributes', 'peak_demand_mw', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Demand requirement peak demand'),
     ('attributes', 'peak_reactive_power', 'ReactivePower', 'MVAr', NULL, NULL, NULL, NULL, NULL, NULL, 'Area/zone peak reactive power'),
@@ -235,6 +241,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'reactive_power_from', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'VSC from-terminal reactive power'),
     ('attributes', 'reactive_power_limits', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'Reactive power limits, per-unit on the component''s base_power'),
     ('attributes', 'reactive_power_limits', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Reactive power limits'),
+    ('attributes', 'reactive_power_required', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'FACTSControlDevice share of reactive power required'),
     ('attributes', 'reactive_power_to', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'VSC to-terminal reactive power, per-unit on the component''s base_power'),
     ('attributes', 'reactive_power_to', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'VSC to-terminal reactive power'),
     ('attributes', 'rectifier_base_voltage', 'Voltage', 'kV', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier commutating base voltage'),
@@ -262,6 +269,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'switch_mode_voltage', 'Voltage', 'kV', 'dc_voltage_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'LCC mode-switch DC voltage'),
     ('attributes', 'time_at_status', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'Time spent in the current on/off status'),
     ('attributes', 'time_limits', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'Time limits'),
+    ('attributes', 'transition_time', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'HydroPumpTurbine transition time between turbine and pump modes'),
     ('attributes', 'unserved_demand_curve', 'CostPerEnergy', 'USD/MWh', NULL, NULL, NULL, NULL, NULL, NULL, 'Demand requirement cost curve for unserved demand'),
     ('attributes', 'value_of_lost_load', 'CostPerEnergy', 'USD/MWh', NULL, NULL, NULL, NULL, NULL, NULL, 'Value of lost load'),
     ('attributes', 'voltage', 'Voltage', 'kV', NULL, NULL, NULL, NULL, NULL, NULL, 'Transport technology voltage class'),
@@ -639,4 +647,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', '1f3d010c6f6fec36f51bcbb85d2d3ed43cb586fe3503ee74aaeb960543f32040', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '80855cc5d6b75f1162cb630f012eb63966d9a37da2e1c37c44ff0d6ccf60f0a6', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

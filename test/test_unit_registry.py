@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 497
+EXPECTED_UNIT_CONVENTIONS = 505
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1360,6 +1360,8 @@ def test_merged_hvdc_columns_registered(db):
         ("max_active_power", {"ActivePower/MW", "ActivePower/pu"}),
         ("max_impedance_reactive_power", {"ReactivePower/MVAr", "ReactivePower/pu"}),
         ("alpha", {"Dimensionless/1"}),
+        ("max_shunt_current", {"ApparentPower/MVA", "ApparentPower/pu"}),
+        ("minimum_time", {"OperationalDuration/min"}),
         ("reactive_power_to", {"ReactivePower/MVAr", "ReactivePower/pu"}),
         ("power_trajectory", {"ActivePower/MW", "ActivePower/pu"}),
         ("r", {"Resistance/ohm", "Resistance/pu"}),
@@ -1372,10 +1374,13 @@ def test_merged_hvdc_columns_registered(db):
         # per power_units: left reported gaps rather than stored under a wrong unit.
         ("transfer_setpoint", set()),
         ("dc_setpoint_from", set()),
+        # Annotated A, but PSY exports it as power per unit on base_power: a gap.
+        ("max_dc_current", set()),
         # Self-describing loss curves: exempt through attribute_identifiers.
         ("loss", set()),
         ("converter_loss_from", set()),
         ("operation_cost", set()),
+        ("upstream_turbines", set()),
     ],
 )
 def test_attribute_conventions(db, name, expected):
