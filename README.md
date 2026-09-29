@@ -244,7 +244,7 @@ generator's `bus` column, say), but a relationship where either side can have se
 of the other — or where the link itself carries data, or where the "other side" spans
 several different component tables — has no single column to hold it. `schema/schema.sql`
 handles each of these cases with a dedicated association table: a row per link rather
-than a column on either side. Five exist:
+than a column on either side. Six exist:
 
 | Table | Links | Why it needs its own table |
 |---|---|---|
@@ -253,16 +253,20 @@ than a column on either side. Five exist:
 | `combined_cycle_associations` | a plant ↔ the CT/CA units feeding into or receiving from its HRSGs | stated directly in the table's own comment: "a CT or CA can feed multiple HRSGs and an HRSG can have multiple CTs/CAs" — genuinely many-to-many, which is why it is a separate table from `plant_associations` rather than another row shape in it (`plant_associations` enforces one row per `(plant, entity)`, which this relationship violates) |
 | `time_series_associations` | a time series ↔ the entity that owns it | one entity can own several time series (different resolutions, different features), and the association row is what makes a stored series queryable by owner without touching the series data itself |
 | `trading_hub_associations` | a trading hub ↔ its member entities | a hub aggregates several settlement points and an entity can belong to more than one hub, so neither side can hold the link; `UNIQUE (trading_hub_id, entity_id)` keeps one row per membership |
+| `service_associations` | a service (reserve or transmission interface) ↔ its members | a reserve draws on many devices and a device can serve several reserves, and members span device, branch and reserve tables; neither side carries a member list, so these rows are the only record of who contributes; `UNIQUE (service_id, entity_id)` keeps one row per membership |
 
-Two of the five (`supplemental_attribute_associations`, `time_series_associations`)
+Two of the six (`supplemental_attribute_associations`, `time_series_associations`)
 resolve one side of the link through `entities` — the supertype table every component
 row also has a row in (`id`, `entity_table`, `entity_type`) — so a single
 `component_id`/`owner_id` column can point at a generator, a bus, or any other component
 type without a separate FK per possible target. `plant_associations`, `combined_cycle_associations` and
 `trading_hub_associations` reference `entities` the same way for their non-owning
 side (`entity_id`); their owning side (`plant_id`) always points at `plants`, since that
-side is never ambiguous. All five declare their FKs `ON DELETE CASCADE`, so a deleted
+side is never ambiguous. All six declare their FKs `ON DELETE CASCADE`, so a deleted
 component or attribute takes its association rows with it rather than leaving orphans.
+
+`service_associations` resolves both sides through `entities`, and triggers keep each side to its kind: a `reserves` or `transmission_interfaces` row as the service, and branches, reserves or devices as members, depending on the service.
+Views in `views.sql` read it: `service_contributors`, `interface_branch_directions` (an interface's `direction_mapping` names resolved to its member branches) and `interface_direction_violations` (mapped names that resolve to none; empty for valid data), `service_bid_offers` and `service_bids` (the market bids devices place on reserves), and `service_offer_violations` (offers into a service the device is not a member of; empty for valid data).
 
 `hydro_reservoir_connections` is association-shaped too, but it is listed with the hydro
 topology rather than here: it links two reservoirs to each other, not a component to a
