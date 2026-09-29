@@ -1,5 +1,7 @@
 """Insert SDK objects (as JSON-shaped dicts) using the manifest's SQL."""
 
+import json
+import os
 import sqlite3
 from contextlib import contextmanager
 
@@ -8,6 +10,7 @@ from .encode import EncodeError, canonical_json, encode, value_at
 from .errors import GapValueError, InsertError, UnsupportedComponentError, describe
 from .manifest import load_manifest
 from .report import InsertReport
+from .time_series import element_dtype, insert_time_series, reader_missing
 
 SAVEPOINT = "sienna_griddb_tools_insert"
 
@@ -133,7 +136,65 @@ def _attribute_types(doc):
     return types
 
 
-def insert_document(conn, doc, *, strict=False):
+def _time_series_plan(doc, sidecar, report, strict, no_sidecar):
+    """The association rows to insert, after reporting what cannot be stored."""
+    plan = load_manifest().time_series
+    rows = doc.get(plan["section"]) or []
+    if not rows:
+        return []
+    missing = no_sidecar if sidecar is None else reader_missing()
+    if missing is not None:
+        _unsupported(report, strict, plan["section"], len(rows), missing)
+        return []
+    unsupported = plan["unsupported_types"]
+    counts = {}
+    for row in rows:
+        if row.get("time_series_type") in unsupported:
+            counts[row["time_series_type"]] = counts.get(row["time_series_type"], 0) + 1
+    for series_type, n in sorted(counts.items()):
+        _unsupported(report, strict, series_type, n, unsupported[series_type])
+    components = load_manifest().components
+    stored, orphans, dtypes = [], {}, {}
+    for row in rows:
+        if row.get("time_series_type") in unsupported:
+            continue
+        owner = row.get("owner_type")
+        if row.get("owner_category") == "Component" and owner not in components:
+            orphans[owner] = orphans.get(owner, 0) + 1
+        elif element_dtype(row.get("element_type")) in plan["unsupported_dtypes"]:
+            dtypes[row["element_type"]] = dtypes.get(row["element_type"], 0) + 1
+        else:
+            stored.append(row)
+    if orphans:
+        reason = f"owned by types GridDB does not store: {', '.join(sorted(orphans))}"
+        _unsupported(report, strict, plan["section"], sum(orphans.values()), reason)
+    for element_type, n in sorted(dtypes.items()):
+        why = plan["unsupported_dtypes"][element_dtype(element_type)]
+        reason = f"element_type {element_type}: {why}"
+        _unsupported(report, strict, plan["section"], n, reason)
+    return stored
+
+
+def insert_document(conn, doc, *, strict=False, time_series=None):
+    """Insert a whole SystemDocument in one savepoint.
+
+    doc is a parsed document, an SDK model, or the path of a document's JSON.
+    time_series is the HDF5 sidecar holding its arrays; by default a path doc's
+    time_series_storage_file, resolved beside it (reported unsupported when that
+    file does not exist). It is only ever read.
+    """
+    no_sidecar = "no time series sidecar given"
+    if isinstance(doc, (str, os.PathLike)):
+        with open(doc, encoding="utf-8") as handle:
+            loaded = json.load(handle)
+        stored = loaded.get("time_series_storage_file")
+        if time_series is None and stored:
+            default = os.path.join(os.path.dirname(os.path.abspath(doc)), stored)
+            if os.path.isfile(default):
+                time_series = default
+            else:
+                no_sidecar = f"time series sidecar {default} does not exist"
+        doc = loaded
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
@@ -149,10 +210,7 @@ def insert_document(conn, doc, *, strict=False):
         rows = doc.get(section) or []
         if len(rows) > 0:
             _unsupported(report, strict, section, len(rows), reason)
-    series = doc.get(manifest.time_series["section"]) or []
-    if series:
-        section = manifest.time_series["section"]
-        _unsupported(report, strict, section, len(series), "no time series sidecar given")
+    series = _time_series_plan(doc, time_series, report, strict, no_sidecar)
 
     attr_types = _attribute_types(doc)
     supplemental = manifest.supplemental
@@ -200,4 +258,6 @@ def insert_document(conn, doc, *, strict=False):
                     conn, section["row_sql"], _params(section["bindings"], row, what), what
                 )
                 report.add_inserted(name)
+        if series:
+            insert_time_series(conn, manifest.time_series, series, time_series, report)
     return report

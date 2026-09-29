@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: pip install -e "sdk/python[test]" "pydantic>=2" -e power-openapi-models/python
+        run: pip install -e "sdk/python[test,time-series]" "pydantic>=2" -e power-openapi-models/python
       # Golden fixtures are generated on the fly and gitignored, never checked in.
       - name: Generate golden fixtures
         run: python3 test/prepare_fixtures.py
