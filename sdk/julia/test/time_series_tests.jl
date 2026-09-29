@@ -169,6 +169,21 @@ mktempdir() do dir
             end
         end
 
+        @testset "a non-object time series row is an InsertError" begin
+            for value in (nothing, 5, Any[1])
+                fresh(mktempdir()) do db
+                    doc = load_json(doc_path)
+                    push!(doc["time_series_associations"], value)
+                    @test_throws G.InsertError insert_document!(
+                        db,
+                        doc;
+                        time_series=sidecar,
+                    )
+                    @test count_rows(db, "entities") == 0
+                end
+            end
+        end
+
         @testset "time series strict and bad arrays roll back" begin
             fresh(mktempdir()) do db
                 doc = load_json(doc_path)

@@ -334,6 +334,15 @@ def test_an_unsupported_owner_is_found_by_its_id(conn, case, tmp_path):
     fresh.close()
 
 
+@pytest.mark.parametrize("value", [None, 5, [1]])
+def test_a_non_object_row_is_an_insert_error(conn, case, value):
+    doc = load(case)
+    doc["time_series_associations"].append(value)
+    with pytest.raises(griddb.InsertError, match="not an object"):
+        griddb.insert_document(conn, doc, time_series=sidecar(case))
+    assert rows(conn, "SELECT count(*) FROM entities") == [(0,)]
+
+
 def test_a_non_f64_element_type_is_unsupported_up_front(conn, case):
     doc = load(case)
     for row in doc["time_series_associations"]:

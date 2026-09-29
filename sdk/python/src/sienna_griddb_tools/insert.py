@@ -177,6 +177,8 @@ def _time_series_plan(doc, sidecar, report, strict, no_sidecar, unsupported_ids)
     if missing is not None:
         _unsupported(report, strict, plan["section"], len(rows), missing)
         return []
+    for row in rows:
+        _require_object(row, f"{plan['section']} row")
     unsupported = plan["unsupported_types"]
     counts = {}
     for row in rows:

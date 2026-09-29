@@ -65,6 +65,7 @@ function storable_time_series(
         mark_unsupported!(report, strict, plan.section, length(rows), missing_reason)
         return stored
     end
+    foreach(row -> require_object(row, "$(plan.section) row"), rows)
     counts = Dict{String, Int}()
     dtypes = Dict{String, Int}()
     for row in rows
