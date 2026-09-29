@@ -190,6 +190,19 @@ def test_component_base_cost_is_rejected(conn):
         griddb.insert_component(conn, "ThermalStandard", thermal)
 
 
+def test_reserve_requirement_defaults_only_where_the_schema_does(conn):
+    """The online and offline schemas default requirement to 0.0; a group reserve
+    must carry one."""
+    online = {"id": 1, "name": "a", "time_frame": 5.0, "reserve_direction": "UP"}
+    griddb.insert_component(conn, "OnlineReserve", online)
+    offline = {"id": 2, "name": "b", "time_frame": 5.0}
+    griddb.insert_component(conn, "OfflineReserve", offline)
+    assert conn.execute("SELECT requirement FROM reserves").fetchall() == [(0.0,), (0.0,)]
+    group = {"id": 3, "name": "g", "reserve_direction": "UP"}
+    with pytest.raises(griddb.InsertError, match=r"NOT NULL .*reserves\.requirement"):
+        griddb.insert_component(conn, "GroupReserve", group)
+
+
 # Review Focus 1
 def test_duplicate_id_across_types_rolls_back_document(conn):
     doc = golden()
