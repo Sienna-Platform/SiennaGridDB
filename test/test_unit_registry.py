@@ -1397,6 +1397,31 @@ def test_attribute_conventions(db, name, expected):
     assert {r[0] for r in rows} == expected
 
 
+# Attribute names are global across component types, so a name must mean one
+# quantity everywhere: one fixed row at most, and basis arms of one kind.
+BASIS_DISCRIMINATORS = ("power_units", "parameter_units", "voltage_units", "dc_voltage_units")
+
+
+def test_attribute_name_means_one_quantity(db):
+    """Sees only the registry, so not how PSY exports a value both types annotate alike
+    (dc_current: A on VSC, power per unit on InterconnectingConverter).
+    check_units_sync.py L3(d) catches that where PSY's descriptor tags the field."""
+    rows = db.execute(
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_kind "
+        "FROM unit_conventions WHERE table_name = 'attributes'"
+    ).fetchall()
+    fixed, basis = {}, {}
+    for name, disc, value, kind in rows:
+        if disc is None:
+            fixed.setdefault(name, set()).add(kind)
+        elif disc in BASIS_DISCRIMINATORS:
+            basis.setdefault(name, set()).add(kind)
+    assert {n: k for n, k in fixed.items() if len(k) > 1} == {}
+    assert {n: k for n, k in basis.items() if len(k) > 1} == {}
+    both = {n for n in fixed.keys() & basis.keys() if fixed[n] != basis[n]}
+    assert both == set()
+
+
 def test_attribute_start_time_limits_registered_unit_accepted(fresh_db):
     make_entity(fresh_db, 1)
     insert_attribute(
