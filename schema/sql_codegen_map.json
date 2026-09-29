@@ -372,12 +372,28 @@
         "reactive_power_required"
       ]
     },
-    "transport_technologies": {},
+    "transport_technologies": {
+      "attribute_channel": [
+        "capacity_limits",
+        "start_region",
+        "end_region",
+        "start_node",
+        "end_node",
+        "line_loss",
+        "resistance",
+        "reactance",
+        "voltage"
+      ]
+    },
     "demand_technologies": {
       "attribute_channel": [
         "peak_demand_mw",
         "value_of_lost_load",
-        "unserved_demand_curve"
+        "unserved_demand_curve",
+        "conformity",
+        "growth_rate",
+        "new_construction_year",
+        "new_demand_mw"
       ],
       "db_only": [
         "power_systems_type"

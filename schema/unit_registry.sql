@@ -166,6 +166,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'g', 'Conductance', 'pu', 'admittance_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'VSC line shunt conductance, per-unit on the component''s base'),
     ('attributes', 'g', 'ActivePower', 'MW', 'admittance_units', 'COMPONENT_MVAR', NULL, NULL, NULL, NULL, 'VSC line shunt conductance in the PSS/E form: MW at 1.0 pu voltage'),
     ('attributes', 'g', 'Conductance', 'S', 'admittance_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'VSC line shunt conductance'),
+    ('attributes', 'growth_rate', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Demand requirement growth rate'),
     ('attributes', 'impedance_active_power', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'ZIP load constant-impedance active power, per-unit on the component''s base_power'),
     ('attributes', 'impedance_active_power', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'ZIP load constant-impedance active power'),
     ('attributes', 'impedance_reactive_power', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'ZIP load constant-impedance reactive power, per-unit on the component''s base_power'),
@@ -185,6 +186,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'inverter_xc', 'Reactance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'LCC inverter commutating reactance, per-unit on the component''s base'),
     ('attributes', 'inverter_xc', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'LCC inverter commutating reactance'),
     ('attributes', 'l', 'Reactance', 'pu', NULL, NULL, NULL, NULL, NULL, NULL, 'TModelHVDCLine series inductance, per-unit on the line''s base_current'),
+    ('attributes', 'line_loss', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Transport technology line loss fraction'),
     ('attributes', 'load_balance_time_horizon', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'ShiftablePowerLoad number of periods over which load must balance'),
     ('attributes', 'load_response', 'PowerPerFrequency', 'MW/Hz', NULL, NULL, NULL, NULL, NULL, NULL, 'Area load-frequency response'),
     ('attributes', 'magnitude', 'Voltage', 'pu', NULL, NULL, NULL, NULL, NULL, NULL, 'Bus voltage magnitude, per-unit on base_voltage'),
@@ -211,6 +213,8 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'min_compounding_voltage', 'Voltage', 'pu', 'dc_voltage_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'LCC minimum compounding voltage, per-unit on the component''s base'),
     ('attributes', 'min_compounding_voltage', 'Voltage', 'kV', 'dc_voltage_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'LCC minimum compounding voltage'),
     ('attributes', 'minimum_time', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'HydroPumpTurbine minimum time in turbine and pump modes'),
+    ('attributes', 'new_construction_year', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Demand requirement installation year (no unit annotation in the schemas)'),
+    ('attributes', 'new_demand_mw', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Demand requirement new demand'),
     ('attributes', 'peak_active_power', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'Area/zone peak active power, per-unit on the component''s base_power'),
     ('attributes', 'peak_active_power', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Area/zone peak active power'),
     ('attributes', 'peak_demand_mw', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Demand requirement peak demand'),
@@ -236,6 +240,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'rating_from', 'ApparentPower', 'MVA', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'VSC from-converter rating'),
     ('attributes', 'rating_to', 'ApparentPower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'VSC to-converter rating, per-unit on the component''s base_power'),
     ('attributes', 'rating_to', 'ApparentPower', 'MVA', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'VSC to-converter rating'),
+    ('attributes', 'reactance', 'Reactance', 'ohm', NULL, NULL, NULL, NULL, NULL, NULL, 'Transport technology series reactance'),
     ('attributes', 'reactive_power', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'Reactive power setpoint, per-unit on the component''s base_power'),
     ('attributes', 'reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Reactive power setpoint'),
     ('attributes', 'reactive_power_flow', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'Branch reactive power flow, per-unit on the component''s base_power'),
@@ -261,6 +266,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'rectifier_transformer_ratio', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier transformer ratio'),
     ('attributes', 'rectifier_xc', 'Reactance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'LCC rectifier commutating reactance, per-unit on the component''s base'),
     ('attributes', 'rectifier_xc', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'LCC rectifier commutating reactance'),
+    ('attributes', 'resistance', 'Resistance', 'ohm', NULL, NULL, NULL, NULL, NULL, NULL, 'Transport technology series resistance'),
     ('attributes', 'rmpct_from', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC from-converter remote-regulation share'),
     ('attributes', 'rmpct_to', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC to-converter remote-regulation share'),
     ('attributes', 'scheduled_dc_voltage', 'Voltage', 'pu', 'dc_voltage_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'LCC scheduled DC voltage, per-unit on the component''s base'),
@@ -650,4 +656,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', '7f16286f4ab17178714be0938d53dbcf1ce2f615b9a97782cfc6e25ccceb788e', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '7c35053165752434332022773bac997bd7f9c61d2e891f17a35b806fa45e43aa', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

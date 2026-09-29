@@ -655,6 +655,8 @@ VALUES
     ('AreaInterchange', 'to_area', 'Importing area reference'),
     ('TwoTerminalVSCLine', 'remote_bus_control_from', 'Remotely regulated bus reference'),
     ('TwoTerminalVSCLine', 'remote_bus_control_to', 'Remotely regulated bus reference'),
+    ('AggregateTransportTechnology', 'start_region', 'Transport technology from-region reference'),
+    ('AggregateTransportTechnology', 'end_region', 'Transport technology to-region reference'),
     ('HydroReservoir', 'upstream_turbines', 'Turbine id references'),
     ('HydroReservoir', 'downstream_turbines', 'Turbine id references'),
     ('HydroReservoir', 'upstream_reservoirs', 'Reservoir id references'),
