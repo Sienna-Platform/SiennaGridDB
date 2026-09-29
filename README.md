@@ -116,17 +116,10 @@ them:
 | `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
-**Columns vs. `attributes`.** A table sourced from several upstream components keeps the
-fields common to all of them as columns. A field only some variants carry goes through
-`sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
-There it is registered as an `attributes.<name>` convention when its unit is unambiguous,
-validated against `allowed_units` on write — or left unregistered when its unit depends on
-a sibling attribute (a `discriminator_column` must name a sibling *column*, and a field
-inside `attributes` has no column sibling to name). `two_terminal_hvdc_lines` follows this
-for all three HVDC variants (LCC impedances, VSC setpoints); `thermal_generators` follows
-it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_trajectory` stays
-unregistered, basis-dependent on the attribute `power_units`, same as VSC's
-`dc_setpoint_*`).
+**Columns vs. `attributes`.** A table sourced from several upstream components keeps the fields common to all of them as columns.
+A field only some variants carry goes through `sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
+Each attribute row states its own `unit`/`quantity_kind`, following the same per-row basis rule as typed columns: the name registers one `attributes.<name>` convention per arm (for example `active_power` as `ActivePower`/`MW` for `NATURAL_UNITS` and `ActivePower`/`pu` for `COMPONENT_BASE`), and each row uses the arm matching its own component's `power_units` (or `parameter_units`, a control mode, and so on).
+References and self-describing payloads listed in `attribute_identifiers` (bus `number`, `load_zone`, `dynamic_injector`, the loads' `operation_cost`, loss curves) and string, boolean or enum values carry no unit.
 
 Current registry: **41 quantity kinds, 66 allowed units, 514 conventions.**
 
@@ -150,6 +143,7 @@ To resolve any column's unit:
 3. **Read the matched row's `unit`.** If it is `pu`, resolve it against the base column on
    the *same row* — `base_power` for power/impedance quantities, `base_voltage` for voltage
    quantities — never a system-wide table.
+   An `attributes` row states its unit inline; a `pu` power resolves against the owner's `base_power`, a `pu` voltage against a base voltage that depends on the field, and a `pu` impedance or admittance against both (`docs/units-architecture.md` §5).
 
 *Worked example:* `transmission_lines.r` has two `unit_conventions` rows, discriminated by
 `parameter_units`: `COMPONENT_BASE` → `unit = pu`, `NATURAL_UNITS` → `unit = ohm`. A row with
