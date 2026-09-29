@@ -99,15 +99,32 @@ def test_unsupported_type(conn):
         griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}], strict=True)
 
 
-def test_component_base_cost_is_rejected(conn):
-    raw_path = sdk_repo() / "fixtures" / "case14_operations.NATURAL_UNITS.json"
-    if not raw_path.exists():
-        pytest.skip("power-openapi-models checkout not found")
-    raw = json.loads(raw_path.read_text("utf-8"))
-    thermal = first(raw, "ThermalStandard")
-    griddb.insert_component(conn, "ACBus", lone_bus(raw, thermal["bus"]))
-    with pytest.raises(griddb.InsertError, match="NATURAL_UNITS"):
+def thermal_with_cost_basis(conn, power_units):
+    """A golden thermal with its bus inserted; power_units None drops the key."""
+    doc = golden()
+    thermal = first(doc, "ThermalStandard")
+    curve = thermal["operation_cost"]["variable_operation_cost"]
+    curve.pop("power_units", None)
+    if power_units is not None:
+        curve["power_units"] = power_units
+    griddb.insert_component(conn, "ACBus", lone_bus(doc, thermal["bus"]))
+    return thermal
+
+
+def test_legacy_component_base_cost_is_rejected(conn):
+    thermal = thermal_with_cost_basis(conn, "COMPONENT_BASE")
+    with pytest.raises(griddb.InsertError, match="legacy power_units must be NATURAL_UNITS"):
         griddb.insert_component(conn, "ThermalStandard", thermal)
+    assert count(conn, "thermal_generators") == 0
+
+
+def test_cost_without_power_units_inserts(conn):
+    thermal = thermal_with_cost_basis(conn, None)
+    griddb.insert_component(conn, "ThermalStandard", thermal)
+    (basis,) = conn.execute(
+        "SELECT json_type(production_cost, '$.power_units') FROM thermal_generators"
+    ).fetchone()
+    assert basis is None
 
 
 # Review Focus 1
