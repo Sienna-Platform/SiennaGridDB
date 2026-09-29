@@ -1968,12 +1968,11 @@ SELECT
 END;
 
 -- =============================================================================
--- Cost Payload Power-Units Guard
--- column_conventions.json registers cost curves in natural units only, with no
--- power_units discriminator, so only NATURAL_UNITS passes; a NULL or absent
--- power_units passes too, since the payload may be a plain curve. Keep this
--- trigger set in sync with column_conventions.json's production_cost /
--- operation_cost* rows.
+-- Cost Curve Basis Guard
+-- Cost curves are natural units (x axis MW) and carry no basis field. A legacy
+-- power_units passes only as NATURAL_UNITS, so a per-unit curve is rejected
+-- instead of misread; an absent one passes. Keep this trigger set in sync with
+-- column_conventions.json's production_cost / operation_cost* rows.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_thermal_generators_cost_units_insert BEFORE
 INSERT
@@ -1983,7 +1982,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -1996,7 +1995,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2010,7 +2009,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2024,7 +2023,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2037,7 +2036,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2050,7 +2049,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2064,7 +2063,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2078,7 +2077,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2091,7 +2090,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2104,7 +2103,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2117,7 +2116,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2130,7 +2129,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2144,7 +2143,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2158,7 +2157,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2174,7 +2173,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2188,7 +2187,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2204,7 +2203,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2218,7 +2217,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2234,7 +2233,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;
@@ -2248,7 +2247,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'cost payload power_units must be NATURAL_UNITS.'
+        'cost curves are natural units; a legacy power_units must be NATURAL_UNITS.'
     );
 
 END;

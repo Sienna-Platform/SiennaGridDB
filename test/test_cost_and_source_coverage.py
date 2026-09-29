@@ -16,10 +16,7 @@ import pytest
 
 from conftest import load_schemas_json, make_entity
 
-NATURAL = "NATURAL_UNITS"
-
 PIECEWISE_IO_COST = {
-    "power_units": NATURAL,
     "variable_cost_type": "COST",
     "value_curve": {
         "curve_type": "INPUT_OUTPUT",
@@ -351,7 +348,6 @@ def test_source_base_voltage_must_be_positive(fresh_db):
 def fuel_curve(fuel_cost=4.0, curve_type="INCREMENTAL", fuel_cost_time_series=None):
     curve = {
         "variable_cost_type": "FUEL",
-        "power_units": NATURAL,
         "value_curve": {
             "curve_type": curve_type,
             "function_data": {
@@ -420,7 +416,6 @@ def test_time_series_backed_curve_types_are_accepted(fresh_db, curve_type):
     bus = make_bus(fresh_db, 1, "bus-1")
     cost = {
         "variable_cost_type": "COST",
-        "power_units": NATURAL,
         "value_curve": {
             "curve_type": curve_type,
             "function_data": {

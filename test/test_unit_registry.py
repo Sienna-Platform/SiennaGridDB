@@ -710,12 +710,16 @@ def test_transmission_line_discriminated_registry_rows(db):
 
 
 # Cost payloads
-def _thermal_production_cost(power_units):
+def _legacy_basis(power_units):
+    return "" if power_units is None else '"power_units":"' + power_units + '",'
+
+
+def _thermal_production_cost(power_units=None):
     """The production curve payload written through
     operation_cost.variable_operation_cost; production_cost is a GENERATED
     column derived from it, so this is never written directly."""
     return (
-        '{"variable_cost_type":"COST","power_units":"' + power_units + '",'
+        '{"variable_cost_type":"COST",' + _legacy_basis(power_units) +
         '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
         '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}'
     )
@@ -758,9 +762,10 @@ def test_cost_relative_base_variable_rejected(fresh_db, power_units):
         _insert_thermal(fresh_db, 2, topo, _thermal_production_cost(power_units))
 
 
-def test_cost_natural_units_variable_accepted(fresh_db):
+@pytest.mark.parametrize("power_units", [None, "NATURAL_UNITS"])
+def test_cost_natural_units_variable_accepted(fresh_db, power_units):
     topo = _setup_topology(fresh_db)
-    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost(power_units))
     (count,) = fresh_db.execute("SELECT COUNT(*) FROM thermal_generators").fetchone()
     assert count == 1
 
@@ -769,7 +774,7 @@ def test_cost_update_relative_base_rejected(fresh_db):
     """UPDATE that changes operation_cost's variable_operation_cost to a
     relative-base payload is rejected; production_cost derives from it."""
     topo = _setup_topology(fresh_db)
-    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost())
     with pytest.raises(
         sqlite3.IntegrityError, match="power_units must be NATURAL_UNITS"
     ):
@@ -783,11 +788,11 @@ def test_production_cost_generated_column_rejects_direct_update(fresh_db):
     """production_cost is GENERATED ALWAYS AS; SQLite itself refuses a direct
     UPDATE, independent of any CHECK."""
     topo = _setup_topology(fresh_db)
-    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost("NATURAL_UNITS"))
+    _insert_thermal(fresh_db, 2, topo, _thermal_production_cost())
     with pytest.raises(sqlite3.OperationalError, match="generated column"):
         fresh_db.execute(
             "UPDATE thermal_generators SET production_cost = ? WHERE id = 2",
-            (_thermal_production_cost("NATURAL_UNITS"),),
+            (_thermal_production_cost(),),
         )
 
 
@@ -813,12 +818,12 @@ def test_renewable_curtailment_cost_relative_base_rejected(fresh_db):
         )
 
 
-def _storage_cost(charge_pu="NATURAL_UNITS", discharge_pu="NATURAL_UNITS"):
-    """A StorageCost payload. power_units live under charge/discharge_variable_cost
+def _storage_cost(charge_pu=None, discharge_pu=None):
+    """A StorageCost payload. A legacy power_units lives under charge/discharge_variable_cost
     (CostCurve), NOT under a `variable` key (that key does not exist on StorageCost)."""
     def cc(pu):
         return (
-            '{"variable_cost_type":"COST","power_units":"' + pu + '",'
+            '{"variable_cost_type":"COST",' + _legacy_basis(pu) +
             '"value_curve":{"curve_type":"INPUT_OUTPUT","function_data":'
             '{"function_type":"LINEAR","proportional_term":0,"constant_term":0}}}'
         )
