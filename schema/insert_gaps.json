@@ -14,12 +14,6 @@
       "peak_reactive_power",
       "power_units"
     ],
-    "AreaInterchange": [
-      "active_power_flow",
-      "available",
-      "from_area",
-      "to_area"
-    ],
     "DemandRequirement": [
       "conformity",
       "growth_rate",
@@ -110,28 +104,11 @@
       "max_impedance_reactive_power",
       "operation_cost"
     ],
-    "Line": [
-      "active_power_flow",
-      "angle_limits",
-      "available",
-      "rating_b",
-      "rating_c",
-      "reactive_power_flow"
-    ],
     "LoadZone": [
       "base_power",
       "peak_active_power",
       "peak_reactive_power",
       "power_units"
-    ],
-    "MonitoredLine": [
-      "active_power_flow",
-      "angle_limits",
-      "available",
-      "flow_limits",
-      "rating_b",
-      "rating_c",
-      "reactive_power_flow"
     ],
     "MotorLoad": [
       "active_power",
@@ -202,14 +179,6 @@
     ],
     "StorageTechnology": [
       "capital_costs"
-    ],
-    "TModelHVDCLine": [
-      "active_power_flow",
-      "active_power_limits_from",
-      "active_power_limits_to",
-      "available",
-      "c",
-      "l"
     ],
     "ThermalMultiStart": [
       "dynamic_injector",

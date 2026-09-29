@@ -253,4 +253,5 @@ def test_checked_in_manifest_is_current():
 def test_gap_file_lists_known_gaps():
     gaps = json.loads((SCHEMA_DIR / "insert_gaps.json").read_text(encoding="utf-8"))["gaps"]
     assert "ACBus" not in gaps
-    assert "available" in gaps["Line"]
+    assert "Line" not in gaps
+    assert gaps["TwoTerminalLCCLine"] == ["transfer_setpoint"]

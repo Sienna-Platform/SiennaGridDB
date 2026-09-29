@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 451
+EXPECTED_UNIT_CONVENTIONS = 463
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1335,8 +1335,6 @@ def test_merged_hvdc_columns_registered(db):
         ("base_voltage", {"Voltage/kV"}),
         ("angle", {"Angle/rad"}),
         ("angle_limits", {"Angle/rad"}),
-        ("active_power_flow", {"ActivePower/MW"}),
-        ("reactive_power_flow", {"ReactivePower/MVAr"}),
         ("max_active_power", {"ActivePower/MW"}),
         ("time_at_status", {"OperationalDuration/min"}),
         ("load_response", {"PowerPerFrequency/MW/Hz"}),
@@ -1357,6 +1355,9 @@ def test_merged_hvdc_columns_registered(db):
         # Unit depends on a basis choice or a sibling control mode: one arm per
         # value of the owning component's discriminating field.
         ("rating_from", {"ApparentPower/MVA", "ApparentPower/pu"}),
+        ("active_power_flow", {"ActivePower/MW", "ActivePower/pu"}),
+        ("reactive_power_flow", {"ReactivePower/MVAr", "ReactivePower/pu"}),
+        ("rating_b", {"ApparentPower/MVA", "ApparentPower/pu"}),
         ("reactive_power_to", {"ReactivePower/MVAr", "ReactivePower/pu"}),
         ("power_trajectory", {"ActivePower/MW", "ActivePower/pu"}),
         ("r", {"Resistance/ohm", "Resistance/pu"}),
