@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 3; -- bump on every schema or registry change
+PRAGMA user_version = 4; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -33,6 +33,8 @@ DROP TABLE IF EXISTS transformer_circuits;
 DROP TABLE IF EXISTS planning_regions;
 
 DROP TABLE IF EXISTS transmission_interchanges;
+
+DROP TABLE IF EXISTS reserves;
 
 DROP TABLE IF EXISTS entities;
 
@@ -332,6 +334,25 @@ CREATE TABLE transmission_interchanges (
     max_flow_to REAL NOT NULL,
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- Reserve products (PSY OnlineReserve, OfflineReserve, GroupReserve), one table
+-- discriminated by entities.entity_type. enforce_reserves_type_shape_* keep each
+-- row to its type's fields. Contributors are service_associations rows.
+CREATE TABLE reserves (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    time_frame REAL NULL, -- Units: min
+    requirement REAL NOT NULL, -- Units: MW
+    sustained_time REAL NULL, -- Units: min
+    max_output_fraction REAL NULL CHECK (max_output_fraction BETWEEN 0 AND 1),
+    max_participation_factor REAL NULL CHECK (max_participation_factor BETWEEN 0 AND 1),
+    deployed_fraction REAL NULL CHECK (deployed_fraction BETWEEN 0 AND 1),
+    -- The schemas flatten PSY's direction type parameter into this enum:
+    reserve_direction TEXT NULL CHECK (reserve_direction IN ('UP', 'DOWN', 'SYMMETRIC')),
+    -- Operating reserve demand curve (CostCurve), verbatim; NULL when absent:
+    variable TEXT NULL CHECK (variable IS NULL OR json_valid(variable))
 ) strict;
 
 -- Existing thermal generation units (ThermalStandard, ThermalMultiStart).

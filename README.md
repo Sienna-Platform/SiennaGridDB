@@ -29,12 +29,10 @@ Read this before building on it:
 - **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
   `PRAGMA user_version` is bumped on every schema change but nothing reads it.
-- **Roughly half the data model is typed.** 44 of 96 upstream components have a table.
-  Dynamics has none; services/reserves and the investment policy layer have none. See the
-  open coverage issue.
-- **The unit registry is the load-bearing deliverable** — 405 column conventions, sealed
-  and tamper-guarded, readable through the `column_units` view as an authoritative
-  `(table, column) -> (quantity_kind, unit, basis rule)` map.
+- **Roughly half the data model is typed.**
+  Dynamics and the investment policy layer have no tables; see the open coverage issue.
+- **The unit registry is the load-bearing deliverable.**
+  Its column conventions are sealed, tamper-guarded, and readable through the `column_units` view as an authoritative `(table, column) -> (quantity_kind, unit, basis rule)` map.
 
 ## How To(s)
 
@@ -128,7 +126,7 @@ it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_traject
 unregistered, basis-dependent on the attribute `power_units`, same as VSC's
 `dc_setpoint_*`).
 
-Current registry: **41 quantity kinds, 66 allowed units, 405 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 411 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`

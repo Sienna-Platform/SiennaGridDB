@@ -287,6 +287,12 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('renewable_generators', 'reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial reactive power setpoint in MVAr'),
     ('renewable_generators', 'reactive_power_limits', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'JSON {min, max}, per-unit on the row''s base_power'),
     ('renewable_generators', 'reactive_power_limits', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'JSON {min, max} in MVAr'),
+    ('reserves', 'deployed_fraction', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Fraction of the procured reserve assumed deployed'),
+    ('reserves', 'max_output_fraction', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Maximum fraction of each device''s output assignable to the reserve'),
+    ('reserves', 'max_participation_factor', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Maximum portion of the reserve one device may contribute'),
+    ('reserves', 'requirement', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Required reserve quantity, or the scaling factor of an attached requirement time series'),
+    ('reserves', 'sustained_time', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'Time the reserve contribution must be sustained'),
+    ('reserves', 'time_frame', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'Saturation time frame to provide the reserve contribution'),
     ('sources', 'active_power', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Active power injection setpoint, per-unit on the row''s base_power'),
     ('sources', 'active_power', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Active power injection setpoint in MW'),
     ('sources', 'active_power_limits', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Active power limits (JSON min/max), per-unit on the row''s base_power'),
@@ -547,4 +553,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'ab9137a875d33a3278f89af3ad2a0074d9aba82477a3c1c1a43ff11114b4096b', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '3998b57588b88a9c587249ae959cc03c665e48acfe71bec10114907c8b5ce53e', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
