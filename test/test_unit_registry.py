@@ -1338,8 +1338,8 @@ def test_merged_hvdc_columns_registered(db):
         # Curve blobs whose numeric leaves carry different dimensions.
         ("unserved_demand_curve", None),
         # Unambiguous unit -> registered, so a writer cannot get it wrong.
-        ("rectifier_delay_angle", "Angle/deg"),
-        ("inverter_extinction_angle_limits", "Angle/deg"),
+        ("rectifier_delay_angle", "Angle/rad"),
+        ("inverter_extinction_angle_limits", "Angle/rad"),
         ("rectifier_bridges", "Dimensionless/1"),
         ("inverter_base_voltage", "Voltage/kV"),
         ("dc_current", "CurrentFlow/A"),

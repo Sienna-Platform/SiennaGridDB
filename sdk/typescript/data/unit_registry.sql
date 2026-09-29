@@ -132,8 +132,8 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'efficiency', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'Efficiency'),
     ('attributes', 'inverter_base_voltage', 'Voltage', 'kV', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter commutating base voltage'),
     ('attributes', 'inverter_bridges', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter bridge count'),
-    ('attributes', 'inverter_extinction_angle', 'Angle', 'deg', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter extinction angle'),
-    ('attributes', 'inverter_extinction_angle_limits', 'Angle', 'deg', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter extinction-angle limits'),
+    ('attributes', 'inverter_extinction_angle', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter extinction angle'),
+    ('attributes', 'inverter_extinction_angle_limits', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter extinction-angle limits'),
     ('attributes', 'inverter_tap_limits', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter tap limits'),
     ('attributes', 'inverter_tap_setting', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter tap setting'),
     ('attributes', 'inverter_tap_step', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC inverter tap step'),
@@ -162,8 +162,8 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'reactive_power_to', 'ReactivePower', 'MVAr', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC to-terminal reactive power'),
     ('attributes', 'rectifier_base_voltage', 'Voltage', 'kV', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier commutating base voltage'),
     ('attributes', 'rectifier_bridges', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier bridge count'),
-    ('attributes', 'rectifier_delay_angle', 'Angle', 'deg', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier firing (delay) angle'),
-    ('attributes', 'rectifier_delay_angle_limits', 'Angle', 'deg', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier firing-angle limits'),
+    ('attributes', 'rectifier_delay_angle', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier firing (delay) angle'),
+    ('attributes', 'rectifier_delay_angle_limits', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier firing-angle limits'),
     ('attributes', 'rectifier_tap_limits', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier tap limits'),
     ('attributes', 'rectifier_tap_setting', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier tap setting'),
     ('attributes', 'rectifier_tap_step', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'LCC rectifier tap step'),
@@ -547,4 +547,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'ab9137a875d33a3278f89af3ad2a0074d9aba82477a3c1c1a43ff11114b4096b', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '658f04e22f3cde95b193e019562392a5af6de0dac3de6c52e4c01549fde32bb9', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

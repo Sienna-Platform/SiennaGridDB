@@ -2656,12 +2656,12 @@
         {
           "field": "inverter_extinction_angle",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
           "field": "inverter_extinction_angle_limits",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
           "field": "inverter_rc",
@@ -2731,12 +2731,12 @@
         {
           "field": "rectifier_delay_angle",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
           "field": "rectifier_delay_angle_limits",
           "quantity_kind": "Angle",
-          "unit": "deg"
+          "unit": "rad"
         },
         {
           "field": "rectifier_rc",
