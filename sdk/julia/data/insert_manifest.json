@@ -851,6 +851,14 @@
           "path": "available"
         },
         {
+          "encode": "real",
+          "path": "Y.real"
+        },
+        {
+          "encode": "real",
+          "path": "Y.imag"
+        },
+        {
           "encode": "text",
           "path": "admittance_units"
         },
@@ -860,11 +868,9 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'fixed_admittance', 'FixedAdmittance')",
-      "gaps": [
-        "Y"
-      ],
+      "gaps": [],
       "rank": 2,
-      "row_sql": "INSERT INTO fixed_admittance (id, name, bus, available, admittance_units, base_power) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 'COMPONENT_MVAR'), ?)",
+      "row_sql": "INSERT INTO fixed_admittance (id, name, bus, available, y_g, y_b, admittance_units, base_power) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_MVAR'), ?)",
       "skip": [],
       "table": "fixed_admittance"
     },

@@ -112,6 +112,12 @@ def test_derived_columns_bind_json_paths(manifest):
     paths = [b["path"] for b in manifest["components"]["AreaInterchange"]["bindings"]]
     assert "flow_limits.from_to" in paths
     assert "flow_limits.to_from" in paths
+    shunt = manifest["components"]["FixedAdmittance"]
+    columns = shunt["row_sql"].split("(", 1)[1].split(")", 1)[0].split(", ")
+    assert len(columns) == len(shunt["bindings"])
+    bound = dict(zip(columns, (b["path"] for b in shunt["bindings"]), strict=True))
+    assert (bound["y_g"], bound["y_b"]) == ("Y.real", "Y.imag")
+    assert "Y" not in shunt["gaps"]
 
 
 def test_not_null_column_without_source_blocks_generation():
