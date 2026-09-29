@@ -24,6 +24,11 @@ describe("encodings", () => {
     expect(() => encode("int", 1.5)).toThrow(EncodeError);
     expect(() => encode("int", true)).toThrow(EncodeError);
   });
+  test("int stays in Int64", () => {
+    expect(encode("int", -(2 ** 63))).toBe(-(2n ** 63n));
+    expect(() => encode("int", 2 ** 63)).toThrow(EncodeError);
+    expect(() => encode("int", 1e20)).toThrow(EncodeError);
+  });
   test("others", () => {
     expect(encode("real", 2)).toBe(2);
     expect(() => encode("real", "1")).toThrow(EncodeError);
