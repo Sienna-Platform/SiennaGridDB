@@ -17,6 +17,9 @@ def _connect(path):
         )
     conn = sqlite3.connect(path, isolation_level=None)
     conn.execute("PRAGMA foreign_keys = ON")
+    # A document inserts in one savepoint, so every row opens a statement journal;
+    # on disk that file I/O dominates the insert. Set at open: no temp tables yet.
+    conn.execute("PRAGMA temp_store = MEMORY")
     return conn
 
 
