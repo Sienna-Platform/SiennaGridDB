@@ -53,6 +53,49 @@ mktempdir() do dir
             end
         end
 
+        @testset "explicit null optional fields read as absent" begin
+            doc = load_json(doc_path)
+            optional = (
+                "units",
+                "quantity_kind",
+                "unit_system",
+                "component_field",
+                "application_data",
+            )
+            for row in doc["time_series_associations"], key in optional
+                get!(row, key, nothing)
+            end
+            db_path = joinpath(mktempdir(), "nulls.sqlite")
+            db = create_database(db_path)
+            insert_document!(db, doc; time_series=sidecar)
+            close(db)
+            @test python_dump(db_path) == expected_dump
+        end
+
+        @testset "a plant owns series as a supplemental attribute" begin
+            # Plant-type attributes are stored in plants, not supplemental_attributes
+            doc = load_json(doc_path)
+            plant = "ThermalPowerPlant"
+            attribute = Dict{String, Any}("id" => 3, "name" => "p3")
+            doc["supplemental_attributes"] = Any[attribute]
+            doc["supplemental_attribute_associations"][1]["attribute_type"] = plant
+            for row in doc["time_series_associations"]
+                row["owner_id"] == 3 && (row["owner_type"] = plant)
+            end
+            fresh(mktempdir()) do db
+                report = insert_document!(db, doc; time_series=sidecar)
+                @test report.inserted["plants"] == 1
+                @test report.inserted["time_series_associations"] == 19
+                geo = query(
+                    db,
+                    "SELECT v.timestep, v.element, v.value FROM time_series_associations a " *
+                    "JOIN static_time_series v ON v.uri = a.uri WHERE a.owner_id = 3 " *
+                    "AND a.time_series_type = 'SingleTimeSeries' ORDER BY 1, 2",
+                )
+                @test geo == [(0, 0, 7.0), (1, 0, 8.0), (2, 0, 9.0)]
+            end
+        end
+
         @testset "a symlinked read-only sidecar is left alone" begin
             linked = mktempdir()
             target = joinpath(mktempdir(), "elsewhere.h5")

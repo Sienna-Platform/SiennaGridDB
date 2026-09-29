@@ -550,6 +550,24 @@ def test_association_owner_category_attribute_domain_enforced(fresh_db):
     _insert_association(fresh_db, 2, owner_category="SupplementalAttribute")
 
 
+def test_association_owner_category_attribute_accepts_plant(fresh_db):
+    """Plant-type attributes live in plants, so a plant owns series as a
+    SupplementalAttribute, on insert and update alike."""
+    make_entity(fresh_db, 1)
+    make_entity(fresh_db, 3, entity_table="plants")
+    fresh_db.execute(
+        "INSERT INTO plants(id, name, TYPE, value) VALUES (3, 'p3', 'ThermalPowerPlant', '{}')"
+    )
+    _insert_association(fresh_db, 3, owner_category="SupplementalAttribute")
+    _insert_association(fresh_db, 1, name="other")
+    fresh_db.execute(
+        "UPDATE time_series_associations SET owner_id = 3, "
+        "owner_category = 'SupplementalAttribute' WHERE owner_id = 1"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
+        fresh_db.execute("UPDATE time_series_associations SET owner_id = 1")
+
+
 def test_association_categories_and_hashes_readable_directly(fresh_db):
     """No decode view needed anymore: owner_category/time_series_type are
     already wire-spelled TEXT, and the hash columns are already lowercase hex
