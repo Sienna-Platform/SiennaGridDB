@@ -442,37 +442,26 @@ CREATE TABLE storage_technologies (
 );
 
 -- transport_technologies: generated from NodalACTransportTechnology, NodalHVDCTransportTechnology, AggregateTransportTechnology
+-- Stored via the generic `attributes` table, not as columns:
+-- capacity_limits, start_region, end_region, start_node, end_node, line_loss, resistance, reactance, voltage
 CREATE TABLE transport_technologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NOT NULL,
     power_systems_type TEXT NOT NULL,
-    start_node INTEGER NULL,
-    end_node INTEGER NULL,
-    capacity_limits JSON NULL, -- Units: MW
     capital_costs JSON NULL,
-    resistance REAL NULL DEFAULT 0.0, -- Units: ohm
-    voltage REAL NULL DEFAULT 0.0, -- Units: kV
     unit_size REAL NULL DEFAULT 0.0, -- Units: MW
-    reactance REAL NULL DEFAULT 0.0, -- Units: ohm
-    financial_data JSON NOT NULL,
-    line_loss JSON NULL, -- Units: 1
-    start_region INTEGER NULL,
-    end_region INTEGER NULL
+    financial_data JSON NOT NULL
 );
 
 -- demand_technologies: generated from DemandRequirement
 -- Stored via the generic `attributes` table, not as columns:
--- peak_demand_mw, value_of_lost_load, unserved_demand_curve
+-- peak_demand_mw, value_of_lost_load, unserved_demand_curve, conformity, growth_rate, new_construction_year, new_demand_mw
 CREATE TABLE demand_technologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     available BOOLEAN NULL DEFAULT TRUE,
     power_systems_type TEXT NOT NULL,
-    conformity TEXT NULL DEFAULT 'UNDEFINED',
-    growth_rate REAL NULL DEFAULT 0.0, -- Units: 1
-    new_demand_mw REAL NULL DEFAULT 0.0, -- Units: MW
-    new_construction_year INTEGER NULL DEFAULT 2020,
     region JSON NULL
 );
 
