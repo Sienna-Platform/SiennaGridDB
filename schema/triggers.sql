@@ -1967,6 +1967,48 @@ SELECT
 
 END;
 
+-- Arrays are shared by uri, so an association's delete (or a cascade from its
+-- owner) drops the values only when no remaining association names the uri.
+-- feature_sets rows are shared the same way and deliberately never deleted.
+CREATE TRIGGER IF NOT EXISTS delete_orphan_static_time_series AFTER
+DELETE ON time_series_associations
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations
+        WHERE
+            uri = OLD.uri
+    )
+BEGIN
+DELETE FROM static_time_series
+WHERE
+    uri = OLD.uri;
+
+END;
+
+-- Neither trigger sees an INSERT OR REPLACE conflict delete (recursive_triggers
+-- is off) or a one-statement uri swap across rows, which drops a still-named
+-- array; the orphaned_time_series view lists what both leave behind.
+CREATE TRIGGER IF NOT EXISTS delete_orphan_static_time_series_update AFTER
+UPDATE
+    OF uri ON time_series_associations
+    WHEN OLD.uri <> NEW.uri
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations
+        WHERE
+            uri = OLD.uri
+    )
+BEGIN
+DELETE FROM static_time_series
+WHERE
+    uri = OLD.uri;
+
+END;
+
 -- =============================================================================
 -- Cost Payload Power-Units Guard
 -- column_conventions.json registers cost curves in natural units only, with no

@@ -53,3 +53,109 @@ WHERE
         OR rl.entity_id IS NOT NULL
         OR oc.entity_id IS NOT NULL
     );
+
+-- Every time series reference in a stored payload (association_id,
+-- *_association_id, fuel_cost_time_series) no association resolves; empty after
+-- a complete insert. test_dangling_view_covers_every_reference_column checks it.
+CREATE VIEW IF NOT EXISTS dangling_time_series_references AS
+WITH
+    payloads (entity_id, source_table, source_column, payload) AS (
+        SELECT entity_id, 'attributes', name, value FROM attributes
+        UNION ALL
+        SELECT id, 'hydro_generators', 'operation_cost', operation_cost FROM hydro_generators
+        UNION ALL
+        SELECT id, 'hydro_reservoirs', 'head_to_volume_factor', head_to_volume_factor
+        FROM hydro_reservoirs
+        UNION ALL
+        SELECT id, 'hydro_reservoirs', 'operation_cost', operation_cost FROM hydro_reservoirs
+        UNION ALL
+        SELECT id, 'plants', 'value', value FROM plants
+        UNION ALL
+        SELECT id, 'point_to_point_bids', 'spread_bid', spread_bid FROM point_to_point_bids
+        UNION ALL
+        SELECT id, 'renewable_generators', 'operation_cost', operation_cost
+        FROM renewable_generators
+        UNION ALL
+        SELECT id, 'sources', 'operation_cost', operation_cost FROM sources
+        UNION ALL
+        SELECT id, 'storage_technologies', 'operation_costs', operation_costs
+        FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_units', 'operation_cost', operation_cost FROM storage_units
+        UNION ALL
+        SELECT id, 'supplemental_attributes', 'value', value FROM supplemental_attributes
+        UNION ALL
+        SELECT id, 'supply_technologies', 'capital_costs', capital_costs FROM supply_technologies
+        UNION ALL
+        SELECT id, 'supply_technologies', 'operation_costs', operation_costs
+        FROM supply_technologies
+        UNION ALL
+        SELECT id, 'thermal_generators', 'operation_cost', operation_cost FROM thermal_generators
+        UNION ALL
+        SELECT id, 'transport_technologies', 'capital_costs', capital_costs
+        FROM transport_technologies
+        UNION ALL
+        SELECT id, 'virtual_participants', 'operation_cost', operation_cost
+        FROM virtual_participants
+    )
+SELECT
+    p.entity_id,
+    p.source_table,
+    p.source_column,
+    t.fullkey AS path,
+    t.value AS association_id
+FROM
+    payloads p,
+    json_tree(p.payload) t
+WHERE
+    json_valid(p.payload)
+    AND t.type = 'integer'
+    -- A bare integer payload has no key: its column (or attribute) names it.
+    AND (
+        coalesce(t.key, p.source_column) IN ('association_id', 'fuel_cost_time_series')
+        OR coalesce(t.key, p.source_column) GLOB '*_association_id'
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations a
+        WHERE
+            a.id = t.value
+    );
+
+-- Values no association names, and associations whose uri has no values: what
+-- the orphan cleanup triggers cannot see (INSERT OR REPLACE, a one-statement uri
+-- swap). Empty after an SDK insert.
+CREATE VIEW IF NOT EXISTS orphaned_time_series AS
+SELECT
+    'values without association' AS problem,
+    v.uri,
+    NULL AS association_id
+FROM
+    (SELECT DISTINCT uri FROM static_time_series) v
+WHERE
+    NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations a
+        WHERE
+            a.uri = v.uri
+    )
+UNION ALL
+SELECT
+    'association without values',
+    a.uri,
+    a.id
+FROM
+    time_series_associations a
+WHERE
+    NOT EXISTS (
+        SELECT
+            1
+        FROM
+            static_time_series v
+        WHERE
+            v.uri = a.uri
+    );
