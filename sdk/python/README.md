@@ -14,5 +14,5 @@ print(report.to_json())   # inserted / skipped_fields / unsupported
 
 - Fields GridDB has no column for yet are counted in `report.skipped_fields`, not
   written. Pass `strict=True` to raise instead.
-- Cost payloads must be in `NATURAL_UNITS`; the database rejects anything else.
+- Cost curves are natural units and carry no basis; the database rejects a legacy `power_units` other than `NATURAL_UNITS`.
 - CLI: `python3 -m sienna_griddb_tools build system.json system.sqlite`.

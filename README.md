@@ -92,8 +92,8 @@ resistances, and similar) are **stored flexibly in per-unit on a component base 
 natural units**. A per-row discriminator column, `parameter_units`
 (`COMPONENT_BASE` | `NATURAL_UNITS`), records which basis a row uses. `r`/`x` are scalar
 `REAL`; `b`/`g` are JSON `{from, to}` shunt halves (stored as `json_valid`-checked text).
-Costs stay in natural currency units, and the cost JSON blobs must carry
-`NATURAL_UNITS`. The schemas' one `OperationalCost` object is stored verbatim in
+Cost curves are natural units (x axis MW) and carry no basis; a legacy `power_units` other than `NATURAL_UNITS` is rejected.
+The schemas' one `OperationalCost` object is stored verbatim in
 `operation_cost` on the generator tables, `variable_operation_cost` member included.
 `production_cost` is a `GENERATED ALWAYS AS` column deriving
 `json_extract(operation_cost, '$.variable_operation_cost')` -- a queryable column for
@@ -163,9 +163,8 @@ Two kinds of value sit outside `unit_conventions` entirely:
 
 - **Time-series values** — the unit lives on `time_series_metadata` (joined by `uuid`), not
   on the row you're reading; see [Time-series units](#time-series-units) below.
-- **Cost JSON payloads** (`operation_cost` / `production_cost`) — carry their own embedded
-  `power_units` key. Triggers require it to be `NATURAL_UNITS`, since the DB stores no base
-  to resolve `COMPONENT_BASE` against.
+- **Cost JSON payloads** (`operation_cost` / `production_cost`): cost curves are natural units and carry no basis.
+  Triggers reject a legacy `power_units` other than `NATURAL_UNITS`, since the DB stores no base to resolve `COMPONENT_BASE` against.
 
 ### Time-series units
 
@@ -383,8 +382,8 @@ written out in that file.
   At insert time it is counted in the returned report instead of being written;
   `strict` mode raises instead. Regenerating the manifest after a schema update closes
   these gaps with no runtime change.
-- **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
-  and the runtimes do not convert.
+- **Costs.** Cost curves are natural units and carry no basis; the triggers reject a legacy `power_units` other than `NATURAL_UNITS`.
+  The runtimes do not convert.
 - **Not supported yet.** `LoadZone`, services, `service_associations`,
   `time_series_associations`, and `ext` have no table. They are reported, not written.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected

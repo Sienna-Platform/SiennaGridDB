@@ -200,6 +200,9 @@ infrastore's lowercase spelling — see §6):
 - **`NATURAL_UNITS`** — a physical unit (ohm, S, MVAr, MW, kV). Self-contained, no base needed.
 - **`COMPONENT_BASE`** — dimensionless pu against bases reachable from the row.
 
+Cost curves sit outside this axis: they are natural units (x axis MW) and carry no basis.
+A legacy `power_units` other than `NATURAL_UNITS` is rejected.
+
 ### Why two basis values
 
 Upstream's `UnitSystem` enum is exactly `COMPONENT_BASE` / `NATURAL_UNITS`, and `unit_basis`
