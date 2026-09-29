@@ -12,6 +12,9 @@ function connect(path::AbstractString)
         throw(SQLiteVersionError("SQLite $found is older than the required $MIN_SQLITE"))
     end
     DBInterface.execute(db, "PRAGMA foreign_keys = ON")
+    # A document inserts in one savepoint, so every row opens a statement journal;
+    # on disk that file I/O dominates the insert. Set at open: no temp tables yet.
+    DBInterface.execute(db, "PRAGMA temp_store = MEMORY")
     return db
 end
 

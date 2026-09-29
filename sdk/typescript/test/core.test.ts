@@ -91,6 +91,7 @@ test("openDatabase checks user_version and enables foreign keys", () => {
   createDatabase(path).close();
   const db = openDatabase(path);
   expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
+  expect(db.pragma("temp_store", { simple: true })).toBe(2);
   db.close();
   const raw = new Database(path);
   raw.pragma("user_version = 99");

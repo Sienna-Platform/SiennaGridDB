@@ -62,6 +62,7 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
             @test_throws DatabaseExistsError create_database(path)
             db = open_database(path)
             @test first(DBInterface.execute(db, "PRAGMA foreign_keys"))[1] == 1
+            @test first(DBInterface.execute(db, "PRAGMA temp_store"))[1] == 2
             DBInterface.execute(db, "PRAGMA user_version = 99")
             close(db)
             @test_throws ManifestMismatchError open_database(path)

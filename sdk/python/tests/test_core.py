@@ -70,6 +70,7 @@ def test_create_database_seeds_vocabulary(tmp_path):
     n = conn.execute("SELECT count(*) FROM entity_types").fetchone()[0]
     assert n == len(load_manifest().vocabulary["entity_types"])
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    assert conn.execute("PRAGMA temp_store").fetchone()[0] == 2
     seed_vocabulary(conn)
     assert conn.execute("SELECT count(*) FROM entity_types").fetchone()[0] == n
 
