@@ -14,7 +14,7 @@
 
 -- thermal_generators: generated from ThermalStandard, ThermalMultiStart
 -- Stored via the generic `attributes` table, not as columns:
--- power_trajectory, start_time_limits, start_types, time_at_status
+-- power_trajectory, start_time_limits, start_types, time_at_status, dynamic_injector
 CREATE TABLE thermal_generators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -33,11 +33,12 @@ CREATE TABLE thermal_generators (
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     time_limits JSON NULL, -- Units: min
     prime_mover_type TEXT NULL DEFAULT 'OT' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types (name),
-    fuel TEXT NULL DEFAULT 'OTHER' CHECK (fuel IN ('ANTHRACITE_COAL', 'BITUMINOUS_COAL', 'LIGNITE_COAL', 'SUBBITUMINOUS_COAL', 'WASTE_COAL', 'REFINED_COAL', 'SYNTHESIS_GAS_COAL', 'DISTILLATE_FUEL_OIL', 'JET_FUEL', 'KEROSENE', 'PETROLEUM_COKE', 'RESIDUAL_FUEL_OIL', 'PROPANE', 'SYNTHESIS_GAS_PETROLEUM_COKE', 'WASTE_OIL', 'BLAST_FURNACE_GAS', 'NATURAL_GAS', 'OTHER_GAS', 'AG_BYPRODUCT', 'MUNICIPAL_WASTE', 'OTHER_BIOMASS_SOLIDS', 'WOOD_WASTE_SOLIDS', 'OTHER_BIOMASS_LIQUIDS', 'SLUDGE_WASTE', 'BLACK_LIQUOR', 'WOOD_WASTE_LIQUIDS', 'LANDFILL_GAS', 'OTHER_BIOMASS_GAS', 'NUCLEAR', 'WASTE_HEAT', 'TIRE_DERIVED_FUEL', 'COAL', 'GEOTHERMAL', 'OTHER')) REFERENCES fuels (name),
-    dynamic_injector INTEGER NULL
+    fuel TEXT NULL DEFAULT 'OTHER' CHECK (fuel IN ('ANTHRACITE_COAL', 'BITUMINOUS_COAL', 'LIGNITE_COAL', 'SUBBITUMINOUS_COAL', 'WASTE_COAL', 'REFINED_COAL', 'SYNTHESIS_GAS_COAL', 'DISTILLATE_FUEL_OIL', 'JET_FUEL', 'KEROSENE', 'PETROLEUM_COKE', 'RESIDUAL_FUEL_OIL', 'PROPANE', 'SYNTHESIS_GAS_PETROLEUM_COKE', 'WASTE_OIL', 'BLAST_FURNACE_GAS', 'NATURAL_GAS', 'OTHER_GAS', 'AG_BYPRODUCT', 'MUNICIPAL_WASTE', 'OTHER_BIOMASS_SOLIDS', 'WOOD_WASTE_SOLIDS', 'OTHER_BIOMASS_LIQUIDS', 'SLUDGE_WASTE', 'BLACK_LIQUOR', 'WOOD_WASTE_LIQUIDS', 'LANDFILL_GAS', 'OTHER_BIOMASS_GAS', 'NUCLEAR', 'WASTE_HEAT', 'TIRE_DERIVED_FUEL', 'COAL', 'GEOTHERMAL', 'OTHER')) REFERENCES fuels (name)
 );
 
 -- renewable_generators: generated from RenewableDispatch, RenewableNonDispatch
+-- Stored via the generic `attributes` table, not as columns:
+-- dynamic_injector
 CREATE TABLE renewable_generators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -51,13 +52,12 @@ CREATE TABLE renewable_generators (
     power_factor REAL NOT NULL, -- Units: 1
     operation_cost JSON NULL,
     base_power REAL NOT NULL, -- Units: MVA
-    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    dynamic_injector INTEGER NULL
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 );
 
 -- hydro_generators: generated from HydroDispatch, HydroTurbine, HydroPumpTurbine
 -- Stored via the generic `attributes` table, not as columns:
--- efficiency, active_power_limits_pump, turbine_type, time_at_status, active_power_pump, minimum_time, transition_time
+-- efficiency, active_power_limits_pump, turbine_type, time_at_status, active_power_pump, minimum_time, transition_time, dynamic_injector
 CREATE TABLE hydro_generators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -75,7 +75,6 @@ CREATE TABLE hydro_generators (
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     status TEXT NULL DEFAULT 'OFFLINE' CHECK (status IN ('OFFLINE', 'ONLINE', 'STARTUP', 'SHUTDOWN')),
     operation_cost JSON NOT NULL,
-    dynamic_injector INTEGER NULL,
     commitment_mode TEXT NULL DEFAULT 'COMMITTED' CHECK (commitment_mode IN ('UNCOMMITTED', 'COMMITTED', 'SELF_SCHEDULED', 'RELIABILITY', 'MUST_RUN')),
     powerhouse_elevation REAL NULL DEFAULT 0.0, -- Units: m
     outflow_limits JSON NULL, -- Units: m3/s
@@ -85,6 +84,8 @@ CREATE TABLE hydro_generators (
 );
 
 -- storage_units: generated from EnergyReservoirStorage
+-- Stored via the generic `attributes` table, not as columns:
+-- dynamic_injector
 CREATE TABLE storage_units (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -111,8 +112,7 @@ CREATE TABLE storage_units (
     cycle_limits INTEGER NULL DEFAULT 10000, -- Units: 1
     ramp_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu/min, NATURAL_UNITS: MW/min)
     self_discharge REAL NULL DEFAULT 0.0, -- Units: 1/min
-    standing_loss REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    dynamic_injector INTEGER NULL
+    standing_loss REAL NULL DEFAULT 0.0 -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
 );
 
 -- hydro_reservoirs: generated from HydroReservoir
@@ -137,14 +137,13 @@ CREATE TABLE hydro_reservoirs (
 
 -- loads: generated from PowerLoad, StandardLoad, InterruptiblePowerLoad, InterruptibleStandardLoad, MotorLoad, ExponentialLoad, ShiftablePowerLoad
 -- Stored via the generic `attributes` table, not as columns:
--- available, active_power, reactive_power, max_active_power, max_reactive_power, conformity, operation_cost, constant_active_power, constant_reactive_power, current_active_power, current_reactive_power, impedance_active_power, impedance_reactive_power, max_constant_active_power, max_constant_reactive_power, max_current_active_power, max_current_reactive_power, max_impedance_active_power, max_impedance_reactive_power, alpha, beta, motor_technology, rating, reactive_power_limits, active_power_limits, load_balance_time_horizon
+-- available, active_power, reactive_power, max_active_power, max_reactive_power, conformity, operation_cost, constant_active_power, constant_reactive_power, current_active_power, current_reactive_power, impedance_active_power, impedance_reactive_power, max_constant_active_power, max_constant_reactive_power, max_current_active_power, max_current_reactive_power, max_impedance_active_power, max_impedance_reactive_power, alpha, beta, motor_technology, rating, reactive_power_limits, active_power_limits, load_balance_time_horizon, dynamic_injector
 CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     base_power REAL NOT NULL, -- Units: MVA
-    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    dynamic_injector INTEGER NULL
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 );
 
 -- transmission_lines: generated from Line, MonitoredLine
@@ -280,6 +279,8 @@ CREATE TABLE tmodel_hvdc_lines (
 );
 
 -- synchronous_condensers: generated from SynchronousCondenser
+-- Stored via the generic `attributes` table, not as columns:
+-- dynamic_injector
 CREATE TABLE synchronous_condensers (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -294,6 +295,8 @@ CREATE TABLE synchronous_condensers (
 );
 
 -- fixed_admittance: generated from FixedAdmittance
+-- Stored via the generic `attributes` table, not as columns:
+-- dynamic_injector
 CREATE TABLE fixed_admittance (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -305,6 +308,8 @@ CREATE TABLE fixed_admittance (
 );
 
 -- switched_admittance: generated from SwitchedAdmittance
+-- Stored via the generic `attributes` table, not as columns:
+-- dynamic_injector
 CREATE TABLE switched_admittance (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -321,6 +326,8 @@ CREATE TABLE switched_admittance (
 );
 
 -- sources: generated from Source
+-- Stored via the generic `attributes` table, not as columns:
+-- dynamic_injector
 CREATE TABLE sources (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -343,7 +350,7 @@ CREATE TABLE sources (
 
 -- interconnecting_converters: generated from InterconnectingConverter
 -- Stored via the generic `attributes` table, not as columns:
--- available, active_power, active_power_limits, reactive_power_limits, rating, dc_voltage_droop, loss_function
+-- available, active_power, active_power_limits, reactive_power_limits, rating, dc_voltage_droop, loss_function, dynamic_injector
 CREATE TABLE interconnecting_converters (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -361,13 +368,12 @@ CREATE TABLE interconnecting_converters (
     remote_bus_control INTEGER NULL,
     rmpct REAL NULL DEFAULT 100.0, -- Units: 1
     power_factor_weighting_fraction REAL NULL DEFAULT 1.0, -- Units: 1
-    voltage_limits JSON NULL DEFAULT '{"max":999.9,"min":0.0}', -- Units: pu
-    dynamic_injector INTEGER NULL
+    voltage_limits JSON NULL DEFAULT '{"max":999.9,"min":0.0}' -- Units: pu
 );
 
 -- facts_control_devices: generated from FACTSControlDevice
 -- Stored via the generic `attributes` table, not as columns:
--- available, control_mode, max_shunt_current, reactive_power_required
+-- available, control_mode, max_shunt_current, reactive_power_required, dynamic_injector
 CREATE TABLE facts_control_devices (
     name TEXT NOT NULL UNIQUE,
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -378,8 +384,7 @@ CREATE TABLE facts_control_devices (
     shunt_control_type TEXT NULL DEFAULT 'STATCOM' CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
     regulated_bus_number INTEGER NULL DEFAULT 0, -- Units: 1
     base_power REAL NOT NULL, -- Units: MVA
-    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    dynamic_injector INTEGER NULL
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 );
 
 -- balancing_topologies: generated from ACBus, DCBus

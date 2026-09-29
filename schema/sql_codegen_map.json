@@ -14,7 +14,8 @@
         "power_trajectory",
         "start_time_limits",
         "start_types",
-        "time_at_status"
+        "time_at_status",
+        "dynamic_injector"
       ],
       "db_only": [
         "production_cost"
@@ -28,6 +29,9 @@
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
         "prime_mover_type": "REFERENCES prime_mover_types (name)"
       },
+      "attribute_channel": [
+        "dynamic_injector"
+      ],
       "db_only": [
         "production_cost"
       ]
@@ -47,7 +51,8 @@
         "time_at_status",
         "active_power_pump",
         "minimum_time",
-        "transition_time"
+        "transition_time",
+        "dynamic_injector"
       ],
       "db_only": [
         "production_cost"
@@ -61,7 +66,10 @@
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
         "prime_mover_type": "REFERENCES prime_mover_types (name)",
         "storage_technology_type": "REFERENCES storage_technology_types (name)"
-      }
+      },
+      "attribute_channel": [
+        "dynamic_injector"
+      ]
     },
     "hydro_reservoirs": {
       "attribute_channel": [
@@ -103,7 +111,8 @@
         "rating",
         "reactive_power_limits",
         "active_power_limits",
-        "load_balance_time_horizon"
+        "load_balance_time_horizon",
+        "dynamic_injector"
       ]
     },
     "transmission_lines": {
@@ -311,7 +320,7 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ]
     },
@@ -323,7 +332,7 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ]
     },
@@ -331,7 +340,7 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ],
       "db_only": [
@@ -343,7 +352,7 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ]
     },
@@ -358,7 +367,8 @@
         "reactive_power_limits",
         "rating",
         "dc_voltage_droop",
-        "loss_function"
+        "loss_function",
+        "dynamic_injector"
       ]
     },
     "facts_control_devices": {
@@ -369,7 +379,8 @@
         "available",
         "control_mode",
         "max_shunt_current",
-        "reactive_power_required"
+        "reactive_power_required",
+        "dynamic_injector"
       ]
     },
     "transport_technologies": {

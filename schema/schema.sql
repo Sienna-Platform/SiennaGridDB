@@ -667,7 +667,28 @@ VALUES
     ('TwoTerminalGenericHVDCLine', 'loss', 'Loss curve payload with its own power_units'),
     ('TwoTerminalLCCLine', 'loss', 'Loss curve payload with its own power_units'),
     ('TwoTerminalVSCLine', 'converter_loss_from', 'Loss curve payload with its own power_units'),
-    ('TwoTerminalVSCLine', 'converter_loss_to', 'Loss curve payload with its own power_units');
+    ('TwoTerminalVSCLine', 'converter_loss_to', 'Loss curve payload with its own power_units'),
+    ('EnergyReservoirStorage', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ExponentialLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('FACTSControlDevice', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('FixedAdmittance', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('HydroDispatch', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('HydroPumpTurbine', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('HydroTurbine', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('InterconnectingConverter', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('InterruptiblePowerLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('InterruptibleStandardLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('MotorLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('PowerLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('RenewableDispatch', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('RenewableNonDispatch', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ShiftablePowerLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('Source', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('StandardLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('SwitchedAdmittance', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('SynchronousCondenser', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ThermalMultiStart', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ThermalStandard', 'dynamic_injector', 'Dynamic injection device reference');
 
 -- Optional entity data not required for modeling (geolocation, outages, ...).
 CREATE TABLE supplemental_attributes (
