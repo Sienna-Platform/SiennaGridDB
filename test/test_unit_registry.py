@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 520
+EXPECTED_UNIT_CONVENTIONS = 523
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -54,6 +54,8 @@ COMPLETENESS_ALLOWLIST = {
     # non-binding sentinel ceiling, not unit-converted on the PSY side (no x-unit
     # in the schema; see schema.sql's facts_control_devices comment)
     ("facts_control_devices", "max_reactive_power"),
+    # penalty cost with no unit annotation in the schemas
+    ("transmission_interfaces", "violation_penalty"),
 }
 
 

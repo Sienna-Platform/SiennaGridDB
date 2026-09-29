@@ -189,6 +189,18 @@ CREATE TABLE reserves (
     reserve_direction TEXT NULL CHECK (reserve_direction IN ('UP', 'DOWN', 'SYMMETRIC'))
 );
 
+-- transmission_interfaces: generated from TransmissionInterface
+CREATE TABLE transmission_interfaces (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    active_power_flow_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    violation_penalty REAL NULL,
+    direction_mapping JSON NULL,
+    base_power REAL NOT NULL, -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
+);
+
 -- discrete_controlled_ac_branches: generated from DiscreteControlledACBranch
 CREATE TABLE discrete_controlled_ac_branches (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,

@@ -116,10 +116,10 @@ def test_bus_fields_round_trip_through_attributes(conn):
 
 
 def test_unsupported_type(conn):
-    report = griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}])
-    assert report.unsupported == {"TransmissionInterface": 1}
+    report = griddb.insert_components(conn, "AGC", [{"id": 1}])
+    assert report.unsupported == {"AGC": 1}
     with pytest.raises(griddb.UnsupportedComponentError):
-        griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}], strict=True)
+        griddb.insert_components(conn, "AGC", [{"id": 1}], strict=True)
 
 
 def test_rows_naming_an_unsupported_component_are_reported_not_written(conn):

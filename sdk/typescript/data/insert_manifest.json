@@ -3955,6 +3955,49 @@
       "skip": [],
       "table": "transformer_circuits"
     },
+    "TransmissionInterface": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_flow_limits"
+        },
+        {
+          "encode": "real",
+          "path": "violation_penalty"
+        },
+        {
+          "encode": "json",
+          "path": "direction_mapping"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_interfaces', 'TransmissionInterface')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO transmission_interfaces (id, name, available, active_power_flow_limits, violation_penalty, direction_mapping, base_power, power_units) VALUES (?, ?, COALESCE(?, 1), ?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "transmission_interfaces"
+    },
     "TwoTerminalGenericHVDCLine": {
       "attributes": [
         {
@@ -5036,6 +5079,11 @@
         "is_dc": false,
         "is_topology": false,
         "name": "TransformerCircuit"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TransmissionInterface"
       },
       {
         "is_dc": false,
