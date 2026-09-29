@@ -1,10 +1,13 @@
-"""Services: reserves (with per-type shape triggers) and transmission interfaces."""
+"""Services: reserves, transmission interfaces, membership, and the service views."""
 
+import json
 import sqlite3
 
 import pytest
 
 from conftest import make_entity
+from test_cost_and_source_coverage import insert_thermal
+from test_schema_integrity import make_arc, make_bus, make_circuit
 
 CURVE = (
     '{"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": '
@@ -251,3 +254,182 @@ def test_deleting_a_service_or_a_member_cascades(fresh_db):
     assert members(fresh_db) == [(4, 20)]
     fresh_db.execute("DELETE FROM entities WHERE id = 20")
     assert members(fresh_db) == []
+
+
+# Views, on a small synthetic system: a line and a transformer in an interface,
+# two generators bidding into reserves, and a load whose cost is an attribute.
+def insert_line(conn, line_id, name, arc_id):
+    make_entity(conn, line_id, "transmission_lines", "Line")
+    conn.execute(
+        "INSERT INTO transmission_lines "
+        "(id, name, arc_id, continuous_rating, r, x, base_power, power_units) "
+        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, 100.0, 'NATURAL_UNITS')",
+        (line_id, name, arc_id),
+    )
+
+
+def insert_transformer(conn, xf_id, name, arc_id):
+    make_entity(conn, xf_id, "two_winding_transformers", "TwoWindingTransformer")
+    circuit = make_circuit(conn, xf_id + 100, arc_id)
+    conn.execute(
+        "INSERT INTO two_winding_transformers (id, name, circuit) VALUES (?, ?, ?)",
+        (xf_id, name, circuit),
+    )
+
+
+def bid(offers):
+    return {"cost_type": "MARKET_BID_TIME_SERIES", "ancillary_service_offers": offers}
+
+
+def add_series(conn, owner_id, name, time_series_type):
+    conn.execute(
+        "INSERT INTO time_series_associations (owner_id, owner_type, owner_category, "
+        "time_series_type, name, uri, features_hash) "
+        "VALUES (?, 'ThermalStandard', 'Component', ?, ?, ?, ?)",
+        (owner_id, time_series_type, name, f"uri-{owner_id}-{name}", "0" * 64),
+    )
+
+
+@pytest.fixture
+def system(fresh_db):
+    conn = fresh_db
+    add_reserve(conn, 1, "OnlineReserve", name="online_up")
+    add_reserve(conn, 2, "OfflineReserve", name="offline_up")
+    add_interface(conn, 4, direction_mapping='{"line_a": 1, "xf_b": -1}')
+    # Interface 5 names xf_b, a member of 4 only; transformer 23 shares line_a's name.
+    add_interface(conn, 5, direction_mapping='{"line_c": -1.0, "xf_b": 1}')
+    bus = make_bus(conn, 50, "b50")
+    arc = make_arc(conn, 52, bus, make_bus(conn, 51, "b51"))
+    insert_line(conn, 20, "line_a", arc)
+    insert_transformer(conn, 21, "xf_b", arc)
+    insert_line(conn, 22, "line_c", arc)
+    insert_transformer(conn, 23, "line_a", arc)
+    insert_thermal(conn, 10, bus, None, operation_cost=bid([1]))
+    insert_thermal(conn, 11, bus, None, operation_cost=bid([1, 2]))
+    make_entity(conn, 12, "loads", "InterruptiblePowerLoad")
+    conn.execute(
+        "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) "
+        "VALUES (12, 'InterruptiblePowerLoad', 'operation_cost', ?, '1', 'Dimensionless')",
+        (json.dumps({"cost_type": "MARKET_BID", "ancillary_service_offers": [2]}),),
+    )
+    for pair in [(1, 10), (1, 11), (2, 12), (4, 20), (4, 21), (4, 22), (5, 22)]:
+        join(conn, *pair)
+    add_series(conn, 10, "online_up", "SingleTimeSeries")
+    add_series(conn, 10, "online_up", "DeterministicSingleTimeSeries")
+    add_series(conn, 10, "max_active_power", "SingleTimeSeries")
+    return conn
+
+
+def rows(conn, sql):
+    return sorted(conn.execute(sql).fetchall())
+
+
+def test_service_contributors(system):
+    assert rows(system, "SELECT * FROM service_contributors WHERE service_id = 2") == [
+        (2, "OfflineReserve", 12, "InterruptiblePowerLoad")
+    ]
+
+
+def test_interface_branch_directions_resolve_to_member_branches(system):
+    assert rows(system, "SELECT * FROM interface_branch_directions") == [
+        (4, 20, 1, "line_a"),
+        (4, 21, -1, "xf_b"),
+        (5, 22, -1, "line_c"),
+    ]
+    sql = "SELECT DISTINCT typeof(direction) FROM interface_branch_directions"
+    assert rows(system, sql) == [("integer",)]
+
+
+def test_unresolved_direction_name_is_a_violation(system):
+    assert rows(system, "SELECT * FROM interface_direction_violations") == [(5, "xf_b")]
+    join(system, 5, 21)
+    assert rows(system, "SELECT * FROM interface_direction_violations") == []
+
+
+def test_service_bid_offers_read_columns_and_attributes(system):
+    assert rows(system, "SELECT * FROM service_bid_offers") == [
+        (10, 1),
+        (11, 1),
+        (11, 2),
+        (12, 2),
+    ]
+
+
+def insert_row(conn, table, row):
+    conn.execute(
+        f"INSERT INTO {table} ({', '.join(row)}) VALUES ({', '.join('?' for _ in row)})",
+        list(row.values()),
+    )
+
+
+# A minimal row for each cost table besides thermal: (table, type, cost column, row).
+def cost_rows(bus, other_bus):
+    limits = '{"min": 0.0, "max": 10.0}'
+    power = {"base_power": 100.0, "power_units": "NATURAL_UNITS", "rating": 10.0}
+    storage = {
+        "prime_mover_type": "BA",
+        "storage_technology_type": "LIB",
+        "storage_capacity": 40.0,
+        "storage_level_limits": limits,
+        "initial_storage_capacity_level": 0.5,
+        "input_active_power_limits": limits,
+        "output_active_power_limits": limits,
+        "efficiency": '{"in": 0.9, "out": 0.9}',
+    }
+    return [
+        ("renewable_generators", "RenewableDispatch", "operation_cost",
+         {"prime_mover_type": "WT", "balancing_topology": bus, **power}),
+        ("hydro_generators", "HydroDispatch", "operation_cost",
+         {"balancing_topology": bus, "active_power_limits": limits, **power}),
+        ("storage_units", "EnergyReservoirStorage", "operation_cost",
+         {"balancing_topology": bus, **storage, **power}),
+        ("sources", "Source", "operation_cost",
+         {"bus": bus, "base_power": 100.0, "power_units": "NATURAL_UNITS",
+          "r_th": 0.0, "x_th": 0.1}),
+        ("virtual_participants", "VirtualParticipant", "operation_cost",
+         {"max_supply": 10.0, "max_demand": 10.0}),
+        ("point_to_point_bids", "PointToPointBid", "spread_bid",
+         {"from_id": bus, "to_id": other_bus, "max_active_power": 10.0,
+          "price_limits": limits}),
+    ]
+
+
+def test_service_bid_offers_read_every_cost_arm(fresh_db):
+    """Every cost column that can hold a bid is read once per (device, service);
+    a JSON-null offer list and an attribute other than operation_cost are not."""
+    conn = fresh_db
+    for name in ("WT", "HY", "BA"):
+        conn.execute("INSERT OR IGNORE INTO prime_mover_types (name) VALUES (?)", (name,))
+    conn.execute("INSERT OR IGNORE INTO storage_technology_types (name) VALUES ('LIB')")
+    bus, other = make_bus(conn, 50, "b50"), make_bus(conn, 51, "b51")
+    for device_id, (table, type_name, column, row) in enumerate(cost_rows(bus, other), 10):
+        make_entity(conn, device_id, table, type_name)
+        row.update(id=device_id, name=f"d{device_id}")
+        row[column] = json.dumps(bid([device_id % 2 + 1]))
+        insert_row(conn, table, row)
+    insert_thermal(conn, 20, bus, None, operation_cost=bid([1, 1]))
+    insert_thermal(conn, 21, bus, None, operation_cost=bid(None))
+    make_entity(conn, 22, "loads", "InterruptiblePowerLoad")
+    conn.execute(
+        "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) "
+        "VALUES (22, 'InterruptiblePowerLoad', 'other_cost', ?, '1', 'Dimensionless')",
+        (json.dumps(bid([2])),),
+    )
+    assert rows(conn, "SELECT * FROM service_bid_offers") == [
+        (10, 1), (11, 2), (12, 1), (13, 2), (14, 1), (15, 2), (20, 1)
+    ]
+
+
+def test_service_bids_are_the_device_series_named_after_the_reserve(system):
+    assert rows(
+        system, "SELECT device_id, service_id, time_series_type FROM service_bids"
+    ) == [
+        (10, 1, "DeterministicSingleTimeSeries"),
+        (10, 1, "SingleTimeSeries"),
+    ]
+
+
+def test_offer_without_membership_is_a_violation(system):
+    assert rows(system, "SELECT * FROM service_offer_violations") == [(11, 2)]
+    join(system, 2, 11)
+    assert rows(system, "SELECT * FROM service_offer_violations") == []
