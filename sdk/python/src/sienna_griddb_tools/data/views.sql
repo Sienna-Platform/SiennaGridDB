@@ -19,17 +19,22 @@ ORDER BY
     uc.table_name,
     uc.column_name;
 
+-- Each numeric column read from attributes comes with its row's unit, since one
+-- name holds pu or MW per component (pu is on the component's base_power).
 CREATE VIEW IF NOT EXISTS operational_data AS
 SELECT
     e.id AS entity_id,
     e.entity_table,
     e.entity_type,
     json_extract(apl.value, '$.min') AS active_power_limit_min,
+    apl.unit AS active_power_limit_unit,
     json_extract(mr.value, '$') AS must_run,
     json_extract(tl.value, '$.up') AS uptime,
     json_extract(tl.value, '$.down') AS downtime,
+    tl.unit AS time_limits_unit,
     json_extract(rl.value, '$.up') AS ramp_up,
     json_extract(rl.value, '$.down') AS ramp_down,
+    rl.unit AS ramp_limits_unit,
     oc.value AS operational_cost,
     json_type(oc.value) AS operational_cost_type
 FROM

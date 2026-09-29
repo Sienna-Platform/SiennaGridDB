@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 463
+EXPECTED_UNIT_CONVENTIONS = 497
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1335,7 +1335,6 @@ def test_merged_hvdc_columns_registered(db):
         ("base_voltage", {"Voltage/kV"}),
         ("angle", {"Angle/rad"}),
         ("angle_limits", {"Angle/rad"}),
-        ("max_active_power", {"ActivePower/MW"}),
         ("time_at_status", {"OperationalDuration/min"}),
         ("load_response", {"PowerPerFrequency/MW/Hz"}),
         ("voltage", {"Voltage/kV"}),
@@ -1358,6 +1357,9 @@ def test_merged_hvdc_columns_registered(db):
         ("active_power_flow", {"ActivePower/MW", "ActivePower/pu"}),
         ("reactive_power_flow", {"ReactivePower/MVAr", "ReactivePower/pu"}),
         ("rating_b", {"ApparentPower/MVA", "ApparentPower/pu"}),
+        ("max_active_power", {"ActivePower/MW", "ActivePower/pu"}),
+        ("max_impedance_reactive_power", {"ReactivePower/MVAr", "ReactivePower/pu"}),
+        ("alpha", {"Dimensionless/1"}),
         ("reactive_power_to", {"ReactivePower/MVAr", "ReactivePower/pu"}),
         ("power_trajectory", {"ActivePower/MW", "ActivePower/pu"}),
         ("r", {"Resistance/ohm", "Resistance/pu"}),
@@ -1373,6 +1375,7 @@ def test_merged_hvdc_columns_registered(db):
         # Self-describing loss curves: exempt through attribute_identifiers.
         ("loss", set()),
         ("converter_loss_from", set()),
+        ("operation_cost", set()),
     ],
 )
 def test_attribute_conventions(db, name, expected):
@@ -1870,6 +1873,19 @@ def test_column_units_view_row_count_matches_unit_conventions(db):
     (view_count,) = db.execute("SELECT COUNT(*) FROM column_units").fetchone()
     (conv_count,) = db.execute("SELECT COUNT(*) FROM unit_conventions").fetchone()
     assert view_count == conv_count == EXPECTED_UNIT_CONVENTIONS
+
+
+def test_operational_data_states_each_attribute_unit(fresh_db):
+    """One attribute name holds pu or MW per component; the view says which."""
+    for entity_id, unit in ((1, "pu"), (2, "MW")):
+        make_entity(fresh_db, entity_id)
+        limits = '{"min": 0.5, "max": 1.0}'
+        insert_attribute(fresh_db, entity_id, "active_power_limits", limits, unit, "ActivePower")
+    rows = fresh_db.execute(
+        "SELECT entity_id, active_power_limit_min, active_power_limit_unit "
+        "FROM operational_data ORDER BY entity_id"
+    ).fetchall()
+    assert rows == [(1, 0.5, "pu"), (2, 0.5, "MW")]
 
 
 def test_parameter_units_arms_share_quantity_kind(db):

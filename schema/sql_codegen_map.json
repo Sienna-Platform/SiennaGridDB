@@ -65,7 +65,35 @@
       },
       "foreign_keys": {
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
-      }
+      },
+      "attribute_channel": [
+        "available",
+        "active_power",
+        "reactive_power",
+        "max_active_power",
+        "max_reactive_power",
+        "conformity",
+        "operation_cost",
+        "constant_active_power",
+        "constant_reactive_power",
+        "current_active_power",
+        "current_reactive_power",
+        "impedance_active_power",
+        "impedance_reactive_power",
+        "max_constant_active_power",
+        "max_constant_reactive_power",
+        "max_current_active_power",
+        "max_current_reactive_power",
+        "max_impedance_active_power",
+        "max_impedance_reactive_power",
+        "alpha",
+        "beta",
+        "motor_technology",
+        "rating",
+        "reactive_power_limits",
+        "active_power_limits",
+        "load_balance_time_horizon"
+      ]
     },
     "transmission_lines": {
       "renames": {

@@ -40,21 +40,86 @@ if HAS_GOLDEN
         end
     end
 
+    function stored_attributes(db, id)
+        rows = DBInterface.execute(
+            db,
+            "SELECT name, json(value) AS value, unit, quantity_kind FROM attributes " *
+            "WHERE entity_id = ?",
+            [id],
+        )
+        return Dict(
+            r.name => (JSON.parse(string(r.value)), r.unit, r.quantity_kind) for r in rows
+        )
+    end
+
+    load(bus_id, power_units) = Dict{String, Any}(
+        "id" => 9001,
+        "name" => "load",
+        "available" => true,
+        "bus" => bus_id,
+        "active_power" => 0.5,
+        "reactive_power" => 0.1,
+        "base_power" => 100.0,
+        "power_units" => power_units,
+        "max_active_power" => 0.6,
+        "max_reactive_power" => 0.2,
+    )
+
+    @testset "load power follows its power_units $power_units" for (power_units, units) in (
+        ("COMPONENT_BASE", ("pu", "pu")),
+        ("NATURAL_UNITS", ("MW", "MVAr")),
+    )
+        mktempdir() do dir
+            fresh(dir) do db
+                bus = lone_bus(golden())
+                insert_component!(db, "ACBus", bus)
+                obj = load(bus["id"], power_units)
+                report = insert_component!(db, "PowerLoad", obj; strict=true)
+                @test isempty(report.skipped_fields)
+                stored = stored_attributes(db, 9001)
+                @test stored["active_power"] == (0.5, units[1], "ActivePower")
+                @test stored["max_reactive_power"] == (0.2, units[2], "ReactivePower")
+                @test isequal(stored["available"], (true, missing, missing))
+            end
+        end
+    end
+
+    @testset "interruptible load cost is stored verbatim" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                bus = lone_bus(golden())
+                insert_component!(db, "ACBus", bus)
+                cost = Dict{String, Any}(
+                    "cost_type" => "LOAD",
+                    "fixed" => 2.0,
+                    "variable_operation_cost" => Dict{String, Any}(
+                        "power_units" => "NATURAL_UNITS",
+                        "value_curve" => Dict{String, Any}(
+                            "curve_type" => "INPUT_OUTPUT",
+                            "function_data" => Dict{String, Any}(
+                                "function_type" => "LINEAR",
+                                "proportional_term" => 30.0,
+                            ),
+                        ),
+                    ),
+                )
+                obj = load(bus["id"], "NATURAL_UNITS")
+                obj["operation_cost"] = cost
+                insert_component!(db, "InterruptiblePowerLoad", obj; strict=true)
+                stored = stored_attributes(db, 9001)["operation_cost"]
+                @test stored[1] == cost
+                @test ismissing(stored[2])
+            end
+        end
+    end
+
     @testset "bus fields round-trip through attributes" begin
         mktempdir() do dir
             fresh(dir) do db
                 bus = lone_bus(golden())
                 report = insert_component!(db, "ACBus", bus; strict=true)
                 @test isempty(report.skipped_fields)
-                rows = DBInterface.execute(
-                    db,
-                    "SELECT name, json(value) AS value, unit, quantity_kind FROM attributes WHERE entity_id = ?",
-                    [bus["id"]],
-                )
-                stored = Dict(
-                    r.name => (JSON.parse(string(r.value)), r.unit, r.quantity_kind) for
-                    r in rows
-                )
+                stored = stored_attributes(db, bus["id"])
                 @test stored["number"][1] == bus["number"]
                 @test ismissing(stored["number"][2]) && ismissing(stored["load_zone"][2])
                 @test stored["load_zone"][1] == bus["load_zone"]
