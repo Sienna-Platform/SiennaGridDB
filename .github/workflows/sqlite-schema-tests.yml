@@ -38,12 +38,13 @@ jobs:
           fetch-depth: 1
 
       # Without this, test/test_load_models.py importorskips and its two model
-      # round-trip tests silently never run in CI.
+      # round-trip tests silently never run in CI. Pinned to the
+      # rh/natural-unit-costs fixture commit: repoint once it merges.
       - name: Checkout power-openapi-models for the model round-trip tests
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/power-openapi-models
-          ref: 531659201ff86e699005fde0ae9aaa25b16906b7
+          ref: d611532516bb9d7e608dcb4986656412cb3a70cd
           path: power-openapi-models
           fetch-depth: 1
 

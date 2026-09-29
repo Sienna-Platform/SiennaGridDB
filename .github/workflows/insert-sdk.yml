@@ -7,6 +7,7 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Bindings pinned to their rh/natural-unit-costs fixture commits: repoint once those merge.
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -16,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/power-openapi-models
-          ref: 531659201ff86e699005fde0ae9aaa25b16906b7
+          ref: d611532516bb9d7e608dcb4986656412cb3a70cd
           path: power-openapi-models
           fetch-depth: 1
       - uses: actions/setup-python@v5
@@ -45,14 +46,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/PowerOpenAPIModels
-          ref: 5eaae341529c6deca0e4561a538db167495abd76
+          ref: a072a3b932c105f861349bc479b6d4ed88c39768
           path: PowerOpenAPIModels
           fetch-depth: 1
       - name: Checkout power-openapi-models (golden fixtures)
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/power-openapi-models
-          ref: 531659201ff86e699005fde0ae9aaa25b16906b7
+          ref: d611532516bb9d7e608dcb4986656412cb3a70cd
           path: power-openapi-models
           fetch-depth: 1
       - uses: julia-actions/setup-julia@v2
@@ -88,7 +89,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/power-openapi-models
-          ref: 531659201ff86e699005fde0ae9aaa25b16906b7
+          ref: d611532516bb9d7e608dcb4986656412cb3a70cd
           path: power-openapi-models
           fetch-depth: 1
       - uses: actions/setup-node@v4
