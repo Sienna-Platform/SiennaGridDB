@@ -240,6 +240,20 @@ def test_features_hash_and_feature_sets(conn, case):
     )
 
 
+def test_a_plant_owns_series_as_a_supplemental_attribute(conn, case):
+    """Plant-type attributes are stored in plants, not supplemental_attributes."""
+    doc = load(case)
+    doc["supplemental_attributes"] = [{"id": 3, "name": "p3"}]
+    doc["supplemental_attribute_associations"][0]["attribute_type"] = "ThermalPowerPlant"
+    for row in doc["time_series_associations"]:
+        if row["owner_id"] == 3:
+            row["owner_type"] = "ThermalPowerPlant"
+    report = griddb.insert_document(conn, doc, time_series=sidecar(case))
+    assert report.inserted["plants"] == 1
+    assert report.inserted["time_series_associations"] == 19
+    assert triples(conn, "geo", owner=3) == [(0, 0, 7.0), (1, 0, 8.0), (2, 0, 9.0)]
+
+
 def test_parsed_document_takes_an_explicit_sidecar(tmp_path, case):
     parsed = insert_dump(tmp_path, "a", load(case), time_series=sidecar(case))
     assert parsed == insert_dump(tmp_path, "b", str(case))
