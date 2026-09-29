@@ -178,12 +178,11 @@ CREATE TABLE loads (
 );
 
 -- transmission_lines: generated from Line, MonitoredLine
+-- Stored via the generic `attributes` table, not as columns:
+-- available, active_power_flow, reactive_power_flow, rating_b, rating_c, angle_limits, flow_limits
 CREATE TABLE transmission_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    available BOOLEAN NOT NULL,
-    active_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    reactive_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     r REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
     x REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
@@ -192,21 +191,15 @@ CREATE TABLE transmission_lines (
     parameter_units TEXT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     b JSON NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: S)
     continuous_rating REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
-    rating_b REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
-    rating_c REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
-    angle_limits JSON NOT NULL, -- Units: rad
-    g JSON NULL DEFAULT '{"from":0.0,"to":0.0}', -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: S)
-    flow_limits JSON NULL -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
+    g JSON NULL DEFAULT '{"from":0.0,"to":0.0}' -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: S)
 );
 
 -- transmission_interchanges: generated from AreaInterchange
+-- Stored via the generic `attributes` table, not as columns:
+-- available, active_power_flow, from_area, to_area
 CREATE TABLE transmission_interchanges (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    available BOOLEAN NOT NULL,
-    active_power_flow REAL NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    from_area INTEGER NOT NULL,
-    to_area INTEGER NOT NULL,
     flow_limits JSON NOT NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
     base_power REAL NOT NULL, -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
@@ -305,19 +298,15 @@ CREATE TABLE two_terminal_hvdc_lines (
 );
 
 -- tmodel_hvdc_lines: generated from TModelHVDCLine
+-- Stored via the generic `attributes` table, not as columns:
+-- available, active_power_flow, active_power_limits_from, active_power_limits_to, l, c
 CREATE TABLE tmodel_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    available BOOLEAN NOT NULL,
-    active_power_flow REAL NOT NULL, -- Units: MW
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     parameter_units TEXT NULL DEFAULT 'NATURAL_UNITS' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     base_current REAL NOT NULL, -- Units: A
-    r REAL NOT NULL, -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
-    l REAL NOT NULL, -- Units: pu
-    c REAL NOT NULL, -- Units: pu
-    active_power_limits_from JSON NOT NULL, -- Units: MW
-    active_power_limits_to JSON NOT NULL -- Units: MW
+    r REAL NOT NULL -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)
 );
 
 -- synchronous_condensers: generated from SynchronousCondenser
