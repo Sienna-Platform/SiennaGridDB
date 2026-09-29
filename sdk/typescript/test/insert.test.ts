@@ -52,10 +52,8 @@ test.skipIf(!hasGolden)("strict gap rolls back", () => {
 
 test("unsupported type", () => {
   const db = fresh();
-  expect(insertComponents(db, "TransmissionInterface", [{ id: 1 }]).unsupported).toEqual({ TransmissionInterface: 1 });
-  expect(() => insertComponents(db, "TransmissionInterface", [{ id: 1 }], { strict: true })).toThrow(
-    UnsupportedComponentError,
-  );
+  expect(insertComponents(db, "AGC", [{ id: 1 }]).unsupported).toEqual({ AGC: 1 });
+  expect(() => insertComponents(db, "AGC", [{ id: 1 }], { strict: true })).toThrow(UnsupportedComponentError);
 });
 
 // AGC has no table, so an association row naming one, on either side, is counted

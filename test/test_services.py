@@ -1,4 +1,4 @@
-"""Services: the reserves table and its per-type shape triggers."""
+"""Services: reserves (with per-type shape triggers) and transmission interfaces."""
 
 import sqlite3
 
@@ -93,3 +93,78 @@ def test_reserve_rejects_wrong_shape_on_update(fresh_db, entity_type, overrides,
     sets = ", ".join(f"{c} = ?" for c in overrides)
     with pytest.raises(sqlite3.IntegrityError, match=message):
         fresh_db.execute(f"UPDATE reserves SET {sets}", list(overrides.values()))
+
+
+def add_interface(conn, interface_id, name=None, **overrides):
+    make_entity(conn, interface_id, "transmission_interfaces", "TransmissionInterface")
+    row = {
+        "id": interface_id,
+        "name": name or f"i{interface_id}",
+        "active_power_flow_limits": '{"min": -100.0, "max": 250.0}',
+        "violation_penalty": 1e5,
+        "direction_mapping": '{"line_a": 1, "line_b": -1}',
+        "base_power": 100.0,
+        "power_units": "NATURAL_UNITS",
+    }
+    row.update(overrides)
+    conn.execute(
+        f"INSERT INTO transmission_interfaces ({', '.join(row)}) "
+        f"VALUES ({', '.join('?' for _ in row)})",
+        list(row.values()),
+    )
+    return interface_id
+
+
+def test_interface_round_trips(fresh_db):
+    add_interface(fresh_db, 1)
+    row = fresh_db.execute(
+        "SELECT name, available, json_extract(active_power_flow_limits, '$.max'), "
+        "violation_penalty, json_extract(direction_mapping, '$.line_b'), power_units "
+        "FROM transmission_interfaces"
+    ).fetchone()
+    assert row == ("i1", 1, 250.0, 1e5, -1, "NATURAL_UNITS")
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"direction_mapping": '["line_a"]'},
+        {"direction_mapping": "{bad"},
+        {"power_units": "SYSTEM_BASE"},
+        {"base_power": 0.0},
+        {"active_power_flow_limits": "{bad"},
+    ],
+)
+def test_interface_rejects_bad_values(fresh_db, overrides):
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint"):
+        add_interface(fresh_db, 1, **overrides)
+
+
+@pytest.mark.parametrize(
+    "value", ["0", "2", "1.5", '"north"', "true", "null", "[1]"]
+)
+def test_interface_direction_must_be_one_or_minus_one(fresh_db, value):
+    mapping = f'{{"line_a": 1, "line_b": {value}}}'
+    with pytest.raises(sqlite3.IntegrityError, match="must be 1 or -1"):
+        add_interface(fresh_db, 1, direction_mapping=mapping)
+    add_interface(fresh_db, 2)
+    with pytest.raises(sqlite3.IntegrityError, match="must be 1 or -1"):
+        fresh_db.execute(
+            "UPDATE transmission_interfaces SET direction_mapping = ?", (mapping,)
+        )
+
+
+def test_interface_direction_may_be_an_integral_real(fresh_db):
+    add_interface(fresh_db, 1, direction_mapping='{"line_a": 1.0, "line_b": -1}')
+
+
+@pytest.mark.parametrize(
+    "power_units, unit", [("COMPONENT_BASE", "pu"), ("NATURAL_UNITS", "MW")]
+)
+def test_interface_flow_limits_unit_follows_power_units(db, power_units, unit):
+    (found,) = db.execute(
+        "SELECT unit FROM unit_conventions WHERE table_name = 'transmission_interfaces' "
+        "AND column_name = 'active_power_flow_limits' AND discriminator_value = ?",
+        (power_units,),
+    ).fetchone()
+    assert found == unit

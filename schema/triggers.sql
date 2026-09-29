@@ -208,6 +208,27 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_transmission_interfaces_entity_exists BEFORE
+INSERT
+    ON transmission_interfaces
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transmission_interfaces'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.id must exist in entities with entity_table transmission_interfaces before insert'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_thermal_generators_entity_exists BEFORE
 INSERT
     ON thermal_generators
@@ -1079,6 +1100,17 @@ WHERE
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS delete_transmission_interfaces_entity
+AFTER
+    DELETE ON transmission_interfaces FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS delete_thermal_generators_entity
 AFTER
     DELETE ON thermal_generators FOR EACH ROW
@@ -1781,6 +1813,63 @@ FROM
         WHERE
             id = NEW.id
     ) t;
+
+END;
+
+-- =============================================================================
+-- Interface Direction Triggers
+-- Each direction_mapping value must be 1 or -1; an integral real such as 1.0
+-- counts, as in the SDKs' int encoder. Malformed JSON is left to the CHECK.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_interfaces_direction_insert BEFORE
+INSERT
+    ON transmission_interfaces
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(
+                CASE
+                    WHEN NOT json_valid(NEW.direction_mapping) THEN NULL
+                    WHEN json_type(NEW.direction_mapping) = 'object' THEN NEW.direction_mapping
+                END
+            )
+        WHERE
+            type NOT IN ('integer', 'real')
+            OR value NOT IN (1, -1)
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.direction_mapping values must be 1 or -1.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_interfaces_direction_update BEFORE
+UPDATE
+    OF direction_mapping ON transmission_interfaces
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(
+                CASE
+                    WHEN NOT json_valid(NEW.direction_mapping) THEN NULL
+                    WHEN json_type(NEW.direction_mapping) = 'object' THEN NEW.direction_mapping
+                END
+            )
+        WHERE
+            type NOT IN ('integer', 'real')
+            OR value NOT IN (1, -1)
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.direction_mapping values must be 1 or -1.'
+    );
 
 END;
 

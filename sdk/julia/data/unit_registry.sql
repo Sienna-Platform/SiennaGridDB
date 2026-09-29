@@ -493,6 +493,9 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('transmission_interchanges', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'Base power the row''s per-unit values resolve against'),
     ('transmission_interchanges', 'max_flow_from', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Maximum flow from'),
     ('transmission_interchanges', 'max_flow_to', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Maximum flow to'),
+    ('transmission_interfaces', 'active_power_flow_limits', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'JSON {min, max} interface flow limits, per-unit on the row''s base_power'),
+    ('transmission_interfaces', 'active_power_flow_limits', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'JSON {min, max} interface flow limits in MW'),
+    ('transmission_interfaces', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'Base power the row''s per-unit values resolve against'),
     ('transmission_lines', 'b', 'Susceptance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'arc_id->arcs.from_id->balancing_topologies.base_voltage', 'Shunt susceptance halves, JSON {from, to}, per-unit on the row''s base_power'),
     ('transmission_lines', 'b', 'Susceptance', 'S', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Shunt susceptance halves, JSON {from, to}, in siemens'),
     ('transmission_lines', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'Base power the row''s per-unit values resolve against'),
@@ -553,4 +556,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', '3998b57588b88a9c587249ae959cc03c665e48acfe71bec10114907c8b5ce53e', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '601494c0b134dcd3e40a92487be3b4fe71dc1a90155f4af5e9feb164f8d57730', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
