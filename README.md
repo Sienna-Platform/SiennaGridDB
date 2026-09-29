@@ -66,8 +66,8 @@ for f in schema.sql triggers.sql unit_registry.sql views.sql; do sqlite3 $DB_NAM
 
 **Every connection must set `PRAGMA foreign_keys = ON`.** SQLite defaults it OFF
 per connection and does not store it in the file, so a database built by
-`just new-db` reports `foreign_keys = 0` when you next open it, and all 86
-foreign keys in this schema are inert until you turn them on:
+`just new-db` reports `foreign_keys = 0` when you next open it, and every
+foreign key in this schema is inert until you turn it on:
 
 ```sh
 sqlite3 griddb-example.sqlite "PRAGMA foreign_keys = ON; ..."
