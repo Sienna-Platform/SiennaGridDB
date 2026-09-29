@@ -179,6 +179,28 @@ def test_non_object_entries_of_an_unsupported_type_are_counted(conn):
     assert griddb.insert_document(conn, doc).unsupported["AGC"] == 3
 
 
+ENTRY_LISTS = (
+    "ThermalStandard",
+    "supplemental_attributes",
+    "supplemental_attribute_associations",
+    "plant_associations",
+    "combined_cycle_associations",
+    "trading_hub_associations",
+    "service_associations",
+)
+
+
+@pytest.mark.parametrize("value", [None, 5, [1]])
+@pytest.mark.parametrize("where", ENTRY_LISTS)
+def test_non_object_entries_raise_insert_error(conn, where, value):
+    doc = golden()
+    rows = doc["components"][where] if where in doc["components"] else doc[where]
+    rows.append(value)
+    with pytest.raises(griddb.InsertError, match="not an object"):
+        griddb.insert_document(conn, doc)
+    assert count(conn, "entities") == 0
+
+
 def test_component_base_cost_is_rejected(conn):
     raw_path = sdk_repo() / "fixtures" / "case14_operations.NATURAL_UNITS.json"
     if not raw_path.exists():

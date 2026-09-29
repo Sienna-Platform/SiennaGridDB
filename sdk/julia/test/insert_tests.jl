@@ -281,6 +281,29 @@ if HAS_GOLDEN
         end
     end
 
+    @testset "non-object entry $(repr(value)) in $where" for where in (
+            "ThermalStandard",
+            "supplemental_attributes",
+            "supplemental_attribute_associations",
+            "plant_associations",
+            "combined_cycle_associations",
+            "trading_hub_associations",
+            "service_associations",
+        ),
+        value in (nothing, 5, Any[1])
+
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                owner = haskey(doc["components"], where) ? doc["components"] : doc
+                push!(owner[where], value)
+                @test_throws InsertError insert_document!(db, doc)
+                @test_throws r"not an object" insert_document!(db, doc)
+                @test count_rows(db, "entities") == 0
+            end
+        end
+    end
+
     # Review Focus 1
     @testset "duplicate id across types" begin
         mktempdir() do dir
