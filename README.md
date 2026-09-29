@@ -116,19 +116,12 @@ them:
 | `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
-**Columns vs. `attributes`.** A table sourced from several upstream components keeps the
-fields common to all of them as columns. A field only some variants carry goes through
-`sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
-There it is registered as an `attributes.<name>` convention when its unit is unambiguous,
-validated against `allowed_units` on write — or left unregistered when its unit depends on
-a sibling attribute (a `discriminator_column` must name a sibling *column*, and a field
-inside `attributes` has no column sibling to name). `two_terminal_hvdc_lines` follows this
-for all three HVDC variants (LCC impedances, VSC setpoints); `thermal_generators` follows
-it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_trajectory` stays
-unregistered, basis-dependent on the attribute `power_units`, same as VSC's
-`dc_setpoint_*`).
+**Columns vs. `attributes`.** A table sourced from several upstream components keeps the fields common to all of them as columns.
+A field only some variants carry goes through `sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
+Each attribute row states its own `unit`/`quantity_kind`, following the same per-row basis rule as typed columns: the name registers one `attributes.<name>` convention per arm (for example `active_power` as `ActivePower`/`MW` for `NATURAL_UNITS` and `ActivePower`/`pu` for `COMPONENT_BASE`), and each row uses the arm matching its own component's `power_units` (or `parameter_units`, a control mode, and so on).
+References and self-describing payloads listed in `attribute_identifiers` (bus `number`, `load_zone`, `dynamic_injector`, the loads' `operation_cost`, loss curves) and string, boolean or enum values carry no unit.
 
-Current registry: **41 quantity kinds, 66 allowed units, 405 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 514 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
@@ -150,6 +143,7 @@ To resolve any column's unit:
 3. **Read the matched row's `unit`.** If it is `pu`, resolve it against the base column on
    the *same row* — `base_power` for power/impedance quantities, `base_voltage` for voltage
    quantities — never a system-wide table.
+   An `attributes` row states its unit inline; a `pu` power resolves against the owner's `base_power`, a `pu` voltage against a base voltage that depends on the field, and a `pu` impedance or admittance against both (`docs/units-architecture.md` §5).
 
 *Worked example:* `transmission_lines.r` has two `unit_conventions` rows, discriminated by
 `parameter_units`: `COMPONENT_BASE` → `unit = pu`, `NATURAL_UNITS` → `unit = ohm`. A row with
@@ -379,13 +373,20 @@ builds from `schema_map.json`, `sql_codegen_map.json`, `column_conventions.json`
 written out in that file.
 
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
-- **Unmapped fields.** A field with no column yet is listed in `schema/insert_gaps.json`.
-  At insert time it is counted in the returned report instead of being written;
-  `strict` mode raises instead. Regenerating the manifest after a schema update closes
-  these gaps with no runtime change.
+- **Attribute fields.** A field with no column goes through a table's `attribute_channel` into `attributes`.
+  The manifest gives each such field a fixed unit, an identifier or unit-free flag, or a discriminator with one unit arm per value (arms nest for two-level discriminators).
+  The generator derives it from the schema's `x-unit`/`x-units`/`x-quantity` annotations, cross-checked against the `attributes` conventions, and fails when a field cannot be classified.
+  At insert time the SDK picks the arm from the object's own discriminator field; a value with no arm is reported as skipped (`strict` raises).
+- **Unmapped fields.** A field with neither a column nor an attribute route is listed in `schema/insert_gaps.json`.
+  At insert time it is counted in the returned report instead of being written; `strict` mode raises instead.
+  Six remain in four types, each waiting on a decision:
+  - `TwoTerminalLCCLine.transfer_setpoint` and `TwoTerminalVSCLine.dc_setpoint_from`/`dc_setpoint_to`: the pinned schemas annotate their power mode as `MW`, but PSY exports it per `power_units`.
+  - `InterconnectingConverter.dc_current`/`max_dc_current`: the pinned schemas annotate `A`, but PSY exports them as power per unit on `base_power`, scaled by it in `NATURAL_UNITS`.
+  - `StorageTechnology.capital_costs`: its three curves fit the `capital_costs_*` columns, but `interconnection_cost` has no home.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
-- **Not supported yet.** `LoadZone`, services, `service_associations`,
+  The loads' `operation_cost` is the exception: it is stored verbatim as an attribute and is not unit-checked.
+- **Not supported yet.** Services, `service_associations`,
   `time_series_associations`, and `ext` have no table. They are reported, not written.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never

@@ -1083,9 +1083,8 @@ CREATE TABLE point_to_point_bids (
 -- Both terminals are AC buses, DC side internal -- unlike tmodel_hvdc_lines,
 -- which runs between DC buses for multi-terminal networks.
 -- Some attribute units depend on a basis choice or a sibling control mode
--- (LCC impedances, VSC dc_setpoint_*) and are left unregistered in
--- column_conventions.json: the registry can't reach a sibling that is itself
--- an attribute, so each such row states its own unit.
+-- (LCC impedances, VSC ac_setpoint_*): each arm is registered, and each row
+-- states the arm its own discriminator field selects.
 CREATE TABLE two_terminal_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,

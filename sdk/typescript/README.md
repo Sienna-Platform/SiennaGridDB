@@ -12,5 +12,5 @@ console.log(JSON.stringify(report, null, 2));
 ```
 
 Any plain JSON object works; zod-parsed SDK objects are plain objects. Fields GridDB
-has no column for yet are counted in `report.skipped_fields`; pass `{ strict: true }`
+has no column or attribute route for yet are counted in `report.skipped_fields`; pass `{ strict: true }`
 to throw. CLI: `griddb-tools build system.json system.sqlite`.
