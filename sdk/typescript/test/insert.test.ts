@@ -45,10 +45,32 @@ test.skipIf(!hasGolden).each(CASES)("golden %s matches the expected report and r
   }
 });
 
-test.skipIf(!hasGolden)("strict gap rolls back", () => {
+test.skipIf(!hasGolden)("strict unknown field rolls back", () => {
   const db = fresh();
-  expect(() => insertComponent(db, "ACBus", loneBus(golden()), { strict: true })).toThrow(GapValueError);
+  const bus = { ...loneBus(golden()), numbr: 3 };
+  expect(() => insertComponent(db, "ACBus", bus, { strict: true })).toThrow(GapValueError);
   expect(count(db, "entities")).toBe(0);
+});
+
+const attributes = (db: Connection, id: unknown): Record<string, [unknown, unknown, unknown]> => {
+  const rows = db
+    .prepare("SELECT name, json(value) AS value, unit, quantity_kind FROM attributes WHERE entity_id = ?")
+    .all(id) as { name: string; value: string; unit: unknown; quantity_kind: unknown }[];
+  return Object.fromEntries(rows.map((r) => [r.name, [JSON.parse(r.value), r.unit, r.quantity_kind]]));
+};
+
+test.skipIf(!hasGolden)("bus fields round-trip through attributes", () => {
+  const db = fresh();
+  const bus = loneBus(golden());
+  expect(insertComponent(db, "ACBus", bus, { strict: true }).skipped_fields).toEqual({});
+  const stored = attributes(db, bus.id);
+  expect(stored.number).toEqual([bus.number, null, null]);
+  expect(stored.load_zone).toEqual([bus.load_zone, null, null]);
+  expect(stored.available).toEqual([bus.available, null, null]);
+  expect(stored.bustype).toEqual([bus.bustype, null, null]);
+  expect(stored.angle).toEqual([bus.angle, "rad", "Angle"]);
+  expect(stored.magnitude).toEqual([bus.magnitude, "pu", "Voltage"]);
+  expect(stored.voltage_limits).toEqual([bus.voltage_limits, "pu", "Voltage"]);
 });
 
 test("unsupported type", () => {

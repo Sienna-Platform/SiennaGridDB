@@ -431,18 +431,13 @@ CREATE TABLE facts_control_devices (
 );
 
 -- balancing_topologies: generated from ACBus, DCBus
+-- Stored via the generic `attributes` table, not as columns:
+-- number, bustype, angle, magnitude, voltage_limits, available, load_zone
 CREATE TABLE balancing_topologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
-    number INTEGER NOT NULL,
     name TEXT NOT NULL UNIQUE,
-    available BOOLEAN NOT NULL,
-    bustype TEXT NULL CHECK (bustype IN ('PQ', 'PV', 'REF', 'ISOLATED', 'SLACK')),
-    angle REAL NULL, -- Units: rad
-    magnitude REAL NULL, -- Units: pu
-    voltage_limits JSON NULL, -- Units: pu
     base_voltage REAL NULL, -- Units: kV
-    area INTEGER NULL,
-    load_zone INTEGER NULL
+    area INTEGER NULL
 );
 
 -- supply_technologies: generated from SupplyTechnology
