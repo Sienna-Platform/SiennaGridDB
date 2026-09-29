@@ -121,6 +121,8 @@ def test_dump_keeps_entity_ids_and_drops_surrogate_ids(tmp_path):
     assert out["entities"]["rows"] == [[7, "t", "X"]]
     assert "id" not in out["attributes"]["columns"]
     assert "id" in out["balancing_topologies"]["columns"]
+    assert "id" in out["time_series_associations"]["columns"]
+    assert "id" not in out["static_time_series"]["columns"]
     assert "unit_conventions" not in out
 
 
