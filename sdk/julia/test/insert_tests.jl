@@ -218,6 +218,27 @@ if HAS_GOLDEN
         end
     end
 
+    @testset "null sections read as empty" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                sections = (
+                    "supplemental_attributes",
+                    "supplemental_attribute_associations",
+                    "plant_associations",
+                )
+                for key in sections
+                    doc[key] = nothing
+                end
+                report = insert_document!(db, doc)
+                @test report.inserted["ThermalStandard"] == 7
+                @test count_rows(db, "supplemental_attribute_associations") == 0
+                empty = Dict{String, Any}("components" => nothing)
+                @test isempty(insert_document!(db, empty).inserted)
+            end
+        end
+    end
+
     # Review Focus 4
     @testset "reinsert keeps the first copy" begin
         mktempdir() do dir

@@ -209,9 +209,13 @@ function insert_component!(
     return insert_components!(db, type_name, [obj]; strict=strict)
 end
 
+# A section given as JSON null reads as empty, as in the Python and TypeScript SDKs.
+section_rows(doc::AbstractDict, key::AbstractString) =
+    something(get(doc, key, nothing), Any[])
+
 function attribute_types(doc::AbstractDict)
     types = Dict{Int, String}()
-    for assoc in get(doc, "supplemental_attribute_associations", Any[])
+    for assoc in section_rows(doc, "supplemental_attribute_associations")
         types[Int(assoc["attribute_id"])] = assoc["attribute_type"]
     end
     return types
@@ -251,7 +255,7 @@ Any failure rolls back the whole document.
 function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
     m = manifest()
     report = InsertReport()
-    components = get(doc, "components", Dict{String, Any}())
+    components = something(get(doc, "components", nothing), Dict{String, Any}())
     plans = Tuple{ComponentPlan, Vector{Any}}[]
     for type_name in sort!(collect(keys(components)))
         objs = components[type_name]
@@ -277,7 +281,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             end
         end
         routed = Tuple{String, String, Any, String}[]
-        for attr in get(doc, "supplemental_attributes", Any[])
+        for attr in section_rows(doc, "supplemental_attributes")
             id = Int(attr["id"])
             if !haskey(attr_types, id)
                 throw(
@@ -307,7 +311,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             add_inserted!(report, table)
         end
         for section in m.associations
-            for row in get(doc, section.section, Any[])
+            for row in section_rows(doc, section.section)
                 what = "$(section.section) row $(JSON.json(row))"
                 run_sql(
                     cache,
