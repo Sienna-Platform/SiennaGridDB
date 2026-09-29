@@ -257,7 +257,11 @@ def test_checked_in_manifest_is_current():
 
 
 def test_gap_file_lists_known_gaps():
+    """Each remaining gap waits on a schema decision, so a new one is a deliberate edit."""
     gaps = json.loads((SCHEMA_DIR / "insert_gaps.json").read_text(encoding="utf-8"))["gaps"]
-    assert "ACBus" not in gaps
-    assert "Line" not in gaps
-    assert gaps["TwoTerminalLCCLine"] == ["transfer_setpoint"]
+    assert gaps == {
+        "InterconnectingConverter": ["dc_current", "max_dc_current"],
+        "StorageTechnology": ["capital_costs"],
+        "TwoTerminalLCCLine": ["transfer_setpoint"],
+        "TwoTerminalVSCLine": ["dc_setpoint_from", "dc_setpoint_to"],
+    }
