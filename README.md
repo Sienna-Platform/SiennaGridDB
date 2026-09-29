@@ -29,12 +29,10 @@ Read this before building on it:
 - **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
   `PRAGMA user_version` is bumped on every schema change but nothing reads it.
-- **Roughly half the data model is typed.** 44 of 96 upstream components have a table.
-  Dynamics has none; services/reserves and the investment policy layer have none. See the
-  open coverage issue.
-- **The unit registry is the load-bearing deliverable** — 405 column conventions, sealed
-  and tamper-guarded, readable through the `column_units` view as an authoritative
-  `(table, column) -> (quantity_kind, unit, basis rule)` map.
+- **Roughly half the data model is typed.**
+  Dynamics and the investment policy layer have no tables; see the open coverage issue.
+- **The unit registry is the load-bearing deliverable.**
+  Its column conventions are sealed, tamper-guarded, and readable through the `column_units` view as an authoritative `(table, column) -> (quantity_kind, unit, basis rule)` map.
 
 ## How To(s)
 
@@ -66,8 +64,8 @@ for f in schema.sql triggers.sql unit_registry.sql views.sql; do sqlite3 $DB_NAM
 
 **Every connection must set `PRAGMA foreign_keys = ON`.** SQLite defaults it OFF
 per connection and does not store it in the file, so a database built by
-`just new-db` reports `foreign_keys = 0` when you next open it, and all 86
-foreign keys in this schema are inert until you turn them on:
+`just new-db` reports `foreign_keys = 0` when you next open it, and every
+foreign key in this schema is inert until you turn it on:
 
 ```sh
 sqlite3 griddb-example.sqlite "PRAGMA foreign_keys = ON; ..."
@@ -121,7 +119,7 @@ A field only some variants carry goes through `sql_codegen_map.json`'s `attribut
 Each attribute row states its own `unit`/`quantity_kind`, following the same per-row basis rule as typed columns: the name registers one `attributes.<name>` convention per arm (for example `active_power` as `ActivePower`/`MW` for `NATURAL_UNITS` and `ActivePower`/`pu` for `COMPONENT_BASE`), and each row uses the arm matching its own component's `power_units` (or `parameter_units`, a control mode, and so on).
 References and self-describing payloads listed in `attribute_identifiers` (bus `number`, `load_zone`, `dynamic_injector`, the loads' `operation_cost`, loss curves) and string, boolean or enum values carry no unit.
 
-Current registry: **41 quantity kinds, 66 allowed units, 514 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 523 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
@@ -240,7 +238,7 @@ generator's `bus` column, say), but a relationship where either side can have se
 of the other — or where the link itself carries data, or where the "other side" spans
 several different component tables — has no single column to hold it. `schema/schema.sql`
 handles each of these cases with a dedicated association table: a row per link rather
-than a column on either side. Five exist:
+than a column on either side. Six exist:
 
 | Table | Links | Why it needs its own table |
 |---|---|---|
@@ -249,16 +247,20 @@ than a column on either side. Five exist:
 | `combined_cycle_associations` | a plant ↔ the CT/CA units feeding into or receiving from its HRSGs | stated directly in the table's own comment: "a CT or CA can feed multiple HRSGs and an HRSG can have multiple CTs/CAs" — genuinely many-to-many, which is why it is a separate table from `plant_associations` rather than another row shape in it (`plant_associations` enforces one row per `(plant, entity)`, which this relationship violates) |
 | `time_series_associations` | a time series ↔ the entity that owns it | one entity can own several time series (different resolutions, different features), and the association row is what makes a stored series queryable by owner without touching the series data itself |
 | `trading_hub_associations` | a trading hub ↔ its member entities | a hub aggregates several settlement points and an entity can belong to more than one hub, so neither side can hold the link; `UNIQUE (trading_hub_id, entity_id)` keeps one row per membership |
+| `service_associations` | a service (reserve or transmission interface) ↔ its members | a reserve draws on many devices and a device can serve several reserves, and members span device, branch and reserve tables; neither side carries a member list, so these rows are the only record of who contributes; `UNIQUE (service_id, entity_id)` keeps one row per membership |
 
-Two of the five (`supplemental_attribute_associations`, `time_series_associations`)
+Two of the six (`supplemental_attribute_associations`, `time_series_associations`)
 resolve one side of the link through `entities` — the supertype table every component
 row also has a row in (`id`, `entity_table`, `entity_type`) — so a single
 `component_id`/`owner_id` column can point at a generator, a bus, or any other component
 type without a separate FK per possible target. `plant_associations`, `combined_cycle_associations` and
 `trading_hub_associations` reference `entities` the same way for their non-owning
 side (`entity_id`); their owning side (`plant_id`) always points at `plants`, since that
-side is never ambiguous. All five declare their FKs `ON DELETE CASCADE`, so a deleted
+side is never ambiguous. All six declare their FKs `ON DELETE CASCADE`, so a deleted
 component or attribute takes its association rows with it rather than leaving orphans.
+
+`service_associations` resolves both sides through `entities`, and triggers keep each side to its kind: a `reserves` or `transmission_interfaces` row as the service, and branches, reserves or devices as members, depending on the service.
+Views in `views.sql` read it: `service_contributors`, `interface_branch_directions` (an interface's `direction_mapping` names resolved to its member branches) and `interface_direction_violations` (mapped names that resolve to none; empty for valid data), `service_bid_offers` and `service_bids` (the market bids devices place on reserves), and `service_offer_violations` (offers into a service the device is not a member of; empty for valid data).
 
 `hydro_reservoir_connections` is association-shaped too, but it is listed with the hydro
 topology rather than here: it links two reservoirs to each other, not a component to a
@@ -386,8 +388,8 @@ written out in that file.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
   The loads' `operation_cost` is the exception: it is stored verbatim as an attribute and is not unit-checked.
-- **Not supported yet.** Services, `service_associations`,
-  `time_series_associations`, and `ext` have no table. They are reported, not written.
+- **Not supported yet.** A component type with no table (such as `AGC`, `HybridSystem`, the dynamics components and the investment requirements) and a section listed under `unsupported_sections` in `schema/insert_config.json` (such as `time_series_associations` and `ext`) are reported under `unsupported`, not written.
+  So is an association row that names a component of such a type.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. CI builds a database from them with each runtime and requires identical

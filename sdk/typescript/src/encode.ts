@@ -16,12 +16,15 @@ function sortDeep(value: unknown): unknown {
   return value;
 }
 
+/** What the int encoder accepts: an integral number in Int64. */
+export function isInt(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= -(2 ** 63) && v < 2 ** 63;
+}
+
 // Integers bind as BigInt: better-sqlite3 binds every JS number as a double.
 const ENCODERS: Record<Encoding, (v: unknown) => SqlValue> = {
   int: (v) => {
-    if (typeof v !== "number" || !Number.isInteger(v)) {
-      throw new EncodeError(`expected an integer, got ${JSON.stringify(v)}`);
-    }
+    if (!isInt(v)) throw new EncodeError(`expected an integer, got ${JSON.stringify(v)}`);
     return BigInt(v);
   },
   real: (v) => {

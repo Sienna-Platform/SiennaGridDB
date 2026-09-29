@@ -34,6 +34,12 @@ DROP TABLE IF EXISTS planning_regions;
 
 DROP TABLE IF EXISTS transmission_interchanges;
 
+DROP TABLE IF EXISTS reserves;
+
+DROP TABLE IF EXISTS transmission_interfaces;
+
+DROP TABLE IF EXISTS service_associations;
+
 DROP TABLE IF EXISTS entities;
 
 DROP TABLE IF EXISTS time_series_associations;
@@ -109,7 +115,7 @@ DROP TABLE IF EXISTS unit_management_metadata;
 -- PER-CONNECTION, AND NOT PERSISTED IN THE FILE. SQLite defaults this OFF on
 -- every new connection, so this line governs the build only: it does not travel
 -- with the database. Every consumer must issue `PRAGMA foreign_keys = ON` on
--- each connection it opens, or all 86 foreign keys in this schema are inert.
+-- each connection it opens, or every foreign key in this schema is inert.
 -- There is no file-level setting that changes this -- see README "Foreign keys".
 PRAGMA foreign_keys = ON;
 
@@ -333,6 +339,58 @@ CREATE TABLE transmission_interchanges (
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 ) strict;
+
+-- Reserve products (PSY OnlineReserve, OfflineReserve, GroupReserve), one table
+-- discriminated by entities.entity_type. enforce_reserves_type_shape_* keep each
+-- row to its type's fields. Contributors are service_associations rows.
+CREATE TABLE reserves (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    time_frame REAL NULL, -- Units: min
+    requirement REAL NOT NULL, -- Units: MW
+    sustained_time REAL NULL, -- Units: min
+    max_output_fraction REAL NULL CHECK (max_output_fraction BETWEEN 0 AND 1),
+    max_participation_factor REAL NULL CHECK (max_participation_factor BETWEEN 0 AND 1),
+    deployed_fraction REAL NULL CHECK (deployed_fraction BETWEEN 0 AND 1),
+    -- The schemas flatten PSY's direction type parameter into this enum:
+    reserve_direction TEXT NULL CHECK (reserve_direction IN ('UP', 'DOWN', 'SYMMETRIC')),
+    -- Operating reserve demand curve (CostCurve), verbatim; NULL when absent:
+    variable TEXT NULL CHECK (variable IS NULL OR json_valid(variable))
+) strict;
+
+-- Flow limit on a set of branches (PSY TransmissionInterface). direction_mapping
+-- is the schemas' branch name -> 1 or -1 object, verbatim; the member branches
+-- are service_associations rows.
+CREATE TABLE transmission_interfaces (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    active_power_flow_limits TEXT NOT NULL -- {"min": ..., "max": ...}
+        CHECK (json_valid(active_power_flow_limits)), -- Units: per power_units
+    -- Penalty cost of violating the limits; the schemas give it no unit:
+    violation_penalty REAL NULL,
+    direction_mapping TEXT NULL CHECK (direction_mapping IS NULL
+        OR (json_valid(direction_mapping) AND json_type(direction_mapping) = 'object')),
+    base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
+) strict;
+
+-- One (service, member) pair (SiennaSchemas ServiceAssociation), the only record of
+-- who contributes to a service; enforce_service_associations_domain_* keep members to
+-- the service's kind. AUTOINCREMENT id for the reason given at plant_associations.
+CREATE TABLE service_associations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_id INTEGER NOT NULL,
+    entity_id INTEGER NOT NULL,
+    FOREIGN KEY (service_id) REFERENCES entities (id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
+    UNIQUE (service_id, entity_id),
+    CHECK (service_id <> entity_id)
+) strict;
+
+-- The UNIQUE pair serves by-service lookups; this one serves by-member lookups.
+CREATE INDEX idx_service_associations_entity ON service_associations (entity_id);
 
 -- Existing thermal generation units (ThermalStandard, ThermalMultiStart).
 CREATE TABLE thermal_generators (

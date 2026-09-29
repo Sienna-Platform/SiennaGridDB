@@ -24,6 +24,14 @@ def test_int_encoding_accepts_integral_floats():
         encode("int", True)
 
 
+def test_int_encoding_stays_in_int64():
+    assert encode("int", 2**63 - 1) == 2**63 - 1
+    assert encode("int", -(2**63)) == -(2**63)
+    for value in (2**63, 1e20, float("inf")):
+        with pytest.raises(EncodeError):
+            encode("int", value)
+
+
 def test_other_encodings():
     assert encode("real", 2) == 2.0
     with pytest.raises(EncodeError):

@@ -116,10 +116,89 @@ def test_bus_fields_round_trip_through_attributes(conn):
 
 
 def test_unsupported_type(conn):
-    report = griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}])
-    assert report.unsupported == {"TransmissionInterface": 1}
+    report = griddb.insert_components(conn, "AGC", [{"id": 1}])
+    assert report.unsupported == {"AGC": 1}
     with pytest.raises(griddb.UnsupportedComponentError):
-        griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}], strict=True)
+        griddb.insert_components(conn, "AGC", [{"id": 1}], strict=True)
+
+
+def test_rows_naming_an_unsupported_component_are_reported_not_written(conn):
+    """AGC has no table, so an association row naming one, on either side, is
+    counted under its section instead of failing the document."""
+    doc = golden()
+    thermal = first(doc, "ThermalStandard")["id"]
+    agc, plant = 9001, 9002
+    doc["components"]["AGC"] = [{"id": agc, "name": "agc"}]
+    doc["supplemental_attributes"].append(
+        {"id": plant, "name": "cc1", "configuration": "SeparateShaftCombustionSteam"}
+    )
+    doc["supplemental_attribute_associations"] += [
+        {"component_id": c, "component_type": t, "attribute_id": plant,
+         "attribute_type": "CombinedCycleBlock"}
+        for c, t in [(thermal, "ThermalStandard"), (agc, "AGC")]
+    ]
+    doc["combined_cycle_associations"] = [
+        {"plant_id": plant, "entity_id": e, "role": "CT", "hrsg_index": i}
+        for i, e in enumerate([thermal, agc], start=1)
+    ]
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["AGC"] == 1
+    assert report.unsupported["supplemental_attribute_associations"] == 1
+    assert report.unsupported["combined_cycle_associations"] == 1
+    assert count(conn, "combined_cycle_associations") == 1
+
+
+# The skip reads ids by the int encoder's rule, so the three SDKs agree on odd ids.
+@pytest.mark.parametrize(
+    "agc_id, ref, skipped",
+    [
+        (9001, 9001.0, True),
+        ("9001", "9001", False),
+        (1, True, False),
+        (1e20, 1e20, False),
+        (9001, [9001], False),
+        (9001, {"id": 9001}, False),
+    ],
+)
+def test_unsupported_reference_ids_follow_the_int_rule(conn, agc_id, ref, skipped):
+    doc = golden()
+    doc["components"]["AGC"] = [{"id": agc_id, "name": "agc"}]
+    rows = doc["supplemental_attribute_associations"]
+    rows.append(dict(rows[0], component_id=ref, component_type="AGC"))
+    if skipped:
+        report = griddb.insert_document(conn, doc)
+        assert report.unsupported["supplemental_attribute_associations"] == 1
+    else:
+        with pytest.raises(griddb.InsertError, match="expected an integer"):
+            griddb.insert_document(conn, doc)
+
+
+def test_non_object_entries_of_an_unsupported_type_are_counted(conn):
+    doc = golden()
+    doc["components"]["AGC"] = [None, 5, [1]]
+    assert griddb.insert_document(conn, doc).unsupported["AGC"] == 3
+
+
+ENTRY_LISTS = (
+    "ThermalStandard",
+    "supplemental_attributes",
+    "supplemental_attribute_associations",
+    "plant_associations",
+    "combined_cycle_associations",
+    "trading_hub_associations",
+    "service_associations",
+)
+
+
+@pytest.mark.parametrize("value", [None, 5, [1]])
+@pytest.mark.parametrize("where", ENTRY_LISTS)
+def test_non_object_entries_raise_insert_error(conn, where, value):
+    doc = golden()
+    rows = doc["components"][where] if where in doc["components"] else doc[where]
+    rows.append(value)
+    with pytest.raises(griddb.InsertError, match="not an object"):
+        griddb.insert_document(conn, doc)
+    assert count(conn, "entities") == 0
 
 
 def test_component_base_cost_is_rejected(conn):
@@ -131,6 +210,19 @@ def test_component_base_cost_is_rejected(conn):
     griddb.insert_component(conn, "ACBus", lone_bus(raw, thermal["bus"]))
     with pytest.raises(griddb.InsertError, match="NATURAL_UNITS"):
         griddb.insert_component(conn, "ThermalStandard", thermal)
+
+
+def test_reserve_requirement_defaults_only_where_the_schema_does(conn):
+    """The online and offline schemas default requirement to 0.0; a group reserve
+    must carry one."""
+    online = {"id": 1, "name": "a", "time_frame": 5.0, "reserve_direction": "UP"}
+    griddb.insert_component(conn, "OnlineReserve", online)
+    offline = {"id": 2, "name": "b", "time_frame": 5.0}
+    griddb.insert_component(conn, "OfflineReserve", offline)
+    assert conn.execute("SELECT requirement FROM reserves").fetchall() == [(0.0,), (0.0,)]
+    group = {"id": 3, "name": "g", "reserve_direction": "UP"}
+    with pytest.raises(griddb.InsertError, match=r"NOT NULL .*reserves\.requirement"):
+        griddb.insert_component(conn, "GroupReserve", group)
 
 
 # Review Focus 1
@@ -170,6 +262,70 @@ def test_plant_attribute_association_is_stored(conn):
         (plant_id,),
     ).fetchone()
     assert linked == 1
+
+
+SERVICE_TYPES = {"OnlineReserve", "OfflineReserve", "GroupReserve", "TransmissionInterface"}
+
+
+def with_services(doc):
+    """The golden document plus an online and an offline reserve on a generator,
+    a group over both, and an interface on a line, with their memberships."""
+    comps = doc["components"]
+    top = max(
+        [o["id"] for objs in comps.values() for o in objs]
+        + [a["id"] for a in doc["supplemental_attributes"]]
+    )
+    online, offline, group, iface = range(top + 1, top + 5)
+    thermal = comps["ThermalStandard"][0]["id"]
+    line = comps["Line"][0]
+    comps["OnlineReserve"] = [
+        {"id": online, "name": "online_up", "available": True, "time_frame": 5.0,
+         "requirement": 10.0, "reserve_direction": "UP"}
+    ]
+    comps["OfflineReserve"] = [
+        {"id": offline, "name": "offline_up", "available": True, "time_frame": 30.0}
+    ]
+    comps["GroupReserve"] = [
+        {"id": group, "name": "group_up", "available": True, "requirement": 0.0,
+         "reserve_direction": "UP"}
+    ]
+    comps["TransmissionInterface"] = [
+        {"id": iface, "name": "IFACE", "available": True,
+         "active_power_flow_limits": {"min": -100.0, "max": 100.0},
+         "violation_penalty": 1e5, "direction_mapping": {line["name"]: -1},
+         "base_power": 100.0, "power_units": "NATURAL_UNITS"}
+    ]
+    doc["service_associations"] = [
+        {"service_id": s, "entity_id": e}
+        for s, e in [(online, thermal), (offline, thermal), (group, online),
+                     (group, offline), (iface, line["id"])]
+    ]
+    return doc
+
+
+def test_services_and_memberships_are_stored(conn):
+    doc = with_services(golden())
+    report = griddb.insert_document(conn, doc)
+    assert {t: report.inserted[t] for t in SERVICE_TYPES} == dict.fromkeys(SERVICE_TYPES, 1)
+    assert report.inserted["service_associations"] == 5
+    assert set(report.unsupported) == {"ext"}
+    assert not SERVICE_TYPES & set(report.skipped_fields)
+    line = doc["components"]["Line"][0]["id"]
+    rows = conn.execute("SELECT branch_id, direction FROM interface_branch_directions")
+    assert rows.fetchall() == [(line, -1)]
+
+
+def test_membership_of_an_unsupported_service_is_reported_not_written(conn):
+    """AGC has no table, so its membership rows are counted, not inserted."""
+    doc = with_services(golden())
+    online = doc["components"]["OnlineReserve"][0]["id"]
+    doc["components"]["AGC"] = [{"id": online + 10, "name": "agc"}]
+    doc["service_associations"].append({"service_id": online + 10, "entity_id": online})
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["AGC"] == 1
+    assert report.unsupported["service_associations"] == 1
+    assert report.inserted["service_associations"] == 5
+    assert count(conn, "service_associations") == 5
 
 
 # Review Focus 2

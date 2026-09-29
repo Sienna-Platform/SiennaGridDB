@@ -19,6 +19,10 @@
           "path": "attribute_type"
         }
       ],
+      "references": [
+        "component_id",
+        "attribute_id"
+      ],
       "row_sql": "INSERT INTO supplemental_attribute_associations (component_id, component_type, attribute_id, attribute_type) VALUES (?, ?, ?, ?)",
       "section": "supplemental_attribute_associations"
     },
@@ -36,6 +40,10 @@
           "encode": "int",
           "path": "group_index"
         }
+      ],
+      "references": [
+        "plant_id",
+        "entity_id"
       ],
       "row_sql": "INSERT INTO plant_associations (plant_id, entity_id, group_index) VALUES (?, ?, ?)",
       "section": "plant_associations"
@@ -59,6 +67,10 @@
           "path": "hrsg_index"
         }
       ],
+      "references": [
+        "plant_id",
+        "entity_id"
+      ],
       "row_sql": "INSERT INTO combined_cycle_associations (plant_id, entity_id, role, hrsg_index) VALUES (?, ?, ?, ?)",
       "section": "combined_cycle_associations"
     },
@@ -73,8 +85,30 @@
           "path": "entity_id"
         }
       ],
+      "references": [
+        "trading_hub_id",
+        "entity_id"
+      ],
       "row_sql": "INSERT INTO trading_hub_associations (trading_hub_id, entity_id) VALUES (?, ?)",
       "section": "trading_hub_associations"
+    },
+    {
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "service_id"
+        },
+        {
+          "encode": "int",
+          "path": "entity_id"
+        }
+      ],
+      "references": [
+        "service_id",
+        "entity_id"
+      ],
+      "row_sql": "INSERT INTO service_associations (service_id, entity_id) VALUES (?, ?)",
+      "section": "service_associations"
     }
   ],
   "attribute_sql": "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) VALUES (?, ?, ?, ?, ?, ?)",
@@ -873,6 +907,41 @@
       "row_sql": "INSERT INTO fixed_admittance (id, name, bus, available, y_g, y_b, admittance_units, base_power) VALUES (?, ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_MVAR'), ?)",
       "skip": [],
       "table": "fixed_admittance"
+    },
+    "GroupReserve": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "requirement"
+        },
+        {
+          "encode": "text",
+          "path": "reserve_direction"
+        },
+        {
+          "encode": "json",
+          "path": "variable"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'reserves', 'GroupReserve')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO reserves (id, name, available, requirement, reserve_direction, variable) VALUES (?, ?, COALESCE(?, 1), ?, ?, ?)",
+      "skip": [],
+      "table": "reserves"
     },
     "HydroDispatch": {
       "attributes": [
@@ -2325,6 +2394,112 @@
       "row_sql": "INSERT INTO transport_technologies (id, name, power_systems_type, available, capital_costs, financial_data, unit_size) VALUES (?, ?, ?, COALESCE(?, TRUE), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), ?, ?)",
       "skip": [],
       "table": "transport_technologies"
+    },
+    "OfflineReserve": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "time_frame"
+        },
+        {
+          "encode": "real",
+          "path": "requirement"
+        },
+        {
+          "encode": "real",
+          "path": "sustained_time"
+        },
+        {
+          "encode": "real",
+          "path": "max_output_fraction"
+        },
+        {
+          "encode": "real",
+          "path": "max_participation_factor"
+        },
+        {
+          "encode": "real",
+          "path": "deployed_fraction"
+        },
+        {
+          "encode": "json",
+          "path": "variable"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'reserves', 'OfflineReserve')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO reserves (id, name, available, time_frame, requirement, sustained_time, max_output_fraction, max_participation_factor, deployed_fraction, variable) VALUES (?, ?, COALESCE(?, 1), ?, COALESCE(?, 0.0), COALESCE(?, 60.0), COALESCE(?, 1.0), COALESCE(?, 1.0), COALESCE(?, 0.0), ?)",
+      "skip": [],
+      "table": "reserves"
+    },
+    "OnlineReserve": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "time_frame"
+        },
+        {
+          "encode": "real",
+          "path": "requirement"
+        },
+        {
+          "encode": "real",
+          "path": "sustained_time"
+        },
+        {
+          "encode": "real",
+          "path": "max_output_fraction"
+        },
+        {
+          "encode": "real",
+          "path": "max_participation_factor"
+        },
+        {
+          "encode": "real",
+          "path": "deployed_fraction"
+        },
+        {
+          "encode": "text",
+          "path": "reserve_direction"
+        },
+        {
+          "encode": "json",
+          "path": "variable"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'reserves', 'OnlineReserve')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO reserves (id, name, available, time_frame, requirement, sustained_time, max_output_fraction, max_participation_factor, deployed_fraction, reserve_direction, variable) VALUES (?, ?, COALESCE(?, 1), ?, COALESCE(?, 0.0), COALESCE(?, 60.0), COALESCE(?, 1.0), COALESCE(?, 1.0), COALESCE(?, 0.0), ?, ?)",
+      "skip": [],
+      "table": "reserves"
     },
     "PointToPointBid": {
       "attributes": [],
@@ -3798,6 +3973,49 @@
       "skip": [],
       "table": "transformer_circuits"
     },
+    "TransmissionInterface": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "json",
+          "path": "active_power_flow_limits"
+        },
+        {
+          "encode": "real",
+          "path": "violation_penalty"
+        },
+        {
+          "encode": "json",
+          "path": "direction_mapping"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_interfaces', 'TransmissionInterface')",
+      "gaps": [],
+      "rank": 0,
+      "row_sql": "INSERT INTO transmission_interfaces (id, name, available, active_power_flow_limits, violation_penalty, direction_mapping, base_power, power_units) VALUES (?, ?, COALESCE(?, 1), ?, ?, ?, ?, ?)",
+      "skip": [],
+      "table": "transmission_interfaces"
+    },
     "TwoTerminalGenericHVDCLine": {
       "attributes": [
         {
@@ -4585,7 +4803,6 @@
   "unsupported_components": {},
   "unsupported_sections": {
     "ext": "no table in schema.sql",
-    "service_associations": "no table in schema.sql",
     "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified"
   },
   "vocabulary": {
@@ -4688,6 +4905,11 @@
       {
         "is_dc": false,
         "is_topology": false,
+        "name": "GroupReserve"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
         "name": "HydroDispatch"
       },
       {
@@ -4759,6 +4981,16 @@
         "is_dc": false,
         "is_topology": false,
         "name": "NodalHVDCTransportTechnology"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "OfflineReserve"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "OnlineReserve"
       },
       {
         "is_dc": false,
@@ -4864,6 +5096,11 @@
         "is_dc": false,
         "is_topology": false,
         "name": "TransformerCircuit"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "TransmissionInterface"
       },
       {
         "is_dc": false,

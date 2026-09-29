@@ -11,10 +11,17 @@ def canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def _int(value):
+def is_int(value):
+    """What the int encoder accepts: an int or integral float, not a bool, in Int64."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise EncodeError(f"expected an integer, got {value!r}")
+        return False
     if isinstance(value, float) and not value.is_integer():
+        return False
+    return -(2**63) <= value < 2**63
+
+
+def _int(value):
+    if not is_int(value):
         raise EncodeError(f"expected an integer, got {value!r}")
     return int(value)
 

@@ -187,6 +187,48 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_reserves_entity_exists BEFORE
+INSERT
+    ON reserves
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'reserves'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'reserves.id must exist in entities with entity_table reserves before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_interfaces_entity_exists BEFORE
+INSERT
+    ON transmission_interfaces
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transmission_interfaces'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.id must exist in entities with entity_table transmission_interfaces before insert'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_thermal_generators_entity_exists BEFORE
 INSERT
     ON thermal_generators
@@ -664,6 +706,23 @@ SELECT
 
 END;
 
+-- An entity's table and type are fixed once inserted: the triggers keyed on them
+-- check a row only when that row is written, so a later change would bypass them.
+CREATE TRIGGER IF NOT EXISTS enforce_entities_identity_update BEFORE
+UPDATE
+    OF entity_table,
+    entity_type ON entities
+    WHEN NEW.entity_table IS NOT OLD.entity_table
+    OR NEW.entity_type IS NOT OLD.entity_type
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'entities.entity_table and entities.entity_type cannot change after insert.'
+    );
+
+END;
+
 -- Business Logic Validation Triggers
 CREATE TRIGGER enforce_arc_entity_types_insert
 AFTER
@@ -1022,6 +1081,28 @@ END;
 CREATE TRIGGER IF NOT EXISTS delete_transmission_interchanges_entity
 AFTER
     DELETE ON transmission_interchanges FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_reserves_entity
+AFTER
+    DELETE ON reserves FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_transmission_interfaces_entity
+AFTER
+    DELETE ON transmission_interfaces FOR EACH ROW
 BEGIN
 DELETE FROM
     entities
@@ -1629,6 +1710,320 @@ SELECT
         ABORT,
         'supplemental_attribute_associations.attribute_id must exist in supplemental_attributes or plants.'
     );
+
+END;
+
+-- =============================================================================
+-- Reserve Shape Triggers
+-- One reserves table holds three types; these mirror each type's required list
+-- in the schemas, keyed on entities.entity_type.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_reserves_type_shape_insert BEFORE
+INSERT
+    ON reserves
+BEGIN
+SELECT
+    CASE
+        WHEN t.entity_type NOT IN ('OnlineReserve', 'OfflineReserve', 'GroupReserve') THEN RAISE(
+            ABORT,
+            'reserves rows must be OnlineReserve, OfflineReserve or GroupReserve entities.'
+        )
+        WHEN t.entity_type <> 'GroupReserve'
+        AND NEW.time_frame IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and OfflineReserve rows require time_frame.'
+        )
+        WHEN t.entity_type = 'GroupReserve'
+        AND (
+            NEW.time_frame IS NOT NULL
+            OR NEW.sustained_time IS NOT NULL
+            OR NEW.max_output_fraction IS NOT NULL
+            OR NEW.max_participation_factor IS NOT NULL
+            OR NEW.deployed_fraction IS NOT NULL
+        ) THEN RAISE(
+            ABORT,
+            'GroupReserve rows have no time_frame, sustained_time or participation fractions.'
+        )
+        WHEN t.entity_type = 'OfflineReserve'
+        AND NEW.reserve_direction IS NOT NULL THEN RAISE(
+            ABORT,
+            'OfflineReserve rows have no reserve_direction: they are upward only.'
+        )
+        WHEN t.entity_type <> 'OfflineReserve'
+        AND NEW.reserve_direction IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and GroupReserve rows require reserve_direction.'
+        )
+    END
+FROM
+    (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    ) t;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_reserves_type_shape_update BEFORE
+UPDATE
+    ON reserves
+BEGIN
+SELECT
+    CASE
+        WHEN t.entity_type NOT IN ('OnlineReserve', 'OfflineReserve', 'GroupReserve') THEN RAISE(
+            ABORT,
+            'reserves rows must be OnlineReserve, OfflineReserve or GroupReserve entities.'
+        )
+        WHEN t.entity_type <> 'GroupReserve'
+        AND NEW.time_frame IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and OfflineReserve rows require time_frame.'
+        )
+        WHEN t.entity_type = 'GroupReserve'
+        AND (
+            NEW.time_frame IS NOT NULL
+            OR NEW.sustained_time IS NOT NULL
+            OR NEW.max_output_fraction IS NOT NULL
+            OR NEW.max_participation_factor IS NOT NULL
+            OR NEW.deployed_fraction IS NOT NULL
+        ) THEN RAISE(
+            ABORT,
+            'GroupReserve rows have no time_frame, sustained_time or participation fractions.'
+        )
+        WHEN t.entity_type = 'OfflineReserve'
+        AND NEW.reserve_direction IS NOT NULL THEN RAISE(
+            ABORT,
+            'OfflineReserve rows have no reserve_direction: they are upward only.'
+        )
+        WHEN t.entity_type <> 'OfflineReserve'
+        AND NEW.reserve_direction IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and GroupReserve rows require reserve_direction.'
+        )
+    END
+FROM
+    (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    ) t;
+
+END;
+
+-- =============================================================================
+-- Interface Direction Triggers
+-- Each direction_mapping value must be 1 or -1; an integral real such as 1.0
+-- counts, as in the SDKs' int encoder. Malformed JSON is left to the CHECK.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_interfaces_direction_insert BEFORE
+INSERT
+    ON transmission_interfaces
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(
+                CASE
+                    WHEN NOT json_valid(NEW.direction_mapping) THEN NULL
+                    WHEN json_type(NEW.direction_mapping) = 'object' THEN NEW.direction_mapping
+                END
+            )
+        WHERE
+            type NOT IN ('integer', 'real')
+            OR value NOT IN (1, -1)
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.direction_mapping values must be 1 or -1.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_interfaces_direction_update BEFORE
+UPDATE
+    OF direction_mapping ON transmission_interfaces
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(
+                CASE
+                    WHEN NOT json_valid(NEW.direction_mapping) THEN NULL
+                    WHEN json_type(NEW.direction_mapping) = 'object' THEN NEW.direction_mapping
+                END
+            )
+        WHERE
+            type NOT IN ('integer', 'real')
+            OR value NOT IN (1, -1)
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.direction_mapping values must be 1 or -1.'
+    );
+
+END;
+
+-- =============================================================================
+-- Service Association Domain Triggers
+-- service_id must be a service row, and each member must fit its kind: branches
+-- for an interface, reserves for a group, static-injection devices for a reserve.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_service_associations_domain_insert BEFORE
+INSERT
+    ON service_associations
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'service_associations.service_id must exist in reserves or transmission_interfaces.'
+    )
+WHERE
+    NOT EXISTS (
+        SELECT
+            1
+        FROM
+            reserves
+        WHERE
+            id = NEW.service_id
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interfaces
+        WHERE
+            id = NEW.service_id
+    );
+
+SELECT
+    CASE
+        WHEN s.entity_type = 'GroupReserve'
+        AND m.entity_table <> 'reserves' THEN RAISE(
+            ABORT,
+            'A GroupReserve''s members must be reserves.'
+        )
+        WHEN s.entity_table = 'transmission_interfaces'
+        AND m.entity_table NOT IN (
+                'transmission_lines',
+                'discrete_controlled_ac_branches',
+                'two_winding_transformers',
+                'three_winding_transformers',
+                'transmission_interchanges',
+                'two_terminal_hvdc_lines',
+                'tmodel_hvdc_lines'
+            ) THEN RAISE(
+            ABORT,
+            'A TransmissionInterface''s members must be branches.'
+        )
+        WHEN s.entity_type IN ('OnlineReserve', 'OfflineReserve')
+        AND m.entity_table NOT IN (
+                'thermal_generators',
+                'renewable_generators',
+                'hydro_generators',
+                'storage_units',
+                'loads',
+                'sources',
+                'synchronous_condensers',
+                'fixed_admittance',
+                'switched_admittance',
+                'facts_control_devices',
+                'interconnecting_converters'
+            ) THEN RAISE(
+            ABORT,
+            'An OnlineReserve''s or OfflineReserve''s members must be devices, not services or branches.'
+        )
+    END
+FROM
+    entities s,
+    entities m
+WHERE
+    s.id = NEW.service_id
+    AND m.id = NEW.entity_id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_service_associations_domain_update BEFORE
+UPDATE
+    OF service_id,
+    entity_id ON service_associations
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'service_associations.service_id must exist in reserves or transmission_interfaces.'
+    )
+WHERE
+    NOT EXISTS (
+        SELECT
+            1
+        FROM
+            reserves
+        WHERE
+            id = NEW.service_id
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interfaces
+        WHERE
+            id = NEW.service_id
+    );
+
+SELECT
+    CASE
+        WHEN s.entity_type = 'GroupReserve'
+        AND m.entity_table <> 'reserves' THEN RAISE(
+            ABORT,
+            'A GroupReserve''s members must be reserves.'
+        )
+        WHEN s.entity_table = 'transmission_interfaces'
+        AND m.entity_table NOT IN (
+                'transmission_lines',
+                'discrete_controlled_ac_branches',
+                'two_winding_transformers',
+                'three_winding_transformers',
+                'transmission_interchanges',
+                'two_terminal_hvdc_lines',
+                'tmodel_hvdc_lines'
+            ) THEN RAISE(
+            ABORT,
+            'A TransmissionInterface''s members must be branches.'
+        )
+        WHEN s.entity_type IN ('OnlineReserve', 'OfflineReserve')
+        AND m.entity_table NOT IN (
+                'thermal_generators',
+                'renewable_generators',
+                'hydro_generators',
+                'storage_units',
+                'loads',
+                'sources',
+                'synchronous_condensers',
+                'fixed_admittance',
+                'switched_admittance',
+                'facts_control_devices',
+                'interconnecting_converters'
+            ) THEN RAISE(
+            ABORT,
+            'An OnlineReserve''s or OfflineReserve''s members must be devices, not services or branches.'
+        )
+    END
+FROM
+    entities s,
+    entities m
+WHERE
+    s.id = NEW.service_id
+    AND m.id = NEW.entity_id;
 
 END;
 

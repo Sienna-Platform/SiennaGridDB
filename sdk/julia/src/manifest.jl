@@ -40,6 +40,7 @@ struct AssociationPlan
     section::String
     row_sql::String
     bindings::Vector{Binding}
+    references::Vector{String}
 end
 
 struct Manifest
@@ -111,8 +112,12 @@ function parse_manifest(raw::AbstractDict)
     )
     supplemental = raw["supplemental_attributes"]
     associations = AssociationPlan[
-        AssociationPlan(a["section"], a["row_sql"], parse_bindings(a["bindings"])) for
-        a in raw["associations"]
+        AssociationPlan(
+            a["section"],
+            a["row_sql"],
+            parse_bindings(a["bindings"]),
+            String.(a["references"]),
+        ) for a in raw["associations"]
     ]
     return Manifest(
         raw["schema_user_version"],

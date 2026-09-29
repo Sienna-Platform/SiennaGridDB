@@ -4,7 +4,7 @@ import sqlite3
 from contextlib import contextmanager
 
 from .db import seed_vocabulary
-from .encode import EncodeError, canonical_json, encode, value_at
+from .encode import EncodeError, canonical_json, encode, is_int, value_at
 from .errors import GapValueError, InsertError, UnsupportedComponentError, describe
 from .manifest import load_manifest
 from .report import InsertReport
@@ -100,7 +100,22 @@ def _write_row(conn, plan, obj, report, strict):
     report.add_inserted(plan.type_name)
 
 
+def _require_object(entry, what):
+    """Every document entry is a JSON object; anything else is schema-invalid input."""
+    if not isinstance(entry, dict):
+        raise InsertError(f"{what} {entry!r}: not an object")
+
+
+def _section_rows(doc, name):
+    """A section's rows; JSON null reads as empty."""
+    rows = doc.get(name) or []
+    for row in rows:
+        _require_object(row, f"{name} row")
+    return rows
+
+
 def _write_entity(conn, plan, obj):
+    _require_object(obj, f"{plan.type_name} entry")
     what = describe(plan.type_name, obj)
     _execute(conn, plan.entity_sql, _params(plan.entity_bindings, obj, what), what)
 
@@ -137,9 +152,15 @@ def insert_model(conn, model, *, strict=False):
 
 def _attribute_types(doc):
     types = {}
-    for assoc in doc.get("supplemental_attribute_associations") or []:
+    for assoc in _section_rows(doc, "supplemental_attribute_associations"):
         types[assoc["attribute_id"]] = assoc["attribute_type"]
     return types
+
+
+def _names_unsupported(row, references, ids):
+    """Whether a reference names a component the insert does not write; ids follow
+    the int encoder's rule, so any other value reaches the encoder and fails there."""
+    return any(is_int(v) and v in ids for v in (value_at(row, r) for r in references))
 
 
 def insert_document(conn, doc, *, strict=False):
@@ -148,11 +169,15 @@ def insert_document(conn, doc, *, strict=False):
     report = InsertReport()
     components = doc.get("components") or {}
     plans = []
+    unsupported_ids = set()
     for type_name in sorted(components):
         objs = [as_json_data(o) for o in components[type_name]]
         plan = _plan_for(type_name, len(objs), report, strict)
         if plan is not None:
             plans.append((plan, objs))
+        else:
+            ids = (o.get("id") for o in objs if isinstance(o, dict))
+            unsupported_ids.update(i for i in ids if is_int(i))
     plans.sort(key=lambda p: (p[0].rank, p[0].type_name))
     for section, reason in sorted(manifest.unsupported_sections.items()):
         rows = doc.get(section) or []
@@ -167,7 +192,7 @@ def insert_document(conn, doc, *, strict=False):
             for obj in objs:
                 _write_entity(conn, plan, obj)
         routed = []
-        for attr in doc.get("supplemental_attributes") or []:
+        for attr in _section_rows(doc, "supplemental_attributes"):
             if attr["id"] not in attr_types:
                 raise InsertError(
                     f"supplemental attribute id={attr['id']}: no association names its type"
@@ -199,7 +224,11 @@ def insert_document(conn, doc, *, strict=False):
             report.add_inserted(table)
         for section in manifest.associations:
             name = section["section"]
-            for row in doc.get(name) or []:
+            for row in _section_rows(doc, name):
+                # A row naming a component that has no table is not written either.
+                if _names_unsupported(row, section["references"], unsupported_ids):
+                    report.add_unsupported(name, 1)
+                    continue
                 what = f"{name} row {row}"
                 _execute(
                     conn, section["row_sql"], _params(section["bindings"], row, what), what

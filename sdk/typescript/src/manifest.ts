@@ -29,7 +29,7 @@ export interface ComponentPlan {
   gaps: string[];
   knownFields: Set<string>;
 }
-export interface AssociationPlan { section: string; row_sql: string; bindings: Binding[] }
+export interface AssociationPlan { section: string; row_sql: string; bindings: Binding[]; references: string[] }
 export interface Manifest {
   schema_user_version: number;
   vocabulary: {

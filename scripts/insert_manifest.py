@@ -295,7 +295,9 @@ def association_entry(conn, resolver, section, rel_file):
         for p in names
     ]
     row_sql = f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join('?' for _ in names)})"
-    return {"section": section, "row_sql": row_sql, "bindings": bindings}
+    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
+    references = [p for p in names if p in fk_columns]
+    return {"section": section, "row_sql": row_sql, "bindings": bindings, "references": references}
 
 
 def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
