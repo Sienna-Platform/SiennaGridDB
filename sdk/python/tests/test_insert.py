@@ -340,3 +340,46 @@ def test_unknown_discriminator_value_is_reported_or_raises(conn):
         griddb.insert_component(conn, "TwoTerminalLCCLine", lcc, strict=True)
     report = griddb.insert_component(conn, "TwoTerminalLCCLine", lcc)
     assert report.skipped_fields["TwoTerminalLCCLine"]["r"] == 1
+
+
+def load(bus_id, power_units, **fields):
+    return {
+        "id": 9001, "name": "load", "available": True, "bus": bus_id,
+        "active_power": 0.5, "reactive_power": 0.1, "base_power": 100.0,
+        "power_units": power_units, "max_active_power": 0.6, "max_reactive_power": 0.2,
+        **fields,
+    }
+
+
+@pytest.mark.parametrize(
+    "power_units,active,reactive",
+    [("COMPONENT_BASE", "pu", "pu"), ("NATURAL_UNITS", "MW", "MVAr")],
+)
+def test_load_power_follows_its_power_units(conn, power_units, active, reactive):
+    bus = lone_bus(golden())
+    griddb.insert_component(conn, "ACBus", bus)
+    report = griddb.insert_component(conn, "PowerLoad", load(bus["id"], power_units), strict=True)
+    assert report.skipped_fields == {}
+    stored = attributes(conn, 9001)
+    assert stored["active_power"] == (0.5, active, "ActivePower")
+    assert stored["max_reactive_power"] == (0.2, reactive, "ReactivePower")
+    assert stored["available"] == (True, None, None)
+
+
+def test_interruptible_load_cost_is_stored_verbatim(conn):
+    bus = lone_bus(golden())
+    griddb.insert_component(conn, "ACBus", bus)
+    cost = {
+        "cost_type": "LOAD",
+        "fixed": 2.0,
+        "variable_operation_cost": {
+            "power_units": "NATURAL_UNITS",
+            "value_curve": {
+                "curve_type": "INPUT_OUTPUT",
+                "function_data": {"function_type": "LINEAR", "proportional_term": 30.0},
+            },
+        },
+    }
+    obj = load(bus["id"], "NATURAL_UNITS", operation_cost=cost)
+    griddb.insert_component(conn, "InterruptiblePowerLoad", obj, strict=True)
+    assert attributes(conn, 9001)["operation_cost"] == (cost, None, None)

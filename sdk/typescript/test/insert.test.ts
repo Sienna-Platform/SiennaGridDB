@@ -221,3 +221,40 @@ test.skipIf(!hasGolden)("unknown discriminator value is reported or raises", () 
   const report = insertComponent(db, "TwoTerminalLCCLine", lcc);
   expect((report.skipped_fields as Record<string, Record<string, number>>).TwoTerminalLCCLine.r).toBe(1);
 });
+
+const load = (bus: unknown, powerUnits: string, extra: JsonObject = {}): JsonObject => ({
+  id: 9001, name: "load", available: true, bus, active_power: 0.5, reactive_power: 0.1,
+  base_power: 100.0, power_units: powerUnits, max_active_power: 0.6, max_reactive_power: 0.2,
+  ...extra,
+});
+
+test.skipIf(!hasGolden).each([
+  ["COMPONENT_BASE", "pu", "pu"],
+  ["NATURAL_UNITS", "MW", "MVAr"],
+])("%s load power follows its power_units", (powerUnits, active, reactive) => {
+  const db = fresh();
+  const bus = loneBus(golden());
+  insertComponent(db, "ACBus", bus);
+  const report = insertComponent(db, "PowerLoad", load(bus.id, powerUnits), { strict: true });
+  expect(report.skipped_fields).toEqual({});
+  const stored = attributes(db, 9001);
+  expect(stored.active_power).toEqual([0.5, active, "ActivePower"]);
+  expect(stored.max_reactive_power).toEqual([0.2, reactive, "ReactivePower"]);
+  expect(stored.available).toEqual([true, null, null]);
+});
+
+test.skipIf(!hasGolden)("interruptible load cost is stored verbatim", () => {
+  const db = fresh();
+  const bus = loneBus(golden());
+  insertComponent(db, "ACBus", bus);
+  const cost = {
+    cost_type: "LOAD",
+    fixed: 2.0,
+    variable_operation_cost: {
+      power_units: "NATURAL_UNITS",
+      value_curve: { curve_type: "INPUT_OUTPUT", function_data: { function_type: "LINEAR", proportional_term: 30.0 } },
+    },
+  };
+  insertComponent(db, "InterruptiblePowerLoad", load(bus.id, "NATURAL_UNITS", { operation_cost: cost }), { strict: true });
+  expect(attributes(db, 9001).operation_cost).toEqual([cost, null, null]);
+});
