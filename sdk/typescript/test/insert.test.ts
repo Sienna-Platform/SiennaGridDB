@@ -131,6 +131,77 @@ test.skipIf(!hasGolden)("duplicate id across types rolls back the document", () 
   expect(count(db, "entities")).toBe(0);
 });
 
+const SERVICE_TYPES = ["OnlineReserve", "OfflineReserve", "GroupReserve", "TransmissionInterface"];
+
+// The golden document plus an online and an offline reserve on a generator, a group
+// over both, and an interface on a line, with their memberships.
+function withServices(doc: JsonObject): JsonObject {
+  const comps = doc.components as Record<string, JsonObject[]>;
+  const ids = [...Object.values(comps).flat(), ...(doc.supplemental_attributes as JsonObject[])].map(
+    (o) => o.id as number,
+  );
+  const top = Math.max(...ids);
+  const [online, offline, group, iface] = [top + 1, top + 2, top + 3, top + 4];
+  const thermal = comps.ThermalStandard[0].id as number;
+  const line = comps.Line[0];
+  comps.OnlineReserve = [
+    { id: online, name: "online_up", available: true, time_frame: 5.0, requirement: 10.0, reserve_direction: "UP" },
+  ];
+  comps.OfflineReserve = [{ id: offline, name: "offline_up", available: true, time_frame: 30.0 }];
+  comps.GroupReserve = [{ id: group, name: "group_up", available: true, requirement: 0.0, reserve_direction: "UP" }];
+  comps.TransmissionInterface = [
+    {
+      id: iface,
+      name: "IFACE",
+      available: true,
+      active_power_flow_limits: { min: -100.0, max: 100.0 },
+      violation_penalty: 1e5,
+      direction_mapping: { [line.name as string]: -1 },
+      base_power: 100.0,
+      power_units: "NATURAL_UNITS",
+    },
+  ];
+  const pairs = [
+    [online, thermal],
+    [offline, thermal],
+    [group, online],
+    [group, offline],
+    [iface, line.id as number],
+  ];
+  doc.service_associations = pairs.map(([s, e]) => ({ service_id: s, entity_id: e }));
+  return doc;
+}
+
+test.skipIf(!hasGolden)("services and memberships are stored", () => {
+  const db = fresh();
+  const doc = withServices(golden());
+  const report = insertDocument(db, doc);
+  for (const t of SERVICE_TYPES) {
+    expect(report.inserted[t]).toBe(1);
+    expect(report.skipped_fields[t]).toBeUndefined();
+  }
+  expect(report.inserted.service_associations).toBe(5);
+  expect(Object.keys(report.unsupported)).toEqual(["ext"]);
+  const line = firstOf(doc, "Line").id;
+  expect(db.prepare("SELECT branch_id, direction FROM interface_branch_directions").all()).toEqual([
+    { branch_id: line, direction: -1 },
+  ]);
+});
+
+// AGC has no table, so its membership rows are counted, not inserted.
+test.skipIf(!hasGolden)("membership of an unsupported service is reported, not written", () => {
+  const db = fresh();
+  const doc = withServices(golden());
+  const online = firstOf(doc, "OnlineReserve").id as number;
+  (doc.components as Record<string, JsonObject[]>).AGC = [{ id: online + 10, name: "agc" }];
+  (doc.service_associations as JsonObject[]).push({ service_id: online + 10, entity_id: online });
+  const report = insertDocument(db, doc);
+  expect(report.unsupported.AGC).toBe(1);
+  expect(report.unsupported.service_associations).toBe(1);
+  expect(report.inserted.service_associations).toBe(5);
+  expect(count(db, "service_associations")).toBe(5);
+});
+
 // Review Focus 2
 test.skipIf(!hasGolden)("dangling bus reference rolls back the document", () => {
   const db = fresh();

@@ -219,6 +219,70 @@ def test_plant_attribute_association_is_stored(conn):
     assert linked == 1
 
 
+SERVICE_TYPES = {"OnlineReserve", "OfflineReserve", "GroupReserve", "TransmissionInterface"}
+
+
+def with_services(doc):
+    """The golden document plus an online and an offline reserve on a generator,
+    a group over both, and an interface on a line, with their memberships."""
+    comps = doc["components"]
+    top = max(
+        [o["id"] for objs in comps.values() for o in objs]
+        + [a["id"] for a in doc["supplemental_attributes"]]
+    )
+    online, offline, group, iface = range(top + 1, top + 5)
+    thermal = comps["ThermalStandard"][0]["id"]
+    line = comps["Line"][0]
+    comps["OnlineReserve"] = [
+        {"id": online, "name": "online_up", "available": True, "time_frame": 5.0,
+         "requirement": 10.0, "reserve_direction": "UP"}
+    ]
+    comps["OfflineReserve"] = [
+        {"id": offline, "name": "offline_up", "available": True, "time_frame": 30.0}
+    ]
+    comps["GroupReserve"] = [
+        {"id": group, "name": "group_up", "available": True, "requirement": 0.0,
+         "reserve_direction": "UP"}
+    ]
+    comps["TransmissionInterface"] = [
+        {"id": iface, "name": "IFACE", "available": True,
+         "active_power_flow_limits": {"min": -100.0, "max": 100.0},
+         "violation_penalty": 1e5, "direction_mapping": {line["name"]: -1},
+         "base_power": 100.0, "power_units": "NATURAL_UNITS"}
+    ]
+    doc["service_associations"] = [
+        {"service_id": s, "entity_id": e}
+        for s, e in [(online, thermal), (offline, thermal), (group, online),
+                     (group, offline), (iface, line["id"])]
+    ]
+    return doc
+
+
+def test_services_and_memberships_are_stored(conn):
+    doc = with_services(golden())
+    report = griddb.insert_document(conn, doc)
+    assert {t: report.inserted[t] for t in SERVICE_TYPES} == dict.fromkeys(SERVICE_TYPES, 1)
+    assert report.inserted["service_associations"] == 5
+    assert set(report.unsupported) == {"ext"}
+    assert not SERVICE_TYPES & set(report.skipped_fields)
+    line = doc["components"]["Line"][0]["id"]
+    rows = conn.execute("SELECT branch_id, direction FROM interface_branch_directions")
+    assert rows.fetchall() == [(line, -1)]
+
+
+def test_membership_of_an_unsupported_service_is_reported_not_written(conn):
+    """AGC has no table, so its membership rows are counted, not inserted."""
+    doc = with_services(golden())
+    online = doc["components"]["OnlineReserve"][0]["id"]
+    doc["components"]["AGC"] = [{"id": online + 10, "name": "agc"}]
+    doc["service_associations"].append({"service_id": online + 10, "entity_id": online})
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["AGC"] == 1
+    assert report.unsupported["service_associations"] == 1
+    assert report.inserted["service_associations"] == 5
+    assert count(conn, "service_associations") == 5
+
+
 # Review Focus 2
 def test_dangling_bus_reference_rolls_back_document(conn):
     thermal = dict(first(golden(), "ThermalStandard"), bus=999999)
