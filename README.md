@@ -385,8 +385,14 @@ written out in that file.
   these gaps with no runtime change.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
-- **Not supported yet.** `LoadZone`, services, `service_associations`,
-  `time_series_associations`, and `ext` have no table. They are reported, not written.
+- **Not supported yet.** `LoadZone`, services, `service_associations`, and `ext` have no table.
+  They are reported, not written.
+- **Time series.** The Python and Julia SDKs insert a document's `time_series_associations` with their document ids, then read each array from the HDF5 sidecar the document names (`time_series_storage_file`, beside the document's JSON, or an explicit `time_series` argument) and store its values in `static_time_series`, once per `uri`.
+  The sidecar is only ever read: infrastore works on a private copy in a temporary directory.
+  Reading needs infrastore (Python extra `sienna-griddb-tools[time-series]`, Julia `InfraStore.jl` loaded).
+  The rows are reported unsupported without it, without a sidecar (a `time_series_storage_file` that does not exist counts as none), in the TypeScript SDK (no HDF5 reader), for `NonSequentialTimeSeries`, for owners with no table, and for element types whose values are not `f64`.
+  After an insert, `dangling_time_series_references` lists any cost payload reference that no association resolves, and `orphaned_time_series` lists values and associations that lost each other.
+  See `docs/units-architecture.md` §4 and §6 for the value layout and the `features_hash` contract.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. CI builds a database from them with each runtime and requires identical

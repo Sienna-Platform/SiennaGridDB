@@ -11,6 +11,7 @@ const report = insertDocument(db, readDocument("system.json"));
 console.log(JSON.stringify(report, null, 2));
 ```
 
-Any plain JSON object works; zod-parsed SDK objects are plain objects. Fields GridDB
-has no column for yet are counted in `report.skipped_fields`; pass `{ strict: true }`
-to throw. CLI: `griddb-tools build system.json system.sqlite`.
+Any plain JSON object works; zod-parsed SDK objects are plain objects.
+Fields GridDB has no column for yet are counted in `report.skipped_fields`; pass `{ strict: true }` to throw.
+Time series are reported in `report.unsupported`: this SDK has no reader for the HDF5 sidecar (use the Python or Julia SDK).
+CLI: `griddb-tools build system.json system.sqlite`.

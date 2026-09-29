@@ -15,4 +15,7 @@ print(report.to_json())   # inserted / skipped_fields / unsupported
 - Fields GridDB has no column for yet are counted in `report.skipped_fields`, not
   written. Pass `strict=True` to raise instead.
 - Cost payloads must be in `NATURAL_UNITS`; the database rejects anything else.
+- Time series: install `sienna-griddb-tools[time-series]` (infrastore) and pass the document's path, `insert_document(conn, "system.json")`, so its HDF5 sidecar resolves beside it, or pass `time_series="system.h5"` with a parsed document or SDK model.
+  The sidecar is only read (infrastore works on a private copy).
+  Without infrastore or a sidecar (a `time_series_storage_file` that does not exist counts as none), time series are reported in `report.unsupported`; an explicit `time_series` path that does not exist raises.
 - CLI: `python3 -m sienna_griddb_tools build system.json system.sqlite`.
