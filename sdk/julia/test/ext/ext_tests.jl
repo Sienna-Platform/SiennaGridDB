@@ -38,10 +38,15 @@ end
             db = create_database(db_path)
             report = insert_document!(db, doc; time_series=joinpath(dir, "case.h5"))
             close(db)
-            load(path) = EXT_JSON.parsefile(path; dicttype=Dict{String, Any})
+            # The dump spells an infinite value Infinity, as Python's json does
+            load(path) = EXT_JSON.parsefile(path; dicttype=Dict{String, Any}, allownan=true)
             @test SiennaGridDBTools.report_dict(report) ==
                   load(joinpath(dir, "case.report.json"))
-            ours = EXT_JSON.parse(python_dump(db_path); dicttype=Dict{String, Any})
+            ours = EXT_JSON.parse(
+                python_dump(db_path);
+                dicttype=Dict{String, Any},
+                allownan=true,
+            )
             python = load(joinpath(dir, "case.dump.json"))
             @test ours["static_time_series"] == python["static_time_series"]
             ids(d) = sort!([r[1] for r in d["time_series_associations"]["rows"]])

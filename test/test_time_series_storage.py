@@ -175,6 +175,13 @@ def test_composite_elements_are_unique_per_slot(fresh_db):
         )
 
 
+def test_nan_is_stored_as_null(fresh_db):
+    make_entity(fresh_db, 1)
+    assoc_id = add_association(fresh_db, 1, "u1")
+    add_values(fresh_db, "u1", [1.0, float("nan"), float("inf")])
+    assert series_values(fresh_db, assoc_id) == [1.0, None, float("inf")]
+
+
 def test_dangling_view_lists_unresolved_references(fresh_db):
     make_entity(fresh_db, 1, "supplemental_attributes", "Payload")
     payload = {

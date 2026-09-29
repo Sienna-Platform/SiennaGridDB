@@ -190,6 +190,7 @@ For a static series those are the time step and the slot within a composite elem
 A forecast follows the geometry `array_shape` records: infrastore stores a `Deterministic` as `[horizon_steps, count, *element_shape]`, and a `Probabilistic` or `Scenarios` forecast puts its percentile or scenario axis in front of that.
 So a scalar `Deterministic` stores window `w` at horizon step `h` as `(timestep h, element w)`, and a composite one stores slot `e` of that window and step as `(h * count + w, e)`.
 Composite elements (`tuple(N,dtype)` and the function-data kinds) keep every raw slot, including a piecewise row's leading used-count slot; decoding them is the consumer's job, per `element_type`.
+A NaN is stored as a NULL `value`, because SQLite has no NaN and binds one as NULL; infinities stay REAL.
 The layout reads neither `element_type` nor `element_shape`, so a `DeterministicSingleTimeSeries` row carrying `element_shape` `[]` for a composite source changes nothing; every association that declares an `array_shape` must declare the stored one, and the inserters check that against the sidecar, even for an array the database already holds.
 
 **Arrays are shared, and cleaned up with their last association.**

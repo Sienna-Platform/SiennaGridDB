@@ -90,7 +90,7 @@ def test_document_path_inserts_series_and_leaves_the_sidecar_untouched(conn, cas
     before = snapshot(case.parent)
     report = griddb.insert_document(conn, str(case))
     assert snapshot(case.parent) == before
-    assert report.inserted["time_series_associations"] == 18
+    assert report.inserted["time_series_associations"] == 19
     assert report.unsupported == UNSUPPORTED
     assert rows(conn, "SELECT * FROM dangling_time_series_references") == []
     assert rows(conn, "SELECT * FROM orphaned_time_series") == []
@@ -106,7 +106,7 @@ def test_a_symlinked_read_only_sidecar_is_left_alone(conn, case, tmp_path):
     before = (target.stat().st_mode, target.stat().st_mtime_ns, target.read_bytes())
     griddb.insert_document(conn, str(case))
     assert (target.stat().st_mode, target.stat().st_mtime_ns, target.read_bytes()) == before
-    assert rows(conn, "SELECT count(*) FROM static_time_series") == [(54,)]
+    assert rows(conn, "SELECT count(*) FROM static_time_series") == [(57,)]
 
 
 def test_one_array_is_stored_once_for_every_association(conn, case):
@@ -143,6 +143,11 @@ def test_composite_elements_keep_every_slot(conn, case):
     assert triples(conn, "tuples") == grid(time_series_case.TUPLES)
     view = "DeterministicSingleTimeSeries"
     assert triples(conn, "steps", view) == triples(conn, "steps")
+
+
+def test_nan_is_stored_as_null_and_inf_as_real(conn, case):
+    griddb.insert_document(conn, str(case))
+    assert triples(conn, "gaps") == [(0, 0, 1.0), (1, 0, None), (2, 0, float("inf"))]
 
 
 def test_forecast_splits_on_the_stored_last_axis(conn, case):
@@ -251,14 +256,14 @@ def test_row_order_does_not_matter(tmp_path, case):
 def test_missing_reader_reports_time_series_unsupported(conn, case, monkeypatch):
     monkeypatch.setattr(insert_module, "reader_missing", lambda: "install the extra")
     report = griddb.insert_document(conn, str(case))
-    assert report.unsupported["time_series_associations"] == 23
+    assert report.unsupported["time_series_associations"] == 24
     assert rows(conn, "SELECT count(*) FROM time_series_associations") == [(0,)]
 
 
 def test_missing_default_sidecar_is_unsupported(conn, case):
     os.remove(case.parent / "case.h5")
     report = griddb.insert_document(conn, str(case))
-    assert report.unsupported["time_series_associations"] == 23
+    assert report.unsupported["time_series_associations"] == 24
     assert rows(conn, "SELECT count(*) FROM time_series_associations") == [(0,)]
 
 
@@ -304,7 +309,7 @@ def test_a_non_f64_element_type_is_unsupported_up_front(conn, case):
             row["element_type"] = "tuple(3,i32)"
     report = griddb.insert_document(conn, doc, time_series=sidecar(case))
     assert report.unsupported["time_series_associations"] == 6
-    assert rows(conn, "SELECT count(*) FROM time_series_associations") == [(16,)]
+    assert rows(conn, "SELECT count(*) FROM time_series_associations") == [(17,)]
 
 
 def test_a_declared_shape_must_match_the_stored_array(conn, case):

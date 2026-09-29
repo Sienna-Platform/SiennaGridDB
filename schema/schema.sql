@@ -1155,7 +1155,8 @@ CREATE TABLE static_time_series (
     -- composite element's raw slot (decoding is the consumer's, per element_type)
     -- or a scalar forecast's window. Byte-identical arrays share one split.
     element INTEGER NOT NULL DEFAULT 0,
-    value REAL NOT NULL
+    -- NULL means NaN: SQLite has no NaN and binds one as NULL. Infinities stay REAL.
+    value REAL
 ) strict;
 
 -- UNIQUE: one value per (array, step, slot); loader double-inserts must fail

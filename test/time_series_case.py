@@ -3,10 +3,10 @@
 
 Built with infrastore itself: one array shared by two owners and by both their
 SingleTimeSeries and DeterministicSingleTimeSeries, feature maps of every kind,
-composite elements, a Deterministic forecast, one all-zero array read as both a
-scalar forecast and a composite series, a supplemental-attribute owner, and the
-rows GridDB reports unsupported (a NonSequentialTimeSeries, an owner type with no
-table, an i64 series).
+composite elements, NaN and Inf values, a Deterministic forecast, one all-zero
+array read as both a scalar forecast and a composite series, a supplemental-attribute
+owner, and the rows GridDB reports unsupported (a NonSequentialTimeSeries, an owner
+type with no table, an i64 series).
 
     python3 test/time_series_case.py OUT_DIR
 
@@ -32,6 +32,7 @@ STEPS = [{"x": [0.0, 5.0, 9.0], "y": [1.0, 2.0]}, {"x": [0.0, 4.0], "y": [3.0]}]
 STEPS = STEPS[:3]
 TUPLES = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
 FORECAST = [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]  # (horizon steps, windows)
+GAPS = [1.0, float("nan"), float("inf")]  # NaN is stored as NULL
 MIXED = {"flag": True, "n": -3, "w": 1.0, "x": 0.5, "zone": "north"}
 UNSTORED_OWNER = "AGC"  # a component type no GridDB table maps
 
@@ -62,6 +63,7 @@ def build(out_dir):
     add(3, "GeographicInfo", attr, _sts([7.0, 8.0, 9.0], "geo"))
     add(9, UNSTORED_OWNER, comp, _sts([5.0, 5.0, 5.0], "limit"))
     store.transform_single_time_series("PT3H", "PT3H")
+    add(1, "Area", comp, _sts(GAPS, "gaps"))
     forecast = infrastore.Deterministic(
         T0, "PT1H", "PT3H", "PT1H", 2, np.array(FORECAST), "forecast"
     )

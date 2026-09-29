@@ -63,7 +63,7 @@ mktempdir() do dir
             before = (filemode(target), mtime(target), read(target))
             fresh(mktempdir()) do db
                 insert_document!(db, joinpath(linked, "case.json"))
-                @test count_rows(db, "static_time_series") == 54
+                @test count_rows(db, "static_time_series") == 57
             end
             @test (filemode(target), mtime(target), read(target)) == before
         end
@@ -122,7 +122,7 @@ mktempdir() do dir
             write(joinpath(moved, "case.json"), JSON.json(doc))
             fresh(mktempdir()) do db
                 report = insert_document!(db, joinpath(moved, "case.json"))
-                @test report.unsupported == Dict("time_series_associations" => 23)
+                @test report.unsupported == Dict("time_series_associations" => 24)
                 @test_throws r"case\.h5 does not exist" insert_document!(
                     db,
                     joinpath(moved, "case.json");
