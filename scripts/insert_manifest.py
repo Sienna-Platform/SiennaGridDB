@@ -16,7 +16,7 @@ from generate_sql_schema import RefResolver, sql_type_for
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
-MANIFEST_VERSION = 2
+MANIFEST_VERSION = 3
 
 ENCODING_BY_SQL_TYPE = {
     "INTEGER": "int",

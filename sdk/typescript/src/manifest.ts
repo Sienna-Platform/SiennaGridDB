@@ -4,7 +4,7 @@ import { ManifestMismatchError } from "./errors.js";
 import type { Encoding } from "./encode.js";
 
 export const DATA_DIR = fileURLToPath(new URL("../data/", import.meta.url));
-const SUPPORTED_MANIFEST_VERSION = 2;
+const SUPPORTED_MANIFEST_VERSION = 3;
 
 export interface Binding { path: string; encode: Encoding }
 /** A fixed unit, none (identifier or unit-free value), or arms picked by a sibling field. */

@@ -1,4 +1,4 @@
-const SUPPORTED_MANIFEST_VERSION = 2
+const SUPPORTED_MANIFEST_VERSION = 3
 
 struct Binding
     segments::Vector{String}
