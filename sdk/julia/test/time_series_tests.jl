@@ -149,6 +149,26 @@ mktempdir() do dir
             end
         end
 
+        @testset "an unsupported owner is found by its id" begin
+            fresh(mktempdir()) do db
+                doc = load_json(doc_path)
+                for row in doc["time_series_associations"]
+                    if row["owner_type"] == "AGC"
+                        row["owner_type"] = "Area"
+                    end
+                end
+                report = insert_document!(db, doc; time_series=sidecar)
+                expected = load_json(joinpath(case_dir, "case.report.json"))
+                @test G.report_dict(report)["unsupported"] == expected["unsupported"]
+            end
+            fresh(mktempdir()) do db
+                doc = load_json(doc_path)
+                delete!(doc["components"], "AGC")
+                @test_throws r"FOREIGN KEY" insert_document!(db, doc; time_series=sidecar)
+                @test count_rows(db, "entities") == 0
+            end
+        end
+
         @testset "time series strict and bad arrays roll back" begin
             fresh(mktempdir()) do db
                 doc = load_json(doc_path)

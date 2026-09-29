@@ -244,6 +244,8 @@ function push_id!(ids::Set{Int}, id)
     return ids
 end
 
+# The one rule for association and time series rows; strict mode never gets here, as
+# the component itself raised.
 names_unsupported(row::AbstractDict, references::Vector{String}, ids::Set{Int}) =
     any(references) do r
         id = get(row, r, nothing)
@@ -325,7 +327,8 @@ function insert_parsed_document!(
             mark_unsupported!(report, strict, section, n, m.unsupported_sections[section])
         end
     end
-    series = storable_time_series(doc, time_series, no_sidecar, report, strict)
+    series =
+        storable_time_series(doc, time_series, no_sidecar, report, strict, unsupported_ids)
     attr_types = attribute_types(doc)
     with_statements(db) do cache
         seed_vocabulary!(db)

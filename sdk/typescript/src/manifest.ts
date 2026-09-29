@@ -30,7 +30,7 @@ export interface ComponentPlan {
   knownFields: Set<string>;
 }
 export interface AssociationPlan { section: string; row_sql: string; bindings: Binding[]; references: string[] }
-export interface TimeSeriesPlan extends Omit<AssociationPlan, "references"> {
+export interface TimeSeriesPlan extends AssociationPlan {
   feature_sql: string;
   value_sql: string;
   unsupported_types: Record<string, string>;

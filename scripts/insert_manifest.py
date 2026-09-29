@@ -295,9 +295,15 @@ def association_entry(conn, resolver, section, rel_file):
         for p in names
     ]
     row_sql = f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join('?' for _ in names)})"
-    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
-    references = [p for p in names if p in fk_columns]
+    references = references_of(conn, section, bindings, names)
     return {"section": section, "row_sql": row_sql, "bindings": bindings, "references": references}
+
+
+def references_of(conn, section, bindings, columns):
+    """Paths of the bindings written to a foreign-key column: the SDKs skip a row
+    whose reference names a component of a type with no table."""
+    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
+    return [b["path"] for b, c in zip(bindings, columns) if c in fk_columns]
 
 
 def resolved_encoding(prop, resolver, rel_file):
@@ -328,10 +334,12 @@ def time_series_entry(conn, resolver, spec):
         by_column[column] = {"path": name, "encode": encoding}
     names = [c for c in columns if c in by_column]
     values = [spec["placeholders"].get(by_column[c]["path"], "?") for c in names]
+    bindings = [by_column[c] for c in names]
     return {
         "section": section,
         "row_sql": f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join(values)})",
-        "bindings": [by_column[c] for c in names],
+        "bindings": bindings,
+        "references": references_of(conn, section, bindings, names),
         # DO NOTHING on the key only: OR IGNORE would also swallow the reserved-key CHECK.
         "feature_sql": (
             "INSERT INTO feature_sets (features_hash, key, value_kind, value_int, "

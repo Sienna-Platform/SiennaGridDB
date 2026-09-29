@@ -311,13 +311,27 @@ def test_strict_rejects_unstorable_series_before_writing(conn, case):
         for r in doc["time_series_associations"]
         if r["time_series_type"] != "NonSequentialTimeSeries"
     ]
-    doc["time_series_associations"] = series
-    with pytest.raises(griddb.UnsupportedComponentError, match="GridDB does not store"):
-        griddb.insert_document(conn, doc, time_series=sidecar(case), strict=True)
     doc["time_series_associations"] = [r for r in series if r["owner_type"] != "AGC"]
     with pytest.raises(griddb.UnsupportedComponentError, match="element_type i64"):
         griddb.insert_document(conn, doc, time_series=sidecar(case), strict=True)
     assert rows(conn, "SELECT count(*) FROM entities") == [(0,)]
+
+
+def test_an_unsupported_owner_is_found_by_its_id(conn, case, tmp_path):
+    """As for association rows: the owner's id, not its owner_type, decides."""
+    relabelled = load(case)
+    for row in relabelled["time_series_associations"]:
+        if row["owner_type"] == "AGC":
+            row["owner_type"] = "Area"
+    report = griddb.insert_document(conn, relabelled, time_series=sidecar(case))
+    assert report.unsupported == UNSUPPORTED
+    absent = load(case)
+    del absent["components"]["AGC"]
+    fresh = griddb.create_database(str(tmp_path / "absent.sqlite"))
+    with pytest.raises(griddb.InsertError, match="FOREIGN KEY"):
+        griddb.insert_document(fresh, absent, time_series=sidecar(case))
+    assert rows(fresh, "SELECT count(*) FROM entities") == [(0,)]
+    fresh.close()
 
 
 def test_a_non_f64_element_type_is_unsupported_up_front(conn, case):

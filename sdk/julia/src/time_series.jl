@@ -44,7 +44,7 @@ count!(counts::Dict{String, Int}, key) = counts[key] = get(counts, key, 0) + 1
 """
 The association rows to insert, after reporting the ones GridDB cannot store: every
 row without a sidecar (`no_sidecar` says why) or reader, unsupported series types,
-owners with no table, element types GridDB does not hold.
+rows naming a component in `unsupported_ids`, element types GridDB does not hold.
 """
 function storable_time_series(
     doc::AbstractDict,
@@ -52,9 +52,9 @@ function storable_time_series(
     no_sidecar::AbstractString,
     report::InsertReport,
     strict,
+    unsupported_ids::Set{Int},
 )
-    m = manifest()
-    plan = m.time_series
+    plan = manifest().time_series
     rows = get(doc, plan.section, nothing)
     stored = Any[]
     if isnothing(rows) || isempty(rows)
@@ -66,16 +66,14 @@ function storable_time_series(
         return stored
     end
     counts = Dict{String, Int}()
-    orphans = Dict{String, Int}()
     dtypes = Dict{String, Int}()
     for row in rows
         series_type = get(row, "time_series_type", "")
-        owner = get(row, "owner_type", "")
         element_type = get(row, "element_type", nothing)
         if haskey(plan.unsupported_types, series_type)
             count!(counts, series_type)
-        elseif get(row, "owner_category", "") == "Component" && !haskey(m.components, owner)
-            count!(orphans, owner)
+        elseif names_unsupported(row, plan.references, unsupported_ids)
+            add_unsupported!(report, plan.section, 1)
         elseif haskey(plan.unsupported_dtypes, element_dtype(element_type))
             count!(dtypes, element_type)
         else
@@ -85,11 +83,6 @@ function storable_time_series(
     for series_type in sort!(collect(keys(counts)))
         reason = plan.unsupported_types[series_type]
         mark_unsupported!(report, strict, series_type, counts[series_type], reason)
-    end
-    if !isempty(orphans)
-        owners = join(sort!(collect(keys(orphans))), ", ")
-        reason = "owned by types GridDB does not store: $owners"
-        mark_unsupported!(report, strict, plan.section, sum(values(orphans)), reason)
     end
     for element_type in sort!(collect(keys(dtypes)))
         why = plan.unsupported_dtypes[element_dtype(element_type)]

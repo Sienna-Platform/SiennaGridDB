@@ -161,12 +161,13 @@ def _attribute_types(doc):
 
 
 def _names_unsupported(row, references, ids):
-    """Whether a reference names a component the insert does not write; ids follow
-    the int encoder's rule, so any other value reaches the encoder and fails there."""
+    """Whether a reference names a component the insert does not write. The one rule
+    for association and time series rows; strict mode never gets here, as the
+    component itself raised. Ids follow the int encoder's rule."""
     return any(is_int(v) and v in ids for v in (value_at(row, r) for r in references))
 
 
-def _time_series_plan(doc, sidecar, report, strict, no_sidecar):
+def _time_series_plan(doc, sidecar, report, strict, no_sidecar, unsupported_ids):
     """The association rows to insert, after reporting what cannot be stored."""
     plan = load_manifest().time_series
     rows = doc.get(plan["section"]) or []
@@ -183,21 +184,16 @@ def _time_series_plan(doc, sidecar, report, strict, no_sidecar):
             counts[row["time_series_type"]] = counts.get(row["time_series_type"], 0) + 1
     for series_type, n in sorted(counts.items()):
         _unsupported(report, strict, series_type, n, unsupported[series_type])
-    components = load_manifest().components
-    stored, orphans, dtypes = [], {}, {}
+    stored, dtypes = [], {}
     for row in rows:
         if row.get("time_series_type") in unsupported:
             continue
-        owner = row.get("owner_type")
-        if row.get("owner_category") == "Component" and owner not in components:
-            orphans[owner] = orphans.get(owner, 0) + 1
+        if _names_unsupported(row, plan["references"], unsupported_ids):
+            report.add_unsupported(plan["section"], 1)
         elif element_dtype(row.get("element_type")) in plan["unsupported_dtypes"]:
             dtypes[row["element_type"]] = dtypes.get(row["element_type"], 0) + 1
         else:
             stored.append(row)
-    if orphans:
-        reason = f"owned by types GridDB does not store: {', '.join(sorted(orphans))}"
-        _unsupported(report, strict, plan["section"], sum(orphans.values()), reason)
     for element_type, n in sorted(dtypes.items()):
         why = plan["unsupported_dtypes"][element_dtype(element_type)]
         reason = f"element_type {element_type}: {why}"
@@ -246,7 +242,9 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
         rows = doc.get(section) or []
         if len(rows) > 0:
             _unsupported(report, strict, section, len(rows), reason)
-    series = _time_series_plan(doc, time_series, report, strict, no_sidecar)
+    series = _time_series_plan(
+        doc, time_series, report, strict, no_sidecar, unsupported_ids
+    )
 
     attr_types = _attribute_types(doc)
     supplemental = manifest.supplemental

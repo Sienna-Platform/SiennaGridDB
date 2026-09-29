@@ -4908,6 +4908,9 @@
       }
     ],
     "feature_sql": "INSERT INTO feature_sets (features_hash, key, value_kind, value_int, value_float, value_bool, value_str) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (features_hash, key) DO NOTHING",
+    "references": [
+      "owner_id"
+    ],
     "row_sql": "INSERT INTO time_series_associations (id, owner_id, owner_type, owner_category, time_series_type, name, initial_timestamp, resolution, length, horizon, interval, count, scenario_count, units, quantity_kind, unit_system, time_reference, component_field, percentiles_json, element_type, element_shape, array_shape, application_data, uri, data_hash, features_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     "section": "time_series_associations",
     "unsupported_dtypes": {

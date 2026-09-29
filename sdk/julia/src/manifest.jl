@@ -47,6 +47,7 @@ struct TimeSeriesPlan
     section::String
     row_sql::String
     bindings::Vector{Binding}
+    references::Vector{String}
     feature_sql::String
     value_sql::String
     unsupported_types::Dict{String, String}
@@ -135,6 +136,7 @@ function parse_manifest(raw::AbstractDict)
         ts["section"],
         ts["row_sql"],
         parse_bindings(ts["bindings"]),
+        String.(ts["references"]),
         ts["feature_sql"],
         ts["value_sql"],
         Dict{String, String}(ts["unsupported_types"]),
