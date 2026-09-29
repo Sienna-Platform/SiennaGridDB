@@ -664,6 +664,23 @@ SELECT
 
 END;
 
+-- An entity's table and type are fixed once inserted: the triggers keyed on them
+-- check a row only when that row is written, so a later change would bypass them.
+CREATE TRIGGER IF NOT EXISTS enforce_entities_identity_update BEFORE
+UPDATE
+    OF entity_table,
+    entity_type ON entities
+    WHEN NEW.entity_table IS NOT OLD.entity_table
+    OR NEW.entity_type IS NOT OLD.entity_type
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'entities.entity_table and entities.entity_type cannot change after insert.'
+    );
+
+END;
+
 -- Business Logic Validation Triggers
 CREATE TRIGGER enforce_arc_entity_types_insert
 AFTER

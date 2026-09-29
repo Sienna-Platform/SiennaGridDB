@@ -185,6 +185,18 @@ def test_every_entity_table_has_supertype_triggers(db):
     assert missing == []
 
 
+@pytest.mark.parametrize(
+    "column, value", [("entity_table", "loads"), ("entity_type", "DCBus")]
+)
+def test_entity_identity_is_fixed_after_insert(fresh_db, column, value):
+    """Triggers keyed on an entity's table or type (the AC/DC bus domain, say)
+    check a row only when it is written, so neither may change afterwards."""
+    make_bus(fresh_db, 1, "ac")
+    with pytest.raises(sqlite3.IntegrityError, match="cannot change after insert"):
+        fresh_db.execute(f"UPDATE entities SET {column} = ? WHERE id = 1", (value,))
+    fresh_db.execute("UPDATE entities SET entity_type = entity_type WHERE id = 1")
+
+
 # Transformer CHECK constraints
 def test_two_winding_transformer_rejects_three_winding_shunt_location(fresh_db):
     """shunt_location is the TwoWindingTransformerShuntLocation enum; STAR only
