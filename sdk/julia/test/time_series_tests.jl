@@ -53,6 +53,25 @@ mktempdir() do dir
             end
         end
 
+        @testset "explicit null optional fields read as absent" begin
+            doc = load_json(doc_path)
+            optional = (
+                "units",
+                "quantity_kind",
+                "unit_system",
+                "component_field",
+                "application_data",
+            )
+            for row in doc["time_series_associations"], key in optional
+                get!(row, key, nothing)
+            end
+            db_path = joinpath(mktempdir(), "nulls.sqlite")
+            db = create_database(db_path)
+            insert_document!(db, doc; time_series=sidecar)
+            close(db)
+            @test python_dump(db_path) == expected_dump
+        end
+
         @testset "a symlinked read-only sidecar is left alone" begin
             linked = mktempdir()
             target = joinpath(mktempdir(), "elsewhere.h5")

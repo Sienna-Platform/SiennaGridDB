@@ -46,8 +46,11 @@ row_major(data::AbstractVector) = Vector{Float64}(data)
 row_major(data::AbstractArray) = vec(permutedims(data, ndims(data):-1:1))
 
 function read_arrays(f::Function, store::InfraStore.Store, sidecar, rows::Vector{Any})
+    # InfraStore rejects null for an optional field, so null keys are dropped here
+    # as in the Python SDK; GridDB's own rows already treat null as absent
+    wire = [filter(p -> !isnothing(p.second), row) for row in rows]
     try
-        InfraStore.import_time_series_associations_openapi!(store, JSON.json(rows))
+        InfraStore.import_time_series_associations_openapi!(store, JSON.json(wire))
     catch e
         throw(sidecar_error(e, sidecar))
     end
