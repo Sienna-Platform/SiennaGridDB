@@ -187,6 +187,27 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_reserves_entity_exists BEFORE
+INSERT
+    ON reserves
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'reserves'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'reserves.id must exist in entities with entity_table reserves before insert'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_thermal_generators_entity_exists BEFORE
 INSERT
     ON thermal_generators
@@ -1047,6 +1068,17 @@ WHERE
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS delete_reserves_entity
+AFTER
+    DELETE ON reserves FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS delete_thermal_generators_entity
 AFTER
     DELETE ON thermal_generators FOR EACH ROW
@@ -1585,6 +1617,109 @@ SELECT
         ABORT,
         'time_series_associations rows using a registered quantity_kind must carry a units value matching a registered (quantity_kind, unit) pair in allowed_units.'
     );
+
+END;
+
+-- =============================================================================
+-- Reserve Shape Triggers
+-- One reserves table holds three types; these mirror each type's required list
+-- in the schemas, keyed on entities.entity_type.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_reserves_type_shape_insert BEFORE
+INSERT
+    ON reserves
+BEGIN
+SELECT
+    CASE
+        WHEN t.entity_type NOT IN ('OnlineReserve', 'OfflineReserve', 'GroupReserve') THEN RAISE(
+            ABORT,
+            'reserves rows must be OnlineReserve, OfflineReserve or GroupReserve entities.'
+        )
+        WHEN t.entity_type <> 'GroupReserve'
+        AND NEW.time_frame IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and OfflineReserve rows require time_frame.'
+        )
+        WHEN t.entity_type = 'GroupReserve'
+        AND (
+            NEW.time_frame IS NOT NULL
+            OR NEW.sustained_time IS NOT NULL
+            OR NEW.max_output_fraction IS NOT NULL
+            OR NEW.max_participation_factor IS NOT NULL
+            OR NEW.deployed_fraction IS NOT NULL
+        ) THEN RAISE(
+            ABORT,
+            'GroupReserve rows have no time_frame, sustained_time or participation fractions.'
+        )
+        WHEN t.entity_type = 'OfflineReserve'
+        AND NEW.reserve_direction IS NOT NULL THEN RAISE(
+            ABORT,
+            'OfflineReserve rows have no reserve_direction: they are upward only.'
+        )
+        WHEN t.entity_type <> 'OfflineReserve'
+        AND NEW.reserve_direction IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and GroupReserve rows require reserve_direction.'
+        )
+    END
+FROM
+    (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    ) t;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_reserves_type_shape_update BEFORE
+UPDATE
+    ON reserves
+BEGIN
+SELECT
+    CASE
+        WHEN t.entity_type NOT IN ('OnlineReserve', 'OfflineReserve', 'GroupReserve') THEN RAISE(
+            ABORT,
+            'reserves rows must be OnlineReserve, OfflineReserve or GroupReserve entities.'
+        )
+        WHEN t.entity_type <> 'GroupReserve'
+        AND NEW.time_frame IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and OfflineReserve rows require time_frame.'
+        )
+        WHEN t.entity_type = 'GroupReserve'
+        AND (
+            NEW.time_frame IS NOT NULL
+            OR NEW.sustained_time IS NOT NULL
+            OR NEW.max_output_fraction IS NOT NULL
+            OR NEW.max_participation_factor IS NOT NULL
+            OR NEW.deployed_fraction IS NOT NULL
+        ) THEN RAISE(
+            ABORT,
+            'GroupReserve rows have no time_frame, sustained_time or participation fractions.'
+        )
+        WHEN t.entity_type = 'OfflineReserve'
+        AND NEW.reserve_direction IS NOT NULL THEN RAISE(
+            ABORT,
+            'OfflineReserve rows have no reserve_direction: they are upward only.'
+        )
+        WHEN t.entity_type <> 'OfflineReserve'
+        AND NEW.reserve_direction IS NULL THEN RAISE(
+            ABORT,
+            'OnlineReserve and GroupReserve rows require reserve_direction.'
+        )
+    END
+FROM
+    (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    ) t;
 
 END;
 

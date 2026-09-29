@@ -212,6 +212,21 @@ CREATE TABLE transmission_interchanges (
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 );
 
+-- reserves: generated from OnlineReserve, OfflineReserve, GroupReserve
+CREATE TABLE reserves (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    available BOOLEAN NOT NULL,
+    time_frame REAL NULL, -- Units: min
+    requirement REAL NULL DEFAULT 0.0, -- Units: MW
+    variable JSON NULL,
+    sustained_time REAL NULL DEFAULT 60.0, -- Units: min
+    max_output_fraction REAL NULL DEFAULT 1.0,
+    max_participation_factor REAL NULL DEFAULT 1.0,
+    deployed_fraction REAL NULL DEFAULT 0.0,
+    reserve_direction TEXT NULL CHECK (reserve_direction IN ('UP', 'DOWN', 'SYMMETRIC'))
+);
+
 -- discrete_controlled_ac_branches: generated from DiscreteControlledACBranch
 CREATE TABLE discrete_controlled_ac_branches (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,

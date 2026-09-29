@@ -29,12 +29,10 @@ Read this before building on it:
 - **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
   `PRAGMA user_version` is bumped on every schema change but nothing reads it.
-- **Roughly half the data model is typed.** 44 of 96 upstream components have a table.
-  Dynamics has none; services/reserves and the investment policy layer have none. See the
-  open coverage issue.
-- **The unit registry is the load-bearing deliverable** — 405 column conventions, sealed
-  and tamper-guarded, readable through the `column_units` view as an authoritative
-  `(table, column) -> (quantity_kind, unit, basis rule)` map.
+- **Roughly half the data model is typed.**
+  Dynamics and the investment policy layer have no tables; see the open coverage issue.
+- **The unit registry is the load-bearing deliverable.**
+  Its column conventions are sealed, tamper-guarded, and readable through the `column_units` view as an authoritative `(table, column) -> (quantity_kind, unit, basis rule)` map.
 
 ## How To(s)
 
@@ -116,19 +114,12 @@ them:
 | `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
-**Columns vs. `attributes`.** A table sourced from several upstream components keeps the
-fields common to all of them as columns. A field only some variants carry goes through
-`sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
-There it is registered as an `attributes.<name>` convention when its unit is unambiguous,
-validated against `allowed_units` on write — or left unregistered when its unit depends on
-a sibling attribute (a `discriminator_column` must name a sibling *column*, and a field
-inside `attributes` has no column sibling to name). `two_terminal_hvdc_lines` follows this
-for all three HVDC variants (LCC impedances, VSC setpoints); `thermal_generators` follows
-it for ThermalMultiStart's `start_time_limits` and `start_types` (`power_trajectory` stays
-unregistered, basis-dependent on the attribute `power_units`, same as VSC's
-`dc_setpoint_*`).
+**Columns vs. `attributes`.** A table sourced from several upstream components keeps the fields common to all of them as columns.
+A field only some variants carry goes through `sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
+Each attribute row states its own `unit`/`quantity_kind`, following the same per-row basis rule as typed columns: the name registers one `attributes.<name>` convention per arm (for example `active_power` as `ActivePower`/`MW` for `NATURAL_UNITS` and `ActivePower`/`pu` for `COMPONENT_BASE`), and each row uses the arm matching its own component's `power_units` (or `parameter_units`, a control mode, and so on).
+References and self-describing payloads listed in `attribute_identifiers` (bus `number`, `load_zone`, `dynamic_injector`, the loads' `operation_cost`, loss curves) and string, boolean or enum values carry no unit.
 
-Current registry: **41 quantity kinds, 66 allowed units, 405 conventions.**
+Current registry: **41 quantity kinds, 66 allowed units, 411 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
