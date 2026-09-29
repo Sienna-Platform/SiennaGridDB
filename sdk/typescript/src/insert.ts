@@ -112,7 +112,22 @@ function writeRow(
   report.addInserted(plan.typeName);
 }
 
+// Every document entry is a JSON object; anything else is schema-invalid input.
+function requireObject(entry: unknown, what: string): void {
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new InsertError(`${what} ${JSON.stringify(entry)}: not an object`);
+  }
+}
+
+// A section given as JSON null reads as empty.
+function sectionRows(doc: JsonObject, name: string): JsonObject[] {
+  const rows = (doc[name] ?? []) as unknown[];
+  for (const row of rows) requireObject(row, `${name} row`);
+  return rows as JsonObject[];
+}
+
 function writeEntity(db: Connection, plan: ComponentPlan, obj: JsonObject) {
+  requireObject(obj, `${plan.typeName} entry`);
   const what = describe(plan.typeName, obj);
   run(db, plan.entity_sql, params(plan.entityBindings, obj, what), what);
 }
@@ -184,7 +199,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     if (n > 0) unsupported(report, strict, section, n, m.unsupported_sections[section]);
   }
   const attrTypes = new Map<number, string>();
-  for (const a of (doc.supplemental_attribute_associations ?? []) as JsonObject[]) {
+  for (const a of sectionRows(doc, "supplemental_attribute_associations")) {
     attrTypes.set(a.attribute_id as number, a.attribute_type as string);
   }
   const supp = m.supplemental_attributes;
@@ -192,7 +207,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     seedVocabulary(db);
     for (const [plan, objs] of plans) for (const obj of objs) writeEntity(db, plan, obj);
     const routed: [string, string, JsonObject, string][] = [];
-    for (const attr of (doc.supplemental_attributes ?? []) as JsonObject[]) {
+    for (const attr of sectionRows(doc, "supplemental_attributes")) {
       const id = attr.id as number;
       const attrType = attrTypes.get(id);
       if (attrType === undefined) {
@@ -221,7 +236,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
       report.addInserted(table);
     }
     for (const section of m.associations) {
-      for (const row of (doc[section.section] ?? []) as JsonObject[]) {
+      for (const row of sectionRows(doc, section.section)) {
         // A row naming a component that has no table is not written either.
         const refs = section.references.map((r) => valueAt(row, r));
         if (refs.some((id) => isInt(id) && unsupportedIds.has(id))) {

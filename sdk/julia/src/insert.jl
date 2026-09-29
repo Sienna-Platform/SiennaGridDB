@@ -131,7 +131,14 @@ function write_row!(cache, plan::ComponentPlan, obj::AbstractDict, report, stric
     return nothing
 end
 
-function write_entity!(cache, plan::ComponentPlan, obj::AbstractDict)
+# Every document entry is a JSON object; anything else is schema-invalid input.
+function require_object(entry, what::AbstractString)
+    is_object(entry) || throw(InsertError("$what $(JSON.json(entry)): not an object"))
+    return nothing
+end
+
+function write_entity!(cache, plan::ComponentPlan, obj)
+    require_object(obj, "$(plan.type_name) entry")
     what = describe(plan.type_name, obj)
     run_sql(cache, plan.entity_sql, bound_params(plan.entity_bindings, obj, what), what)
     return nothing
@@ -184,8 +191,12 @@ function insert_component!(
 end
 
 # A section given as JSON null reads as empty, as in the Python and TypeScript SDKs.
-section_rows(doc::AbstractDict, key::AbstractString) =
-    something(get(doc, key, nothing), Any[])
+function section_rows(doc::AbstractDict, key::AbstractString)
+    rows = something(get(doc, key, nothing), Any[])
+    what = "$key row"
+    foreach(row -> require_object(row, what), rows)
+    return rows
+end
 
 function attribute_types(doc::AbstractDict)
     types = Dict{Int, String}()

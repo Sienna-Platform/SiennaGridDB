@@ -91,7 +91,22 @@ def _write_row(conn, plan, obj, report, strict):
     report.add_inserted(plan.type_name)
 
 
+def _require_object(entry, what):
+    """Every document entry is a JSON object; anything else is schema-invalid input."""
+    if not isinstance(entry, dict):
+        raise InsertError(f"{what} {entry!r}: not an object")
+
+
+def _section_rows(doc, name):
+    """A section's rows; JSON null reads as empty."""
+    rows = doc.get(name) or []
+    for row in rows:
+        _require_object(row, f"{name} row")
+    return rows
+
+
 def _write_entity(conn, plan, obj):
+    _require_object(obj, f"{plan.type_name} entry")
     what = describe(plan.type_name, obj)
     _execute(conn, plan.entity_sql, _params(plan.entity_bindings, obj, what), what)
 
@@ -128,7 +143,7 @@ def insert_model(conn, model, *, strict=False):
 
 def _attribute_types(doc):
     types = {}
-    for assoc in doc.get("supplemental_attribute_associations") or []:
+    for assoc in _section_rows(doc, "supplemental_attribute_associations"):
         types[assoc["attribute_id"]] = assoc["attribute_type"]
     return types
 
@@ -168,7 +183,7 @@ def insert_document(conn, doc, *, strict=False):
             for obj in objs:
                 _write_entity(conn, plan, obj)
         routed = []
-        for attr in doc.get("supplemental_attributes") or []:
+        for attr in _section_rows(doc, "supplemental_attributes"):
             if attr["id"] not in attr_types:
                 raise InsertError(
                     f"supplemental attribute id={attr['id']}: no association names its type"
@@ -200,7 +215,7 @@ def insert_document(conn, doc, *, strict=False):
             report.add_inserted(table)
         for section in manifest.associations:
             name = section["section"]
-            for row in doc.get(name) or []:
+            for row in _section_rows(doc, name):
                 # A row naming a component that has no table is not written either.
                 if _names_unsupported(row, section["references"], unsupported_ids):
                     report.add_unsupported(name, 1)

@@ -121,6 +121,29 @@ test.skipIf(!hasGolden)("non-object entries of an unsupported type are counted",
   expect(insertDocument(fresh(), doc).unsupported.AGC).toBe(3);
 });
 
+const ENTRY_LISTS = [
+  "ThermalStandard",
+  "supplemental_attributes",
+  "supplemental_attribute_associations",
+  "plant_associations",
+  "combined_cycle_associations",
+  "trading_hub_associations",
+  "service_associations",
+];
+
+test.skipIf(!hasGolden).each(ENTRY_LISTS.flatMap((where) => [null, 5, [1]].map((v) => [where, v])))(
+  "non-object entry in %s (%j) raises InsertError",
+  (where, value) => {
+    const db = fresh();
+    const doc = golden();
+    const comps = doc.components as Record<string, unknown[]>;
+    ((where in comps ? comps : doc) as Record<string, unknown[]>)[where].push(value);
+    expect(() => insertDocument(db, doc)).toThrow(InsertError);
+    expect(() => insertDocument(db, doc)).toThrow(/not an object/);
+    expect(count(db, "entities")).toBe(0);
+  },
+);
+
 // Review Focus 1
 test.skipIf(!hasGolden)("duplicate id across types rolls back the document", () => {
   const db = fresh();
