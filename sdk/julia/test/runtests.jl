@@ -1,6 +1,7 @@
 using Test
 using SiennaGridDBTools
 import DBInterface
+import InfraStore
 import JSON
 import SQLite
 
@@ -70,4 +71,5 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
     end
 
     include("insert_tests.jl")
+    include("time_series_tests.jl")
 end

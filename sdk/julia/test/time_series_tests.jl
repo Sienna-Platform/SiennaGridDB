@@ -1,0 +1,193 @@
+snapshot(dir) =
+    Dict(n => (read(joinpath(dir, n)), mtime(joinpath(dir, n))) for n in readdir(dir))
+
+function query(db, sql)
+    return [Tuple(r) for r in DBInterface.execute(db, sql)]
+end
+
+@testset "time series reader is loaded" begin
+    @test isnothing(G.reader_missing())
+    @test G.element_dtype("tuple(3,i64)") == "i64"
+    @test G.element_dtype("linear_function") == "linear_function"
+end
+
+mktempdir() do dir
+    case_dir = joinpath(dir, "case")
+    mkdir(case_dir)
+    if build_time_series_case(case_dir)
+        doc_path = joinpath(case_dir, "case.json")
+        sidecar = joinpath(case_dir, "case.h5")
+        chmod(sidecar, 0o444)
+        expected_dump = read(joinpath(case_dir, "case.dump.json"), String)
+
+        @testset "time series parity with the Python runtime" begin
+            before = snapshot(case_dir)
+            db_path = joinpath(dir, "jl.sqlite")
+            db = create_database(db_path)
+            report = insert_document!(db, doc_path)
+            @test count_rows(db, "orphaned_time_series") == 0
+            close(db)
+            @test snapshot(case_dir) == before
+            expected = load_json(joinpath(case_dir, "case.report.json"))
+            @test G.report_dict(report) == expected
+            @test python_dump(db_path) == expected_dump
+        end
+
+        @testset "time series from a parsed document, in any row order" begin
+            db_path = joinpath(mktempdir(), "reversed.sqlite")
+            db = create_database(db_path)
+            doc = load_json(doc_path)
+            reverse!(doc["time_series_associations"])
+            insert_document!(db, doc; time_series=sidecar)
+            close(db)
+            @test python_dump(db_path) == expected_dump
+            fresh(mktempdir()) do db
+                insert_document!(db, load_json(doc_path); time_series=sidecar)
+                shared = DBInterface.execute(
+                    db,
+                    "SELECT count(*) FROM time_series_associations a JOIN " *
+                    "static_time_series v ON v.uri = a.uri WHERE a.name = 'max_active_power'",
+                )
+                @test first(shared)[1] == 12  # 4 associations x 3 shared values
+                @test count_rows(db, "dangling_time_series_references") == 0
+            end
+        end
+
+        @testset "a symlinked read-only sidecar is left alone" begin
+            linked = mktempdir()
+            target = joinpath(mktempdir(), "elsewhere.h5")
+            cp(sidecar, target)
+            chmod(target, 0o444)
+            cp(doc_path, joinpath(linked, "case.json"))
+            symlink(target, joinpath(linked, "case.h5"))
+            before = (filemode(target), mtime(target), read(target))
+            fresh(mktempdir()) do db
+                insert_document!(db, joinpath(linked, "case.json"))
+                @test count_rows(db, "static_time_series") == 54
+            end
+            @test (filemode(target), mtime(target), read(target)) == before
+        end
+
+        @testset "a second document reuses stored arrays" begin
+            rows = load_json(doc_path)["time_series_associations"]
+            named(names...) = Any[r for r in rows if r["name"] in names]
+            area(id) = Dict{String, Any}(
+                "Area" => Any[Dict{String, Any}("id" => id, "name" => "a$id")],
+            )
+            fresh(mktempdir()) do db
+                first_doc = Dict{String, Any}(
+                    "components" => area(1),
+                    "time_series_associations" => filter(
+                        r -> r["owner_id"] == 1,
+                        named("zero", "max_active_power"),
+                    ),
+                )
+                insert_document!(db, first_doc; time_series=sidecar)
+                values_sql = "SELECT uri, timestep, element, value FROM static_time_series"
+                before = query(db, values_sql * " ORDER BY uri, timestep, element")
+                second_doc = Dict{String, Any}(
+                    "components" => area(2),
+                    "time_series_associations" => filter(
+                        r -> r["owner_id"] == 2,
+                        named("zero_linear", "max_active_power"),
+                    ),
+                )
+                # A declared shape is checked for an array already stored too
+                transposed = deepcopy(second_doc)
+                for row in transposed["time_series_associations"]
+                    row["name"] == "zero_linear" && (row["array_shape"] = Any[2, 3])
+                end
+                @test_throws r"shape \[2, 3\]" insert_document!(
+                    db,
+                    transposed;
+                    time_series=sidecar,
+                )
+                report = insert_document!(db, second_doc; time_series=sidecar)
+                @test report.inserted == Dict("Area" => 1, "time_series_associations" => 4)
+                @test query(db, values_sql * " ORDER BY uri, timestep, element") == before
+                zero_linear = query(
+                    db,
+                    "SELECT v.timestep, v.element, v.value FROM time_series_associations a " *
+                    "JOIN static_time_series v ON v.uri = a.uri WHERE a.name = 'zero_linear' " *
+                    "AND a.time_series_type = 'SingleTimeSeries' ORDER BY 1, 2",
+                )
+                @test zero_linear == [(t, e, 0.0) for t in 0:2 for e in 0:1]
+            end
+        end
+
+        @testset "time series without their default sidecar are unsupported" begin
+            moved = mktempdir()
+            doc = load_json(doc_path)
+            delete!(doc["components"], "AGC")
+            write(joinpath(moved, "case.json"), JSON.json(doc))
+            fresh(mktempdir()) do db
+                report = insert_document!(db, joinpath(moved, "case.json"))
+                @test report.unsupported == Dict("time_series_associations" => 23)
+                @test_throws r"case\.h5 does not exist" insert_document!(
+                    db,
+                    joinpath(moved, "case.json");
+                    strict=true,
+                )
+            end
+            fresh(mktempdir()) do db
+                none = joinpath(moved, "none.h5")
+                @test_throws r"sidecar" insert_document!(db, doc; time_series=none)
+                @test count_rows(db, "entities") == 0
+            end
+        end
+
+        @testset "time series strict and bad arrays roll back" begin
+            fresh(mktempdir()) do db
+                doc = load_json(doc_path)
+                delete!(doc["components"], "AGC")
+                @test_throws r"timestamp vector" insert_document!(
+                    db,
+                    doc;
+                    time_series=sidecar,
+                    strict=true,
+                )
+                filter!(
+                    r -> r["time_series_type"] != "NonSequentialTimeSeries",
+                    doc["time_series_associations"],
+                )
+                filter!(r -> r["owner_type"] != "AGC", doc["time_series_associations"])
+                @test_throws r"element_type i64" insert_document!(
+                    db,
+                    doc;
+                    time_series=sidecar,
+                    strict=true,
+                )
+                reserved = deepcopy(doc)
+                for row in reserved["time_series_associations"]
+                    if row["name"] == "load"
+                        row["features"] = Dict{String, Any}("name" => "x")
+                    end
+                end
+                @test_throws r"association id=.*CHECK constraint" insert_document!(
+                    db,
+                    reserved;
+                    time_series=sidecar,
+                )
+                transposed = deepcopy(doc)
+                for row in transposed["time_series_associations"]
+                    if row["name"] == "linear" &&
+                       row["time_series_type"] != "SingleTimeSeries"
+                        row["array_shape"] = Any[2, 3]
+                    end
+                end
+                @test_throws r"array_shape \[2, 3\] is not" insert_document!(
+                    db,
+                    transposed;
+                    time_series=sidecar,
+                )
+                for row in doc["time_series_associations"]
+                    if row["name"] == "geo"
+                        row["uri"] = row["data_hash"] = "ab"^32
+                    end
+                end
+                @test_throws r"sidecar" insert_document!(db, doc; time_series=sidecar)
+                @test count_rows(db, "entities") == 0
+            end
+        end
+    end
+end
