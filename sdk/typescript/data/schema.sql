@@ -109,7 +109,7 @@ DROP TABLE IF EXISTS unit_management_metadata;
 -- PER-CONNECTION, AND NOT PERSISTED IN THE FILE. SQLite defaults this OFF on
 -- every new connection, so this line governs the build only: it does not travel
 -- with the database. Every consumer must issue `PRAGMA foreign_keys = ON` on
--- each connection it opens, or all 86 foreign keys in this schema are inert.
+-- each connection it opens, or every foreign key in this schema is inert.
 -- There is no file-level setting that changes this -- see README "Foreign keys".
 PRAGMA foreign_keys = ON;
 
