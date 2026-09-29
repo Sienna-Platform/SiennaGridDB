@@ -222,6 +222,15 @@
       ]
     },
     "balancing_topologies": {
+      "attribute_channel": [
+        "number",
+        "bustype",
+        "angle",
+        "magnitude",
+        "voltage_limits",
+        "available",
+        "load_zone"
+      ],
       "db_only": [
         "description"
       ]

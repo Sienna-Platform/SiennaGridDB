@@ -80,7 +80,39 @@
   "attribute_sql": "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) VALUES (?, ?, ?, ?, ?, ?)",
   "components": {
     "ACBus": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "angle",
+          "quantity_kind": "Angle",
+          "unit": "rad"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "bustype",
+          "unit_free": true
+        },
+        {
+          "field": "load_zone",
+          "identifier": true
+        },
+        {
+          "field": "magnitude",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        },
+        {
+          "field": "number",
+          "identifier": true
+        },
+        {
+          "field": "voltage_limits",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -100,15 +132,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'ACBus')",
-      "gaps": [
-        "angle",
-        "available",
-        "bustype",
-        "load_zone",
-        "magnitude",
-        "number",
-        "voltage_limits"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO balancing_topologies (id, name, area, base_voltage) VALUES (?, ?, ?, ?)",
       "skip": [],
@@ -247,7 +271,30 @@
       "table": "transmission_interchanges"
     },
     "DCBus": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "load_zone",
+          "identifier": true
+        },
+        {
+          "field": "magnitude",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        },
+        {
+          "field": "number",
+          "identifier": true
+        },
+        {
+          "field": "voltage_limits",
+          "quantity_kind": "Voltage",
+          "unit": "pu"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -267,13 +314,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'DCBus')",
-      "gaps": [
-        "available",
-        "load_zone",
-        "magnitude",
-        "number",
-        "voltage_limits"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO balancing_topologies (id, name, area, base_voltage) VALUES (?, ?, ?, ?)",
       "skip": [],

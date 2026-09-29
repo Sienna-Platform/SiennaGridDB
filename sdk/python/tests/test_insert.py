@@ -86,10 +86,33 @@ def test_bus_then_generator(conn):
     assert count(conn, "thermal_generators") == 1
 
 
-def test_strict_gap_raises_and_rolls_back(conn):
-    with pytest.raises(griddb.GapValueError, match="angle"):
-        griddb.insert_component(conn, "ACBus", lone_bus(golden()), strict=True)
+def test_strict_unknown_field_raises_and_rolls_back(conn):
+    bus = dict(lone_bus(golden()), numbr=3)
+    with pytest.raises(griddb.GapValueError, match="numbr"):
+        griddb.insert_component(conn, "ACBus", bus, strict=True)
     assert count(conn, "entities") == 0
+
+
+def attributes(conn, entity_id):
+    rows = conn.execute(
+        "SELECT name, json(value) AS value, unit, quantity_kind FROM attributes WHERE entity_id = ?",
+        (entity_id,),
+    )
+    return {name: (json.loads(value), unit, kind) for name, value, unit, kind in rows}
+
+
+def test_bus_fields_round_trip_through_attributes(conn):
+    bus = lone_bus(golden())
+    report = griddb.insert_component(conn, "ACBus", bus, strict=True)
+    assert report.skipped_fields == {}
+    stored = attributes(conn, bus["id"])
+    assert stored["number"] == (bus["number"], None, None)
+    assert stored["load_zone"] == (bus["load_zone"], None, None)
+    assert stored["available"] == (bus["available"], None, None)
+    assert stored["bustype"] == (bus["bustype"], None, None)
+    assert stored["angle"] == (bus["angle"], "rad", "Angle")
+    assert stored["magnitude"] == (bus["magnitude"], "pu", "Voltage")
+    assert stored["voltage_limits"] == (bus["voltage_limits"], "pu", "Voltage")
 
 
 def test_unsupported_type(conn):
@@ -199,7 +222,7 @@ def test_insert_model_with_sdk_objects(conn):
         conn, models.ACBus(id=1, name="b", number=1, available=True)
     )
     assert report.inserted == {"ACBus": 1}
-    assert report.skipped_fields == {"ACBus": {"available": 1, "number": 1}}
+    assert report.skipped_fields == {}
 
 
 def test_cli_build_prints_the_report(tmp_path):

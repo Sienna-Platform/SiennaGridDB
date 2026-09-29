@@ -29,12 +29,40 @@ if HAS_GOLDEN
         end
     end
 
-    @testset "strict gap rolls back" begin
+    @testset "strict unknown field rolls back" begin
         mktempdir() do dir
             fresh(dir) do db
                 bus = lone_bus(golden())
+                bus["numbr"] = 3
                 @test_throws GapValueError insert_component!(db, "ACBus", bus; strict=true)
                 @test count_rows(db, "entities") == 0
+            end
+        end
+    end
+
+    @testset "bus fields round-trip through attributes" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                bus = lone_bus(golden())
+                report = insert_component!(db, "ACBus", bus; strict=true)
+                @test isempty(report.skipped_fields)
+                rows = DBInterface.execute(
+                    db,
+                    "SELECT name, json(value) AS value, unit, quantity_kind FROM attributes WHERE entity_id = ?",
+                    [bus["id"]],
+                )
+                stored = Dict(
+                    r.name => (JSON.parse(string(r.value)), r.unit, r.quantity_kind) for
+                    r in rows
+                )
+                @test stored["number"][1] == bus["number"]
+                @test ismissing(stored["number"][2]) && ismissing(stored["load_zone"][2])
+                @test stored["load_zone"][1] == bus["load_zone"]
+                @test isequal(stored["available"], (bus["available"], missing, missing))
+                @test stored["bustype"][1] == bus["bustype"]
+                @test stored["angle"][2:3] == ("rad", "Angle")
+                @test stored["magnitude"][2:3] == ("pu", "Voltage")
+                @test stored["voltage_limits"][2:3] == ("pu", "Voltage")
             end
         end
     end
