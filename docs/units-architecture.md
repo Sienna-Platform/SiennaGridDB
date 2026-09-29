@@ -297,8 +297,8 @@ base_voltage_ref = 'arc_id->arcs.from_id->balancing_topologies.base_voltage'  --
 The rule: a base must be reachable **without leaving the database** — same-row and FK-path both
 satisfy that; only "in the modeling application" doesn't. `balancing_topologies.base_voltage` is new
 — bus base voltage previously lived only as an `attributes` row — and is the target of most
-two-winding and line paths. `transmission_lines`, `fixed_admittance`, `switched_admittance`, and
-`tmodel_hvdc_lines` also gained their own same-row `base_power`.
+two-winding and line paths.
+`transmission_lines` and `fixed_admittance` also gained their own same-row `base_power`.
 
 Together these give one invariant, checked by `test_pu_conventions_have_resolvable_basis`: every
 `unit='pu'` convention has a `unit_basis_rules` row for its quantity kind, and every base reference
