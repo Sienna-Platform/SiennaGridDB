@@ -142,39 +142,15 @@ CREATE TABLE hydro_reservoirs (
 );
 
 -- loads: generated from PowerLoad, StandardLoad, InterruptiblePowerLoad, InterruptibleStandardLoad, MotorLoad, ExponentialLoad, ShiftablePowerLoad
+-- Stored via the generic `attributes` table, not as columns:
+-- available, active_power, reactive_power, max_active_power, max_reactive_power, conformity, operation_cost, constant_active_power, constant_reactive_power, current_active_power, current_reactive_power, impedance_active_power, impedance_reactive_power, max_constant_active_power, max_constant_reactive_power, max_current_active_power, max_current_reactive_power, max_impedance_active_power, max_impedance_reactive_power, alpha, beta, motor_technology, rating, reactive_power_limits, active_power_limits, load_balance_time_horizon
 CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
-    available BOOLEAN NOT NULL,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    active_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    reactive_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
     base_power REAL NOT NULL, -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    max_active_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    max_reactive_power REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    conformity TEXT NULL DEFAULT 'UNDEFINED' CHECK (conformity IN ('NON_CONFORMING', 'CONFORMING', 'UNDEFINED')),
-    dynamic_injector INTEGER NULL,
-    constant_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    constant_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    impedance_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    impedance_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    current_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    current_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    max_constant_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    max_constant_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    max_impedance_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    max_impedance_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    max_current_active_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    max_current_reactive_power REAL NULL DEFAULT 0.0, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    operation_cost JSON NULL,
-    rating REAL NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVA)
-    reactive_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MVAr)
-    motor_technology TEXT NULL DEFAULT 'UNDETERMINED' CHECK (motor_technology IN ('INDUCTION', 'SYNCHRONOUS', 'UNDETERMINED')),
-    alpha REAL NULL,
-    beta REAL NULL,
-    active_power_limits JSON NULL, -- Units: per power_units (COMPONENT_BASE: pu, NATURAL_UNITS: MW)
-    load_balance_time_horizon INTEGER NULL
+    dynamic_injector INTEGER NULL
 );
 
 -- transmission_lines: generated from Line, MonitoredLine
