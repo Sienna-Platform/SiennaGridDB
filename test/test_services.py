@@ -168,3 +168,86 @@ def test_interface_flow_limits_unit_follows_power_units(db, power_units, unit):
         (power_units,),
     ).fetchone()
     assert found == unit
+
+
+# Membership: the member's kind is read from entities, so bare entity rows
+# stand in for the member tables here.
+def join(conn, service_id, entity_id):
+    conn.execute(
+        "INSERT INTO service_associations (service_id, entity_id) VALUES (?, ?)",
+        (service_id, entity_id),
+    )
+
+
+def members(conn):
+    return conn.execute(
+        "SELECT service_id, entity_id FROM service_associations ORDER BY 1, 2"
+    ).fetchall()
+
+
+def services(conn):
+    """An online, an offline and a group reserve, and an interface: ids 1-4."""
+    add_reserve(conn, 1, "OnlineReserve")
+    add_reserve(conn, 2, "OfflineReserve")
+    add_reserve(conn, 3, "GroupReserve")
+    add_interface(conn, 4)
+    make_entity(conn, 10, "thermal_generators", "ThermalStandard")
+    make_entity(conn, 11, "storage_units", "EnergyReservoirStorage")
+    make_entity(conn, 20, "transmission_lines", "Line")
+    make_entity(conn, 21, "two_winding_transformers", "TwoWindingTransformer")
+    make_entity(conn, 30, "balancing_topologies", "ACBus", is_topology=1)
+
+
+def test_valid_memberships_per_service_kind(fresh_db):
+    services(fresh_db)
+    pairs = [(1, 10), (1, 11), (2, 10), (3, 1), (3, 2), (4, 20), (4, 21)]
+    for pair in pairs:
+        join(fresh_db, *pair)
+    assert members(fresh_db) == pairs
+
+
+WRONG_MEMBERS = [
+    (3, 10, "GroupReserve's members must be reserves"),
+    (4, 10, "members must be branches"),
+    (4, 1, "members must be branches"),
+    (1, 20, "members must be devices"),
+    (2, 3, "members must be devices"),
+    (1, 30, "members must be devices"),
+    (10, 11, "must exist in reserves or transmission_interfaces"),
+    (3, 3, "CHECK constraint"),
+]
+
+
+@pytest.mark.parametrize("service_id, entity_id, message", WRONG_MEMBERS)
+def test_wrong_member_kind_is_rejected(fresh_db, service_id, entity_id, message):
+    services(fresh_db)
+    with pytest.raises(sqlite3.IntegrityError, match=message):
+        join(fresh_db, service_id, entity_id)
+
+
+@pytest.mark.parametrize("service_id, entity_id, message", WRONG_MEMBERS)
+def test_wrong_member_kind_is_rejected_on_update(fresh_db, service_id, entity_id, message):
+    services(fresh_db)
+    join(fresh_db, 1, 10)
+    with pytest.raises(sqlite3.IntegrityError, match=message):
+        fresh_db.execute(
+            "UPDATE service_associations SET service_id = ?, entity_id = ?",
+            (service_id, entity_id),
+        )
+
+
+def test_membership_is_unique(fresh_db):
+    services(fresh_db)
+    join(fresh_db, 1, 10)
+    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
+        join(fresh_db, 1, 10)
+
+
+def test_deleting_a_service_or_a_member_cascades(fresh_db):
+    services(fresh_db)
+    for pair in [(1, 10), (1, 11), (3, 1), (4, 20)]:
+        join(fresh_db, *pair)
+    fresh_db.execute("DELETE FROM reserves WHERE id = 1")
+    assert members(fresh_db) == [(4, 20)]
+    fresh_db.execute("DELETE FROM entities WHERE id = 20")
+    assert members(fresh_db) == []

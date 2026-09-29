@@ -38,6 +38,8 @@ DROP TABLE IF EXISTS reserves;
 
 DROP TABLE IF EXISTS transmission_interfaces;
 
+DROP TABLE IF EXISTS service_associations;
+
 DROP TABLE IF EXISTS entities;
 
 DROP TABLE IF EXISTS time_series_associations;
@@ -358,7 +360,8 @@ CREATE TABLE reserves (
 ) strict;
 
 -- Flow limit on a set of branches (PSY TransmissionInterface). direction_mapping
--- is the schemas' branch name -> 1 or -1 object, verbatim.
+-- is the schemas' branch name -> 1 or -1 object, verbatim; the member branches
+-- are service_associations rows.
 CREATE TABLE transmission_interfaces (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
@@ -372,6 +375,22 @@ CREATE TABLE transmission_interfaces (
     base_power REAL NOT NULL CHECK (base_power > 0), -- Units: MVA
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS'))
 ) strict;
+
+-- One (service, member) pair (SiennaSchemas ServiceAssociation), the only record of
+-- who contributes to a service; enforce_service_associations_domain_* keep members to
+-- the service's kind. AUTOINCREMENT id for the reason given at plant_associations.
+CREATE TABLE service_associations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_id INTEGER NOT NULL,
+    entity_id INTEGER NOT NULL,
+    FOREIGN KEY (service_id) REFERENCES entities (id) ON DELETE CASCADE,
+    FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
+    UNIQUE (service_id, entity_id),
+    CHECK (service_id <> entity_id)
+) strict;
+
+-- The UNIQUE pair serves by-service lookups; this one serves by-member lookups.
+CREATE INDEX idx_service_associations_entity ON service_associations (entity_id);
 
 -- Existing thermal generation units (ThermalStandard, ThermalMultiStart).
 CREATE TABLE thermal_generators (

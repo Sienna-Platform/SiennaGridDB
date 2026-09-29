@@ -148,7 +148,6 @@ def test_unsupported_entries(manifest):
     assert manifest["unsupported_components"] == {}
     assert set(manifest["unsupported_sections"]) == {
         "ext",
-        "service_associations",
         "time_series_associations",
     }
 
@@ -157,6 +156,7 @@ def test_association_references_are_the_foreign_key_columns(manifest):
     """SDKs skip a row whose reference names a component with no table."""
     refs = {a["section"]: a["references"] for a in manifest["associations"]}
     assert refs["supplemental_attribute_associations"] == ["component_id", "attribute_id"]
+    assert refs["service_associations"] == ["service_id", "entity_id"]
     assert refs["combined_cycle_associations"] == ["plant_id", "entity_id"]
 
 
