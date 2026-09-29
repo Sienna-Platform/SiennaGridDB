@@ -9,6 +9,7 @@ module SiennaGridDBTools
 
 import DBInterface
 import JSON
+import SHA
 import SQLite
 
 export create_database,
