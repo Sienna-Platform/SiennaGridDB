@@ -283,6 +283,24 @@ def test_missing_explicit_sidecar_is_an_error(conn, case, tmp_path):
     assert rows(conn, "SELECT count(*) FROM entities") == [(0,)]
 
 
+def test_missing_explicit_sidecar_is_an_error_when_no_array_is_read(conn, case, tmp_path):
+    """Its array already stored and no shape to check, the second document reads nothing."""
+    owners = {
+        r["owner_id"]: r
+        for r in load(case)["time_series_associations"]
+        if r["name"] == "max_active_power" and r["time_series_type"] == "SingleTimeSeries"
+    }
+    first = {"components": {"Area": [{"id": 1, "name": "a1"}]}}
+    first["time_series_associations"] = [owners[1]]
+    griddb.insert_document(conn, first, time_series=sidecar(case))
+    del owners[2]["array_shape"]
+    second = {"components": {"Area": [{"id": 2, "name": "a2"}]}}
+    second["time_series_associations"] = [owners[2]]
+    with pytest.raises(griddb.InsertError, match=r"none\.h5 does not exist"):
+        griddb.insert_document(conn, second, time_series=str(tmp_path / "none.h5"))
+    assert rows(conn, "SELECT count(*) FROM entities") == [(1,)]
+
+
 def test_strict_rejects_unstorable_series_before_writing(conn, case):
     doc = load(case)
     del doc["components"][time_series_case.UNSTORED_OWNER]

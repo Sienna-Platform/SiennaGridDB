@@ -221,8 +221,8 @@ end
 Insert a whole `SystemDocument` (as parsed JSON) in one savepoint: vocabulary, every
 entity row, typed rows in foreign-key rank order, supplemental attributes, associations,
 then time series associations and their arrays, read from the HDF5 sidecar
-`time_series` (only ever read; needs InfraStore.jl loaded). Any failure rolls back the
-whole document.
+`time_series` (only ever read, must exist; needs InfraStore.jl loaded). Any failure
+rolls back the whole document.
 """
 function insert_document!(
     db::SQLite.DB,
@@ -243,6 +243,9 @@ function insert_parsed_document!(
     time_series::Union{Nothing, AbstractString},
     no_sidecar::AbstractString,
 )
+    if !isnothing(time_series) && !isfile(time_series)
+        throw(InsertError("time series sidecar $time_series does not exist"))
+    end
     m = manifest()
     report = InsertReport()
     components = get(doc, "components", Dict{String, Any}())

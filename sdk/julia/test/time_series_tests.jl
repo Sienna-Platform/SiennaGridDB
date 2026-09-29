@@ -102,6 +102,19 @@ mktempdir() do dir
                     transposed;
                     time_series=sidecar,
                 )
+                # An explicit sidecar must exist even when no array is read
+                shapeless = deepcopy(second_doc)
+                foreach(
+                    r -> delete!(r, "array_shape"),
+                    shapeless["time_series_associations"],
+                )
+                none = joinpath(mktempdir(), "none.h5")
+                @test_throws r"none\.h5 does not exist" insert_document!(
+                    db,
+                    shapeless;
+                    time_series=none,
+                )
+                @test count_rows(db, "entities") == 1
                 report = insert_document!(db, second_doc; time_series=sidecar)
                 @test report.inserted == Dict("Area" => 1, "time_series_associations" => 4)
                 @test query(db, values_sql * " ORDER BY uri, timestep, element") == before

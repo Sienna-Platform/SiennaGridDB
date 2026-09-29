@@ -181,8 +181,10 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
     doc is a parsed document, an SDK model, or the path of a document's JSON.
     time_series is the HDF5 sidecar holding its arrays; by default a path doc's
     time_series_storage_file, resolved beside it (reported unsupported when that
-    file does not exist). It is only ever read.
+    file does not exist). It is only ever read, and an explicit one must exist.
     """
+    if time_series is not None and not os.path.isfile(time_series):
+        raise InsertError(f"time series sidecar {time_series} does not exist")
     no_sidecar = "no time series sidecar given"
     if isinstance(doc, (str, os.PathLike)):
         with open(doc, encoding="utf-8") as handle:
