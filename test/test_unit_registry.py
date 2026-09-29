@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 505
+EXPECTED_UNIT_CONVENTIONS = 508
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1362,6 +1362,8 @@ def test_merged_hvdc_columns_registered(db):
         ("alpha", {"Dimensionless/1"}),
         ("max_shunt_current", {"ApparentPower/MVA", "ApparentPower/pu"}),
         ("minimum_time", {"OperationalDuration/min"}),
+        ("peak_active_power", {"ActivePower/MW", "ActivePower/pu"}),
+        ("base_power", {"ApparentPower/MVA"}),
         ("reactive_power_to", {"ReactivePower/MVAr", "ReactivePower/pu"}),
         ("power_trajectory", {"ActivePower/MW", "ActivePower/pu"}),
         ("r", {"Resistance/ohm", "Resistance/pu"}),

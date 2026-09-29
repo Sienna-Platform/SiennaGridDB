@@ -141,6 +141,7 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'alpha', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'ExponentialLoad active power voltage exponent'),
     ('attributes', 'angle', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'Bus voltage angle'),
     ('attributes', 'angle_limits', 'Angle', 'rad', NULL, NULL, NULL, NULL, NULL, NULL, 'Branch phase-angle-difference limits'),
+    ('attributes', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'Area/zone base power for its per-unit fields'),
     ('attributes', 'base_voltage', 'Voltage', 'kV', NULL, NULL, NULL, NULL, NULL, NULL, 'Bus base voltage'),
     ('attributes', 'beta', 'Dimensionless', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'ExponentialLoad reactive power voltage exponent'),
     ('attributes', 'c', 'Susceptance', 'pu', NULL, NULL, NULL, NULL, NULL, NULL, 'TModelHVDCLine shunt capacitance, per-unit on the line''s base_current'),
@@ -210,9 +211,11 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('attributes', 'min_compounding_voltage', 'Voltage', 'pu', 'dc_voltage_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'LCC minimum compounding voltage, per-unit on the component''s base'),
     ('attributes', 'min_compounding_voltage', 'Voltage', 'kV', 'dc_voltage_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'LCC minimum compounding voltage'),
     ('attributes', 'minimum_time', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'HydroPumpTurbine minimum time in turbine and pump modes'),
-    ('attributes', 'peak_active_power', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Area/zone peak active power'),
+    ('attributes', 'peak_active_power', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'Area/zone peak active power, per-unit on the component''s base_power'),
+    ('attributes', 'peak_active_power', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Area/zone peak active power'),
     ('attributes', 'peak_demand_mw', 'ActivePower', 'MW', NULL, NULL, NULL, NULL, NULL, NULL, 'Demand requirement peak demand'),
-    ('attributes', 'peak_reactive_power', 'ReactivePower', 'MVAr', NULL, NULL, NULL, NULL, NULL, NULL, 'Area/zone peak reactive power'),
+    ('attributes', 'peak_reactive_power', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'Area/zone peak reactive power, per-unit on the component''s base_power'),
+    ('attributes', 'peak_reactive_power', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Area/zone peak reactive power'),
     ('attributes', 'power_factor_weighting_fraction_from', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC from-converter power-factor weighting'),
     ('attributes', 'power_factor_weighting_fraction_to', 'Fraction', '1', NULL, NULL, NULL, NULL, NULL, NULL, 'VSC to-converter power-factor weighting'),
     ('attributes', 'power_trajectory', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, NULL, NULL, 'ThermalMultiStart start-up/shut-down power trajectory, per-unit on the component''s base_power'),
@@ -647,4 +650,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', '80855cc5d6b75f1162cb630f012eb63966d9a37da2e1c37c44ff0d6ccf60f0a6', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '7f16286f4ab17178714be0938d53dbcf1ce2f615b9a97782cfc6e25ccceb788e', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

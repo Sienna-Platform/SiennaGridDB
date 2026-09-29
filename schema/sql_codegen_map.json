@@ -291,7 +291,11 @@
         "magnitude",
         "voltage_limits",
         "available",
-        "load_zone"
+        "load_zone",
+        "base_power",
+        "power_units",
+        "peak_active_power",
+        "peak_reactive_power"
       ],
       "db_only": [
         "description"
@@ -390,6 +394,15 @@
         "from_id": "REFERENCES entities (id) ON DELETE CASCADE",
         "to_id": "REFERENCES entities (id) ON DELETE CASCADE"
       }
+    },
+    "planning_regions": {
+      "attribute_channel": [
+        "base_power",
+        "power_units",
+        "peak_active_power",
+        "peak_reactive_power",
+        "load_response"
+      ]
     }
   }
 }

@@ -7,13 +7,6 @@
       "line_loss",
       "start_region"
     ],
-    "Area": [
-      "base_power",
-      "load_response",
-      "peak_active_power",
-      "peak_reactive_power",
-      "power_units"
-    ],
     "DemandRequirement": [
       "conformity",
       "growth_rate",
@@ -51,12 +44,6 @@
     ],
     "InterruptibleStandardLoad": [
       "dynamic_injector"
-    ],
-    "LoadZone": [
-      "base_power",
-      "peak_active_power",
-      "peak_reactive_power",
-      "power_units"
     ],
     "MotorLoad": [
       "dynamic_injector"
