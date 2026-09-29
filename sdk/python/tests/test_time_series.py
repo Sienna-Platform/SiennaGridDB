@@ -245,6 +245,14 @@ def test_parsed_document_takes_an_explicit_sidecar(tmp_path, case):
     assert parsed == insert_dump(tmp_path, "b", str(case))
 
 
+def test_sdk_model_inserts_the_same_database_as_its_dict(tmp_path, case):
+    """The model dump spells every unset optional field as null."""
+    document = pytest.importorskip("power_openapi_models.document")
+    model = document.SystemDocument.model_validate(load(case))
+    from_model = insert_dump(tmp_path, "a", model, time_series=sidecar(case))
+    assert from_model == insert_dump(tmp_path, "b", load(case), time_series=sidecar(case))
+
+
 def test_row_order_does_not_matter(tmp_path, case):
     """A DeterministicSingleTimeSeries listed before the SingleTimeSeries it views."""
     doc = load(case)

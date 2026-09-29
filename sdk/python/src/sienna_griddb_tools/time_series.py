@@ -52,9 +52,12 @@ def arrays(sidecar, rows):
     and shape infrastore stores it; the rows are imported so it serves them by hash."""
     import infrastore
 
+    # infrastore rejects null for an optional field, which an SDK model dump
+    # spells for every unset one; GridDB's own rows already treat null as absent
+    wire = [{k: v for k, v in row.items() if v is not None} for row in rows]
     try:
         with _store(sidecar) as store:
-            store.import_time_series_associations_openapi(json.dumps(rows))
+            store.import_time_series_associations_openapi(json.dumps(wire))
             for row in rows:
                 yield row, store.get_array_by_hash(row.get("data_hash") or row["uri"])
     except (infrastore.TimeSeriesError, OSError) as exc:
