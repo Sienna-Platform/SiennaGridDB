@@ -75,6 +75,15 @@
       "foreign_keys": {
         "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
       },
+      "attribute_channel": [
+        "available",
+        "active_power_flow",
+        "reactive_power_flow",
+        "rating_b",
+        "rating_c",
+        "angle_limits",
+        "flow_limits"
+      ],
       "db_only": [
         "line_length",
         "lte_rating",
@@ -85,6 +94,12 @@
       "foreign_keys": {
         "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
       },
+      "attribute_channel": [
+        "available",
+        "active_power_flow",
+        "from_area",
+        "to_area"
+      ],
       "db_only": [
         "arc_id",
         "max_flow_from",
@@ -200,7 +215,15 @@
       },
       "foreign_keys": {
         "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      }
+      },
+      "attribute_channel": [
+        "available",
+        "active_power_flow",
+        "active_power_limits_from",
+        "active_power_limits_to",
+        "l",
+        "c"
+      ]
     },
     "two_winding_transformers": {
       "foreign_keys": {

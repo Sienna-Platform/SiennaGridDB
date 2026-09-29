@@ -231,7 +231,34 @@
       "table": "planning_regions"
     },
     "AreaInterchange": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_flow"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "from_area",
+          "identifier": true
+        },
+        {
+          "field": "to_area",
+          "identifier": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -259,12 +286,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_interchanges', 'AreaInterchange')",
-      "gaps": [
-        "active_power_flow",
-        "available",
-        "from_area",
-        "to_area"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO transmission_interchanges (id, name, max_flow_from, max_flow_to, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?)",
       "skip": [],
@@ -1233,7 +1255,73 @@
       "table": "loads"
     },
     "Line": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_flow"
+        },
+        {
+          "field": "angle_limits",
+          "quantity_kind": "Angle",
+          "unit": "rad"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_b"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_c"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_flow"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1281,14 +1369,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_lines', 'Line')",
-      "gaps": [
-        "active_power_flow",
-        "angle_limits",
-        "available",
-        "rating_b",
-        "rating_c",
-        "reactive_power_flow"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0.0,\"to\":0.0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?)",
       "skip": [],
@@ -1319,7 +1400,87 @@
       "table": "balancing_topologies"
     },
     "MonitoredLine": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "active_power_flow"
+        },
+        {
+          "field": "angle_limits",
+          "quantity_kind": "Angle",
+          "unit": "rad"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "flow_limits"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_b"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ApparentPower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ApparentPower",
+              "unit": "MVA"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "rating_c"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "reactive_power_flow"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1367,15 +1528,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_lines', 'MonitoredLine')",
-      "gaps": [
-        "active_power_flow",
-        "angle_limits",
-        "available",
-        "flow_limits",
-        "rating_b",
-        "rating_c",
-        "reactive_power_flow"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0.0,\"to\":0.0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?)",
       "skip": [],
@@ -2187,7 +2340,37 @@
       "table": "synchronous_condensers"
     },
     "TModelHVDCLine": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "active_power_flow",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "active_power_limits_from",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "active_power_limits_to",
+          "quantity_kind": "ActivePower",
+          "unit": "MW"
+        },
+        {
+          "field": "available",
+          "unit_free": true
+        },
+        {
+          "field": "c",
+          "quantity_kind": "Susceptance",
+          "unit": "pu"
+        },
+        {
+          "field": "l",
+          "quantity_kind": "Reactance",
+          "unit": "pu"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -2215,14 +2398,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'tmodel_hvdc_lines', 'TModelHVDCLine')",
-      "gaps": [
-        "active_power_flow",
-        "active_power_limits_from",
-        "active_power_limits_to",
-        "available",
-        "c",
-        "l"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO tmodel_hvdc_lines (id, name, arc_id, r, parameter_units, base_current) VALUES (?, ?, ?, ?, COALESCE(?, 'NATURAL_UNITS'), ?)",
       "skip": [],

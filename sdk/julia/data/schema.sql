@@ -657,6 +657,8 @@ VALUES
     ('NodalHVDCTransportTechnology', 'start_node', 'Transport technology from-node reference'),
     ('NodalACTransportTechnology', 'end_node', 'Transport technology to-node reference'),
     ('NodalHVDCTransportTechnology', 'end_node', 'Transport technology to-node reference'),
+    ('AreaInterchange', 'from_area', 'Exporting area reference'),
+    ('AreaInterchange', 'to_area', 'Importing area reference'),
     ('TwoTerminalVSCLine', 'remote_bus_control_from', 'Remotely regulated bus reference'),
     ('TwoTerminalVSCLine', 'remote_bus_control_to', 'Remotely regulated bus reference'),
     ('TwoTerminalGenericHVDCLine', 'loss', 'Loss curve payload with its own power_units'),
