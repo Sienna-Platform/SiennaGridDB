@@ -206,7 +206,50 @@
       "table": "arcs"
     },
     "Area": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "base_power",
+          "quantity_kind": "ApparentPower",
+          "unit": "MVA"
+        },
+        {
+          "field": "load_response",
+          "quantity_kind": "PowerPerFrequency",
+          "unit": "MW/Hz"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_reactive_power"
+        },
+        {
+          "field": "power_units",
+          "unit_free": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -218,13 +261,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'planning_regions', 'Area')",
-      "gaps": [
-        "base_power",
-        "load_response",
-        "peak_active_power",
-        "peak_reactive_power",
-        "power_units"
-      ],
+      "gaps": [],
       "rank": 0,
       "row_sql": "INSERT INTO planning_regions (id, name) VALUES (?, ?)",
       "skip": [],
@@ -1801,7 +1838,45 @@
       "table": "transmission_lines"
     },
     "LoadZone": {
-      "attributes": [],
+      "attributes": [
+        {
+          "field": "base_power",
+          "quantity_kind": "ApparentPower",
+          "unit": "MVA"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_active_power"
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ReactivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ReactivePower",
+              "unit": "MVAr"
+            }
+          },
+          "discriminator": "power_units",
+          "field": "peak_reactive_power"
+        },
+        {
+          "field": "power_units",
+          "unit_free": true
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -1813,12 +1888,7 @@
         }
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'balancing_topologies', 'LoadZone')",
-      "gaps": [
-        "base_power",
-        "peak_active_power",
-        "peak_reactive_power",
-        "power_units"
-      ],
+      "gaps": [],
       "rank": 1,
       "row_sql": "INSERT INTO balancing_topologies (id, name) VALUES (?, ?)",
       "skip": [],

@@ -384,7 +384,7 @@ CREATE TABLE facts_control_devices (
 
 -- balancing_topologies: generated from ACBus, DCBus
 -- Stored via the generic `attributes` table, not as columns:
--- number, bustype, angle, magnitude, voltage_limits, available, load_zone
+-- number, bustype, angle, magnitude, voltage_limits, available, load_zone, base_power, power_units, peak_active_power, peak_reactive_power
 CREATE TABLE balancing_topologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
