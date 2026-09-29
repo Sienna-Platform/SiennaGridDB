@@ -149,6 +149,10 @@ def insert_document(conn, doc, *, strict=False):
         rows = doc.get(section) or []
         if len(rows) > 0:
             _unsupported(report, strict, section, len(rows), reason)
+    series = doc.get(manifest.time_series["section"]) or []
+    if series:
+        section = manifest.time_series["section"]
+        _unsupported(report, strict, section, len(series), "no time series sidecar given")
 
     attr_types = _attribute_types(doc)
     supplemental = manifest.supplemental

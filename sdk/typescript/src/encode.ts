@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { EncodeError, type JsonObject } from "./errors.js";
 
-export type Encoding = "int" | "real" | "text" | "bool" | "json";
+export type Encoding = "int" | "real" | "text" | "bool" | "json" | "features_hash";
 export type SqlValue = bigint | number | string | null;
 
 export function canonicalJson(value: unknown): string {
@@ -40,6 +40,7 @@ const ENCODERS: Record<Encoding, (v: unknown) => SqlValue> = {
     return v ? 1 : 0;
   },
   json: (v) => canonicalJson(v),
+  features_hash: (v) => featuresHash(v as JsonObject),
 };
 
 export function encode(encoding: Encoding, value: unknown): SqlValue {
@@ -96,6 +97,9 @@ function featureBytes(value: unknown): Buffer {
  * as Int and every other number as Float.
  */
 export function featuresHash(features: JsonObject): string {
+  if (features === null || typeof features !== "object" || Array.isArray(features)) {
+    throw new EncodeError(`expected a feature map, got ${JSON.stringify(features)}`);
+  }
   const keys = Object.keys(features).map((k) => [k, Buffer.from(k, "utf8")] as const);
   keys.sort((a, b) => Buffer.compare(a[1], b[1]));
   const hash = createHash("sha256").update("features\0").update(u64(keys.length));

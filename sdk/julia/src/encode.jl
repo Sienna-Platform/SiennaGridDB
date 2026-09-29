@@ -4,6 +4,7 @@ struct RealEncoding <: Encoding end
 struct TextEncoding <: Encoding end
 struct BoolEncoding <: Encoding end
 struct JSONEncoding <: Encoding end
+struct FeaturesHashEncoding <: Encoding end
 
 const ENCODINGS = Dict{String, Encoding}(
     "int" => IntEncoding(),
@@ -11,6 +12,7 @@ const ENCODINGS = Dict{String, Encoding}(
     "text" => TextEncoding(),
     "bool" => BoolEncoding(),
     "json" => JSONEncoding(),
+    "features_hash" => FeaturesHashEncoding(),
 )
 
 canonical_json(value) = JSON.json(value)
@@ -32,6 +34,7 @@ encode(::TextEncoding, v) = throw(EncodeError("expected a string, got $(repr(v))
 encode(::BoolEncoding, v::Bool) = Int(v)
 encode(::BoolEncoding, v) = throw(EncodeError("expected a boolean, got $(repr(v))"))
 encode(::JSONEncoding, v) = canonical_json(v)
+encode(::FeaturesHashEncoding, v) = features_hash(v)
 
 is_object(::AbstractDict) = true
 is_object(_) = false

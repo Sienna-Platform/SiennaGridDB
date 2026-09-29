@@ -6,7 +6,7 @@ from importlib import resources
 
 from .errors import ManifestMismatchError
 
-SUPPORTED_MANIFEST_VERSION = 1
+SUPPORTED_MANIFEST_VERSION = 2
 
 
 def data_text(name):
@@ -45,6 +45,7 @@ class Manifest:
         self.attribute_sql = raw["attribute_sql"]
         self.supplemental = raw["supplemental_attributes"]
         self.associations = raw["associations"]
+        self.time_series = raw["time_series"]
         self.unsupported_sections = raw["unsupported_sections"]
 
 

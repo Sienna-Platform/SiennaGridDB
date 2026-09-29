@@ -146,11 +146,26 @@ def test_vocabulary(manifest):
 
 def test_unsupported_entries(manifest):
     assert manifest["unsupported_components"] == {}
-    assert set(manifest["unsupported_sections"]) == {
-        "ext",
-        "service_associations",
-        "time_series_associations",
-    }
+    assert set(manifest["unsupported_sections"]) == {"ext", "service_associations"}
+
+
+def test_time_series_entry(manifest):
+    entry = manifest["time_series"]
+    assert entry["section"] == "time_series_associations"
+    columns = entry["row_sql"].split("(", 1)[1].split(")", 1)[0].split(", ")
+    paths = [b["path"] for b in entry["bindings"]]
+    assert dict(zip(paths, columns))["association_id"] == "id"
+    assert dict(zip(paths, columns))["features"] == "features_hash"
+    assert dict(zip(paths, columns))["percentiles"] == "percentiles_json"
+    encodings = {b["path"]: b["encode"] for b in entry["bindings"]}
+    assert encodings["features"] == "features_hash"
+    assert encodings["resolution"] == "text"
+    assert encodings["element_shape"] == "json"
+    assert "lower(?)" in entry["row_sql"]
+    assert "timestamps_uri" not in paths
+    assert set(entry["unsupported_types"]) == {"NonSequentialTimeSeries"}
+    assert "i64" in entry["unsupported_dtypes"]
+    assert "f64" not in entry["unsupported_dtypes"]
 
 
 def test_render_is_deterministic():

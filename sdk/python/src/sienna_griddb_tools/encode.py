@@ -1,4 +1,4 @@
-"""The five manifest encodings: JSON-shaped value -> SQLite parameter."""
+"""The manifest encodings: JSON-shaped value -> SQLite parameter."""
 
 import hashlib
 import json
@@ -83,6 +83,7 @@ ENCODERS = {
     "text": _text,
     "bool": _bool,
     "json": canonical_json,
+    "features_hash": features_hash,
 }
 
 

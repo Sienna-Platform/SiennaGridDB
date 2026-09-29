@@ -4,7 +4,7 @@ import { ManifestMismatchError } from "./errors.js";
 import type { Encoding } from "./encode.js";
 
 export const DATA_DIR = fileURLToPath(new URL("../data/", import.meta.url));
-const SUPPORTED_MANIFEST_VERSION = 1;
+const SUPPORTED_MANIFEST_VERSION = 2;
 
 export interface Binding { path: string; encode: Encoding }
 export interface AttributePlan { field: string; unit: string | null; quantity_kind: string | null }
@@ -20,6 +20,12 @@ export interface ComponentPlan {
   knownFields: Set<string>;
 }
 export interface AssociationPlan { section: string; row_sql: string; bindings: Binding[] }
+export interface TimeSeriesPlan extends AssociationPlan {
+  feature_sql: string;
+  value_sql: string;
+  unsupported_types: Record<string, string>;
+  unsupported_dtypes: Record<string, string>;
+}
 export interface Manifest {
   schema_user_version: number;
   vocabulary: {
@@ -31,6 +37,7 @@ export interface Manifest {
   attribute_sql: string;
   supplemental_attributes: { plant_types: string[]; plant_sql: string; attribute_sql: string };
   associations: AssociationPlan[];
+  time_series: TimeSeriesPlan;
   unsupported_sections: Record<string, string>;
 }
 

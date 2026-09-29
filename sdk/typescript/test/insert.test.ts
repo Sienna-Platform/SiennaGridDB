@@ -58,6 +58,13 @@ test("unsupported type", () => {
   );
 });
 
+test("time series are unsupported: no HDF5 reader", () => {
+  const db = fresh();
+  const doc = { time_series_associations: [{ association_id: 1 }] };
+  expect(insertDocument(db, doc).unsupported).toEqual({ time_series_associations: 1 });
+  expect(() => insertDocument(db, doc, { strict: true })).toThrow(/HDF5/);
+});
+
 // Review Focus 1
 test.skipIf(!hasGolden)("duplicate id across types rolls back the document", () => {
   const db = fresh();

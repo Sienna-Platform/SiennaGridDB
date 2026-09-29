@@ -179,6 +179,11 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     const n = sectionSize(doc[section]);
     if (n > 0) unsupported(report, strict, section, n, m.unsupported_sections[section]);
   }
+  const nSeries = sectionSize(doc[m.time_series.section]);
+  if (nSeries > 0) {
+    const reason = "the TypeScript SDK has no reader for the HDF5 time series sidecar";
+    unsupported(report, strict, m.time_series.section, nSeries, reason);
+  }
   const attrTypes = new Map<number, string>();
   for (const a of (doc.supplemental_attribute_associations ?? []) as JsonObject[]) {
     attrTypes.set(a.attribute_id as number, a.attribute_type as string);

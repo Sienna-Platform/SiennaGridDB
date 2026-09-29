@@ -242,6 +242,11 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             mark_unsupported!(report, strict, section, n, m.unsupported_sections[section])
         end
     end
+    n_series = section_size(get(doc, m.time_series.section, nothing))
+    if n_series > 0
+        reason = "no time series sidecar given"
+        mark_unsupported!(report, strict, m.time_series.section, n_series, reason)
+    end
     attr_types = attribute_types(doc)
     with_statements(db) do cache
         seed_vocabulary!(db)
