@@ -41,10 +41,26 @@ end
 
 count!(counts::Dict{String, Int}, key) = counts[key] = get(counts, key, 0) + 1
 
+# A row whose owner the document holds names that owner's type and category; a
+# mislabel is invalid data, like a dangling reference.
+function require_owner_label(row::AbstractDict, owners::Dict{Int, Tuple{String, String}})
+    owner = get(row, "owner_id", nothing)
+    (is_int_value(owner) && haskey(owners, Int(owner))) || return nothing
+    held = owners[Int(owner)]
+    label = (get(row, "owner_type", nothing), get(row, "owner_category", nothing))
+    if label != held
+        what = "time series association id=$(get(row, "association_id", nothing))"
+        is = "owner_id $owner is $(held[1]) ($(held[2]))"
+        throw(InsertError("$what: $is, not $(label[1]) ($(label[2]))"))
+    end
+    return nothing
+end
+
 """
 The association rows to insert, after reporting the ones GridDB cannot store: every
 row without a sidecar (`no_sidecar` says why) or reader, unsupported series types,
 rows naming a component in `unsupported_ids`, element types GridDB does not hold.
+`owners` maps each id the document holds to its `(owner_type, owner_category)`.
 """
 function storable_time_series(
     doc::AbstractDict,
@@ -53,6 +69,7 @@ function storable_time_series(
     report::InsertReport,
     strict,
     unsupported_ids::Set{Int},
+    owners::Dict{Int, Tuple{String, String}},
 )
     plan = manifest().time_series
     rows = get(doc, plan.section, nothing)
@@ -65,7 +82,10 @@ function storable_time_series(
         mark_unsupported!(report, strict, plan.section, length(rows), missing_reason)
         return stored
     end
-    foreach(row -> require_object(row, "$(plan.section) row"), rows)
+    for row in rows
+        require_object(row, "$(plan.section) row")
+        require_owner_label(row, owners)
+    end
     counts = Dict{String, Int}()
     dtypes = Dict{String, Int}()
     for row in rows

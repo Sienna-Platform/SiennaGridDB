@@ -167,8 +167,23 @@ def _names_unsupported(row, references, ids):
     return any(is_int(v) and v in ids for v in (value_at(row, r) for r in references))
 
 
-def _time_series_plan(doc, sidecar, report, strict, no_sidecar, unsupported_ids):
-    """The association rows to insert, after reporting what cannot be stored."""
+def _require_owner_label(row, owners):
+    """A row whose owner the document holds names that owner's type and category;
+    a mislabel is invalid data, like a dangling reference."""
+    owner = row.get("owner_id")
+    if not (is_int(owner) and owner in owners):
+        return
+    label = (row.get("owner_type"), row.get("owner_category"))
+    if label != owners[owner]:
+        raise InsertError(
+            f"time series association id={row.get('association_id')}: owner_id {owner} "
+            f"is {owners[owner][0]} ({owners[owner][1]}), not {label[0]} ({label[1]})"
+        )
+
+
+def _time_series_plan(doc, sidecar, report, strict, no_sidecar, unsupported_ids, owners):
+    """The association rows to insert, after reporting what cannot be stored; owners
+    maps each id the document holds to its (owner_type, owner_category)."""
     plan = load_manifest().time_series
     rows = doc.get(plan["section"]) or []
     if not rows:
@@ -179,6 +194,7 @@ def _time_series_plan(doc, sidecar, report, strict, no_sidecar, unsupported_ids)
         return []
     for row in rows:
         _require_object(row, f"{plan['section']} row")
+        _require_owner_label(row, owners)
     unsupported = plan["unsupported_types"]
     counts = {}
     for row in rows:
@@ -231,24 +247,30 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
     components = doc.get("components") or {}
     plans = []
     unsupported_ids = set()
+    owners = {}
     for type_name in sorted(components):
         objs = [as_json_data(o) for o in components[type_name]]
+        ids = [o.get("id") for o in objs if isinstance(o, dict)]
+        ids = [i for i in ids if is_int(i)]
+        owners.update(dict.fromkeys(ids, (type_name, "Component")))
         plan = _plan_for(type_name, len(objs), report, strict)
         if plan is not None:
             plans.append((plan, objs))
         else:
-            ids = (o.get("id") for o in objs if isinstance(o, dict))
-            unsupported_ids.update(i for i in ids if is_int(i))
+            unsupported_ids.update(ids)
     plans.sort(key=lambda p: (p[0].rank, p[0].type_name))
     for section, reason in sorted(manifest.unsupported_sections.items()):
         rows = doc.get(section) or []
         if len(rows) > 0:
             _unsupported(report, strict, section, len(rows), reason)
+    attr_types = _attribute_types(doc)
+    for attr in _section_rows(doc, "supplemental_attributes"):
+        if attr.get("id") in attr_types:
+            owners[attr["id"]] = (attr_types[attr["id"]], "SupplementalAttribute")
     series = _time_series_plan(
-        doc, time_series, report, strict, no_sidecar, unsupported_ids
+        doc, time_series, report, strict, no_sidecar, unsupported_ids, owners
     )
 
-    attr_types = _attribute_types(doc)
     supplemental = manifest.supplemental
     with _savepoint(conn):
         seed_vocabulary(conn)

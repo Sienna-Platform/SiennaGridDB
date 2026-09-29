@@ -309,15 +309,19 @@ function insert_parsed_document!(
     components = something(get(doc, "components", nothing), Dict{String, Any}())
     plans = Tuple{ComponentPlan, Vector{Any}}[]
     unsupported_ids = Set{Int}()
+    owners = Dict{Int, Tuple{String, String}}()  # id => (owner_type, owner_category)
     for type_name in sort!(collect(keys(components)))
         objs = components[type_name]
+        ids = Set{Int}()
+        for obj in objs
+            obj isa AbstractDict && push_id!(ids, get(obj, "id", nothing))
+        end
+        foreach(id -> owners[id] = (type_name, "Component"), ids)
         if haskey(m.components, type_name)
             push!(plans, (m.components[type_name], collect(Any, objs)))
         else
             note_unsupported!(report, strict, type_name, length(objs))
-            for obj in objs
-                obj isa AbstractDict && push_id!(unsupported_ids, get(obj, "id", nothing))
-            end
+            union!(unsupported_ids, ids)
         end
     end
     sort!(plans; by=p -> (p[1].rank, p[1].type_name))
@@ -327,9 +331,22 @@ function insert_parsed_document!(
             mark_unsupported!(report, strict, section, n, m.unsupported_sections[section])
         end
     end
-    series =
-        storable_time_series(doc, time_series, no_sidecar, report, strict, unsupported_ids)
     attr_types = attribute_types(doc)
+    for attr in section_rows(doc, "supplemental_attributes")
+        id = get(attr, "id", nothing)
+        if is_int_value(id) && haskey(attr_types, Int(id))
+            owners[Int(id)] = (attr_types[Int(id)], "SupplementalAttribute")
+        end
+    end
+    series = storable_time_series(
+        doc,
+        time_series,
+        no_sidecar,
+        report,
+        strict,
+        unsupported_ids,
+        owners,
+    )
     with_statements(db) do cache
         seed_vocabulary!(db)
         for (plan, objs) in plans

@@ -394,6 +394,7 @@ written out in that file.
   The sidecar is only ever read: infrastore works on a private copy in a temporary directory.
   Reading needs infrastore (Python extra `sienna-griddb-tools[time-series]`, Julia `InfraStore.jl` loaded).
   The rows are reported unsupported without it, without a sidecar (a `time_series_storage_file` that does not exist counts as none), in the TypeScript SDK (no HDF5 reader), for `NonSequentialTimeSeries`, for a row whose owner is a component of a type with no table (the rule association rows follow), and for element types whose values are not `f64`.
+  A row whose `owner_type` or `owner_category` disagrees with the component list or supplemental attribute holding its `owner_id` is an `InsertError`, strict or not, even when that owner's rows are skipped.
   After an insert, `dangling_time_series_references` lists any cost payload reference that no association resolves, and `orphaned_time_series` lists values and associations that lost each other.
   See `docs/units-architecture.md` §4 and §6 for the value layout and the `features_hash` contract.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected

@@ -339,21 +339,63 @@ def test_strict_rejects_unstorable_series_before_writing(conn, case):
     assert rows(conn, "SELECT count(*) FROM entities") == [(0,)]
 
 
-def test_an_unsupported_owner_is_found_by_its_id(conn, case, tmp_path):
+def test_an_owner_no_list_holds_fails_its_foreign_key(conn, case):
     """As for association rows: the owner's id, not its owner_type, decides."""
-    relabelled = load(case)
-    for row in relabelled["time_series_associations"]:
-        if row["owner_type"] == "AGC":
-            row["owner_type"] = "Area"
-    report = griddb.insert_document(conn, relabelled, time_series=sidecar(case))
-    assert report.unsupported == UNSUPPORTED
     absent = load(case)
     del absent["components"]["AGC"]
-    fresh = griddb.create_database(str(tmp_path / "absent.sqlite"))
     with pytest.raises(griddb.InsertError, match="FOREIGN KEY"):
-        griddb.insert_document(fresh, absent, time_series=sidecar(case))
-    assert rows(fresh, "SELECT count(*) FROM entities") == [(0,)]
-    fresh.close()
+        griddb.insert_document(conn, absent, time_series=sidecar(case))
+    assert rows(conn, "SELECT count(*) FROM entities") == [(0,)]
+
+
+def relabel(doc, owner, key, label):
+    for row in doc["time_series_associations"]:
+        if row["owner_id"] == owner:
+            row[key] = label
+    return doc
+
+
+def strict_ready(doc):
+    """The case without the component and rows strict mode rejects."""
+    del doc["components"]["AGC"]
+    doc["time_series_associations"] = [
+        r
+        for r in doc["time_series_associations"]
+        if r["time_series_type"] != "NonSequentialTimeSeries"
+        and r["owner_type"] != "AGC"
+        and r.get("element_type") != "i64"
+    ]
+    return doc
+
+
+MISLABELS = [
+    (2, "owner_type", "AGC"),
+    (2, "owner_type", "ThermalStandard"),
+    (3, "owner_type", "Area"),
+    (3, "owner_category", "Component"),
+]
+
+
+@pytest.mark.parametrize(
+    "owner, key, label",
+    [*MISLABELS, (9, "owner_type", "Area"), (9, "owner_category", "SupplementalAttribute")],
+)
+def test_a_row_mislabelling_its_owner_is_an_insert_error(conn, case, owner, key, label):
+    """A row owned by an AGC, whose rows are skipped, is checked too."""
+    doc = relabel(load(case), owner, key, label)
+    with pytest.raises(griddb.InsertError, match=f"owner_id {owner} is "):
+        griddb.insert_document(conn, doc, time_series=sidecar(case))
+    assert rows(conn, "SELECT count(*) FROM entities") == [(0,)]
+
+
+@pytest.mark.parametrize("owner, key, label", MISLABELS)
+def test_strict_rejects_a_row_mislabelling_its_owner(conn, case, owner, key, label):
+    doc = relabel(strict_ready(load(case)), owner, key, label)
+    with pytest.raises(griddb.InsertError, match=f"owner_id {owner} is "):
+        griddb.insert_document(conn, doc, time_series=sidecar(case), strict=True)
+    assert rows(conn, "SELECT count(*) FROM entities") == [(0,)]
+    clean = strict_ready(load(case))
+    griddb.insert_document(conn, clean, time_series=sidecar(case), strict=True)
 
 
 @pytest.mark.parametrize("value", [None, 5, [1]])

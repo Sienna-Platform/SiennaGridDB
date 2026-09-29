@@ -192,23 +192,68 @@ mktempdir() do dir
             end
         end
 
-        @testset "an unsupported owner is found by its id" begin
-            fresh(mktempdir()) do db
-                doc = load_json(doc_path)
-                for row in doc["time_series_associations"]
-                    if row["owner_type"] == "AGC"
-                        row["owner_type"] = "Area"
-                    end
-                end
-                report = insert_document!(db, doc; time_series=sidecar)
-                expected = load_json(joinpath(case_dir, "case.report.json"))
-                @test G.report_dict(report)["unsupported"] == expected["unsupported"]
-            end
+        @testset "an owner no list holds fails its foreign key" begin
             fresh(mktempdir()) do db
                 doc = load_json(doc_path)
                 delete!(doc["components"], "AGC")
                 @test_throws r"FOREIGN KEY" insert_document!(db, doc; time_series=sidecar)
                 @test count_rows(db, "entities") == 0
+            end
+        end
+
+        @testset "a row mislabelling its owner is an InsertError" begin
+            function relabel(doc, owner, key, label)
+                for row in doc["time_series_associations"]
+                    row["owner_id"] == owner && (row[key] = label)
+                end
+                return doc
+            end
+            # The case without the component and rows strict mode rejects
+            function strict_ready(doc)
+                delete!(doc["components"], "AGC")
+                filter!(
+                    r ->
+                        r["time_series_type"] != "NonSequentialTimeSeries" &&
+                            r["owner_type"] != "AGC" &&
+                            get(r, "element_type", nothing) != "i64",
+                    doc["time_series_associations"],
+                )
+                return doc
+            end
+            mislabels = [
+                (2, "owner_type", "AGC"),
+                (2, "owner_type", "ThermalStandard"),
+                (3, "owner_type", "Area"),
+                (3, "owner_category", "Component"),
+            ]
+            # A row owned by an AGC, whose rows are skipped, is checked too
+            unsupported_owner =
+                [(9, "owner_type", "Area"), (9, "owner_category", "SupplementalAttribute")]
+            for (owner, key, label) in [mislabels; unsupported_owner]
+                fresh(mktempdir()) do db
+                    doc = relabel(load_json(doc_path), owner, key, label)
+                    @test_throws Regex("owner_id $owner is ") insert_document!(
+                        db,
+                        doc;
+                        time_series=sidecar,
+                    )
+                    @test count_rows(db, "entities") == 0
+                end
+            end
+            for (owner, key, label) in mislabels
+                fresh(mktempdir()) do db
+                    doc = relabel(strict_ready(load_json(doc_path)), owner, key, label)
+                    @test_throws Regex("owner_id $owner is ") insert_document!(
+                        db,
+                        doc;
+                        time_series=sidecar,
+                        strict=true,
+                    )
+                    @test count_rows(db, "entities") == 0
+                    clean = strict_ready(load_json(doc_path))
+                    insert_document!(db, clean; time_series=sidecar, strict=true)
+                    @test count_rows(db, "entities") == 3
+                end
             end
         end
 
