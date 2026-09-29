@@ -25,6 +25,9 @@ Three layers:
             fixture; see --self-test.)
         (c) PSY needs_conversion field whose mapped schema property lacks any x-unit/x-units
             => WARN list.
+        (d) schema property with a fixed non-power x-unit (e.g. A) whose PSY field converts
+            as ':mva': PSY exports it as a power-base value, not in that unit. FAIL when the
+            insert manifest stores the field (column or attribute), WARN otherwise.
 
 Basis vocabulary (L1): upstream SiennaSchemas' UnitSystem enum is two-valued
 (COMPONENT_BASE | NATURAL_UNITS) and GridDB's unit_basis discriminator matches it 1:1.
@@ -496,8 +499,9 @@ def psy_field_is_documented_natural(name, field, component_props):
     return "power_units" not in component_props
 
 
-def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):
-    """schemas <-> PSY descriptor."""
+def layer3(report, schema_map, schemas_path, psy_structs, doc_cache, stored=None):
+    """schemas <-> PSY descriptor. `stored` maps a component to the fields GridDB writes."""
+    stored = stored or {}
     tables = schema_map["tables"]
     checked_a = 0
     checked_b = 0
@@ -549,6 +553,17 @@ def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):
                 else:
                     checked_a += 1
 
+            # (d) a fixed non-power unit on a field PSY scales by the power base
+            if (field is not None and psy_field_is_mva_convertible(field)
+                    and ann["unit"] not in (None, *POWER_UNITS)):
+                message = ("(d) %s.%s: schema x-unit=%s but PSY converts it as :mva"
+                           % (comp, prop_name, ann["unit"]))
+                if prop_name in stored.get(comp, ()):
+                    report.fail("L3", message + ", and GridDB stores it under that unit")
+                    fail_count += 1
+                else:
+                    report.warn("L3", message)
+
             # (b) $ref to a common.json def mirroring a PSY type must match PSY data_type
             def_name = ref_definition_name(ann["ref"])
             if def_name in PSY_MIRRORED_DEFS:
@@ -589,6 +604,15 @@ def layer3(report, schema_map, schemas_path, psy_structs, doc_cache):
 
     return {"checked_a": checked_a, "checked_b": checked_b, "fails": fail_count,
             "warn_c": warn_c, "components": len(seen_components)}
+
+
+def stored_fields(manifest):
+    """{component: fields the insert manifest writes, as a column or an attribute}."""
+    return {
+        name: {b["path"].split(".")[0] for b in entry["bindings"]}
+        | {a["field"] for a in entry["attributes"]}
+        for name, entry in manifest["components"].items()
+    }
 
 
 def psy_type_matches(def_name, psy_dtype):
@@ -730,7 +754,9 @@ def main(argv=None):
 
     if args.psy_path:
         psy_structs = load_psy_structs(os.path.abspath(args.psy_path))
-        l3_stats = layer3(report, schema_map, schemas_path, psy_structs, doc_cache)
+        manifest = load_json(os.path.join(schema_dir, "insert_manifest.json"))
+        l3_stats = layer3(report, schema_map, schemas_path, psy_structs, doc_cache,
+                          stored_fields(manifest))
     else:
         l3_stats = None
     for layer, label, stats in (
