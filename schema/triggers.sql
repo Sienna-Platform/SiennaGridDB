@@ -1634,10 +1634,9 @@ END;
 
 -- =============================================================================
 -- Time Series Association Owner-Domain Triggers
--- owner_id references entities (both categories share the entities id-space
--- here, unlike infrastore's independent streams), but a 'SupplementalAttribute'
--- owner must actually be a supplemental attribute: a supplemental_attributes row,
--- or a plants row, where plant-type attributes live.
+-- owner_id references entities (both categories share the entities id-space),
+-- but a 'SupplementalAttribute' owner must be a supplemental_attributes row or
+-- a plants row, where plant-type attributes live.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain BEFORE
 INSERT
