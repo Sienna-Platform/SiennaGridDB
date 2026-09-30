@@ -869,9 +869,9 @@ CREATE TABLE time_series_associations (
     -- not exist (SQLite reads 2026-02-30 as March 2).
     CHECK (initial_timestamp IS NULL OR (t0_ms IS NOT NULL
         AND date(substr(initial_timestamp, 1, 10)) IS substr(initial_timestamp, 1, 10))),
-    -- ... or a resolution outside P[nY][nM][nW][nD][T[nH][nM][n[.fff]S]], mixing calendar and
-    -- fixed, or past 2^63 - 1 ms or 2^31 - 1 months. Of what infrastore parses, this rejects
-    -- repeated or out-of-order designators, blanks, lowercase units, a trailing T, signs, zero.
+    -- ... or a resolution outside the standard ISO shape P[nY][nM][nW][nD][T[nH][nM][n[.fff]S]],
+    -- mixing calendar and fixed, or past 2^63 - 1 ms or 2^31 - 1 months. Strict on purpose:
+    -- infrastore also parses repeats, reordering, blanks, lowercase, a trailing T, signs, zero.
     CHECK (resolution IS NULL
         -- the usual spellings skip the grammar below, which costs microseconds a row
         OR resolution = 'PT1H' OR resolution = 'PT15M' OR resolution = 'PT5M' OR (
