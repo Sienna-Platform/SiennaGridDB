@@ -221,6 +221,8 @@ OTHER_SPELLINGS = {
     "PT01H": (3600000, None), "PT3600S": (3600000, None), "PT60M": (3600000, None),
     "PT24H": (86400000, None), "P1W2D": (777600000, None), "PT1M30S": (90000, None),
     "P1DT0.5S": (86400500, None), "P18M": (None, 18), "P1Y6M": (None, 18),
+    # past 2^53 ms, where a float would drop the last second
+    "PT9007199254740993S": (9007199254740993000, None),
 }
 UNREADABLE = [
     "", "P", "PT", "P1", "P1DT", "1H", "pt1h", "-PT1H", "PT1H ", "PTH", "P1H", "PT1D",

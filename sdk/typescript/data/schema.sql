@@ -853,9 +853,11 @@ CREATE TABLE time_series_associations (
                 instr(resolution, 'T') + 1) AS INTEGER), 0)
             + 60000 * iif(instr(resolution, 'M'), CAST(substr(resolution,
                 max(instr(resolution, 'T'), instr(resolution, 'H')) + 1) AS INTEGER), 0)
-            + iif(instr(resolution, 'S'), CAST(round(1000 * CAST(substr(resolution,
+            -- whole seconds, then the fraction's digits padded to milliseconds ('.25S' is 250)
+            + iif(instr(resolution, 'S'), 1000 * CAST(substr(resolution,
                 max(instr(resolution, 'T'), instr(resolution, 'H'), instr(resolution, 'M')) + 1)
-                AS REAL)) AS INTEGER), 0)
+                AS INTEGER) + iif(instr(resolution, '.'), CAST(substr(replace(resolution,
+                'S', '00'), instr(resolution, '.') + 1, 3) AS INTEGER), 0), 0)
         END
     ) STORED,
     -- Reject what time_series_values cannot read: an initial_timestamp SQLite does not
