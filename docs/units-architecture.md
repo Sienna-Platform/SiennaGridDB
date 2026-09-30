@@ -207,7 +207,7 @@ Of the spellings `Period` parses, it rejects exactly these: repeated or out-of-o
 infrastore does not store the last two either.
 `time_series_values` joins every `SingleTimeSeries` association to its stored values and spells each timestamp `YYYY-MM-DDTHH:MM:SS.sssZ` (UTC, millisecond precision, the same width on every row, so text order is time order).
 Its columns are `association_id`, `owner_id`, `owner_type`, `owner_category`, `name`, `time_series_type`, `timestamp`, `timestep`, `element`, `value` and `units`.
-It uses only SQLite built-ins available since 3.38 and starts every step from the stored `t0_ms`, so older readers such as DuckDB's SQLite scanner (SQLite 3.38.1) read the same timestamps.
+It uses only SQLite built-ins available since 3.38 and starts every step from the stored `t0_ms`, so older readers such as DuckDB's SQLite scanner (SQLite 3.38.1) read the same timestamps, apart from one day SQLite 3.38.1 itself prints wrong (0300-03-01 as 0300-02-29).
 Re-reading `initial_timestamp` there would not: SQLite 3.38 reads `08.001-04:00` as `08.000`.
 The timestamp is computed per row, so a filter on it scans the association's values, while a filter on `timestep` uses the `(uri, timestep, element)` index:
 
