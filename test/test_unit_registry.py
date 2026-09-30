@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 41
 EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 405
+EXPECTED_UNIT_CONVENTIONS = 514
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -365,6 +365,18 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
         sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(fresh_db, 3, "poly_attr", "3.0", "s", "Duration")
+
+
+def test_attribute_power_units_arms_both_accepted_mismatch_rejected(fresh_db):
+    """A power_units-discriminated attribute takes either arm of its own
+    quantity_kind; a unit from another quantity is rejected."""
+    make_entity(fresh_db, 1)
+    insert_attribute(fresh_db, 1, "rating", "120.0", "MVA", "ApparentPower")
+    make_entity(fresh_db, 2)
+    insert_attribute(fresh_db, 2, "rating", "1.2", "pu", "ApparentPower")
+    make_entity(fresh_db, 3)
+    with pytest.raises(sqlite3.IntegrityError, match=r"attributes\.name is a known name"):
+        insert_attribute(fresh_db, 3, "rating", "120.0", "MW", "ActivePower")
 
 
 # Time series (infrastore-mirror catalog)
@@ -1319,85 +1331,95 @@ def test_merged_hvdc_columns_registered(db):
     "name,expected",
     [
         # Physical quantities registered on attributes.
-        ("magnitude", "Voltage/pu"),
-        ("base_voltage", "Voltage/kV"),
-        ("angle", "Angle/rad"),
-        ("angle_limits", "Angle/rad"),
-        ("active_power_flow", "ActivePower/MW"),
-        ("reactive_power_flow", "ReactivePower/MVAr"),
-        ("max_active_power", "ActivePower/MW"),
-        ("time_at_status", "OperationalDuration/min"),
-        ("load_response", "PowerPerFrequency/MW/Hz"),
-        ("voltage", "Voltage/kV"),
-        ("value_of_lost_load", "CostPerEnergy/USD/MWh"),
-        ("start_fuel_mmbtu_per_mw", "StartFuelPerCapacity/MMBtu/MW"),
-        # A per-length impedance: Core/units.json has no ohm/km or pu/km, so no
-        # valid pair exists to register and each row must state its own unit.
-        ("resistance", None),
-        ("reactance", None),
-        # Curve blobs whose numeric leaves carry different dimensions.
-        ("unserved_demand_curve", None),
-        # Unambiguous unit -> registered, so a writer cannot get it wrong.
-        ("rectifier_delay_angle", "Angle/deg"),
-        ("inverter_extinction_angle_limits", "Angle/deg"),
-        ("rectifier_bridges", "Dimensionless/1"),
-        ("inverter_base_voltage", "Voltage/kV"),
-        ("dc_current", "CurrentFlow/A"),
-        ("rating_from", "ApparentPower/MVA"),
-        ("reactive_power_to", "ReactivePower/MVAr"),
-        ("rmpct_from", "Fraction/1"),
-        # Unit depends on a basis choice or a sibling control mode. A convention's
-        # discriminator_column names a sibling *column*, which an attributes row
-        # does not have, so these stay unregistered and each row carries its own
-        # unit/quantity_kind (validated against allowed_units by the insert trigger).
-        ("r", None),
-        ("rectifier_rc", None),
-        ("scheduled_dc_voltage", None),
-        ("g", None),
-        ("voltage_limits_from", None),
-        ("dc_setpoint_from", None),
-        ("ac_setpoint_to", None),
-        ("transfer_setpoint", None),
-        ("dc_voltage_droop_from", None),
-        ("loss", None),
-        ("converter_loss_from", None),
+        ("magnitude", {"Voltage/pu"}),
+        ("base_voltage", {"Voltage/kV"}),
+        ("angle", {"Angle/rad"}),
+        ("angle_limits", {"Angle/rad"}),
+        ("time_at_status", {"OperationalDuration/min"}),
+        ("load_response", {"PowerPerFrequency/MW/Hz"}),
+        ("voltage", {"Voltage/kV"}),
+        ("value_of_lost_load", {"CostPerEnergy/USD/MWh"}),
+        ("start_fuel_mmbtu_per_mw", {"StartFuelPerCapacity/MMBtu/MW"}),
+        ("unserved_demand_curve", {"CostPerEnergy/USD/MWh"}),
+        ("start_time_limits", {"OperationalDuration/min"}),
+        ("start_types", {"Dimensionless/1"}),
+        # The schemas annotate these LCC angles in rad.
+        ("rectifier_delay_angle", {"Angle/rad"}),
+        ("inverter_extinction_angle_limits", {"Angle/rad"}),
+        ("rectifier_bridges", {"Dimensionless/1"}),
+        ("inverter_base_voltage", {"Voltage/kV"}),
+        ("dc_current", {"CurrentFlow/A"}),
+        ("rmpct_from", {"Fraction/1"}),
+        ("dc_voltage_droop_from", {"Resistance/pu"}),
+        # Unit depends on a basis choice or a sibling control mode: one arm per
+        # value of the owning component's discriminating field.
+        ("rating_from", {"ApparentPower/MVA", "ApparentPower/pu"}),
+        ("active_power_flow", {"ActivePower/MW", "ActivePower/pu"}),
+        ("reactive_power_flow", {"ReactivePower/MVAr", "ReactivePower/pu"}),
+        ("rating_b", {"ApparentPower/MVA", "ApparentPower/pu"}),
+        ("max_active_power", {"ActivePower/MW", "ActivePower/pu"}),
+        ("max_impedance_reactive_power", {"ReactivePower/MVAr", "ReactivePower/pu"}),
+        ("alpha", {"Dimensionless/1"}),
+        ("max_shunt_current", {"ApparentPower/MVA", "ApparentPower/pu"}),
+        ("minimum_time", {"OperationalDuration/min"}),
+        ("peak_active_power", {"ActivePower/MW", "ActivePower/pu"}),
+        ("base_power", {"ApparentPower/MVA"}),
+        ("resistance", {"Resistance/ohm"}),
+        ("reactance", {"Reactance/ohm"}),
+        ("new_construction_year", {"Dimensionless/1"}),
+        ("reactive_power_to", {"ReactivePower/MVAr", "ReactivePower/pu"}),
+        ("power_trajectory", {"ActivePower/MW", "ActivePower/pu"}),
+        ("r", {"Resistance/ohm", "Resistance/pu"}),
+        ("rectifier_rc", {"Resistance/ohm", "Resistance/pu"}),
+        ("scheduled_dc_voltage", {"Voltage/kV", "Voltage/pu"}),
+        ("g", {"Conductance/S", "ActivePower/MW", "Conductance/pu"}),
+        ("voltage_limits_from", {"Voltage/kV", "Voltage/pu"}),
+        ("ac_setpoint_to", {"PowerFactor/1", "Voltage/kV", "Voltage/pu"}),
+        # The pinned schemas annotate these power modes as MW, but PSY stores them
+        # per power_units: left reported gaps rather than stored under a wrong unit.
+        ("transfer_setpoint", set()),
+        ("dc_setpoint_from", set()),
+        # Annotated A, but PSY exports it as power per unit on base_power: a gap.
+        ("max_dc_current", set()),
+        # Self-describing loss curves: exempt through attribute_identifiers.
+        ("loss", set()),
+        ("converter_loss_from", set()),
+        ("operation_cost", set()),
+        ("upstream_turbines", set()),
     ],
 )
-def test_demoted_hvdc_attribute_conventions(db, name, expected):
+def test_attribute_conventions(db, name, expected):
     rows = db.execute(
         "SELECT quantity_kind || '/' || unit FROM unit_conventions "
         "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
         (name,),
     ).fetchall()
-    if expected is None:
-        assert rows == [], f"attributes.{name} should stay unregistered, got {rows}"
-    else:
-        assert [r[0] for r in rows] == [expected]
+    assert {r[0] for r in rows} == expected
 
 
-@pytest.mark.parametrize(
-    "name,expected",
-    [
-        # ThermalMultiStart fields routed through attribute_channel (C8):
-        # unambiguous units get a fixed convention, same as time_at_status.
-        ("start_time_limits", "OperationalDuration/min"),
-        ("start_types", "Dimensionless/1"),
-        # power_units-discriminated, same reason r/dc_setpoint_* stay unregistered
-        # above: the discriminator column lives on thermal_generators, not on the
-        # attributes row itself.
-        ("power_trajectory", None),
-    ],
-)
-def test_thermal_multistart_attribute_conventions(db, name, expected):
+# Attribute names are global across component types, so a name must mean one
+# quantity everywhere: one fixed row at most, and basis arms of one kind.
+BASIS_DISCRIMINATORS = ("power_units", "parameter_units", "voltage_units", "dc_voltage_units")
+
+
+def test_attribute_name_means_one_quantity(db):
+    """Sees only the registry, so not how PSY exports a value both types annotate alike
+    (dc_current: A on VSC, power per unit on InterconnectingConverter).
+    check_units_sync.py L3(d) catches that where PSY's descriptor tags the field."""
     rows = db.execute(
-        "SELECT quantity_kind || '/' || unit FROM unit_conventions "
-        "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
-        (name,),
+        "SELECT column_name, discriminator_column, discriminator_value, quantity_kind "
+        "FROM unit_conventions WHERE table_name = 'attributes'"
     ).fetchall()
-    if expected is None:
-        assert rows == [], f"attributes.{name} should stay unregistered, got {rows}"
-    else:
-        assert [r[0] for r in rows] == [expected]
+    fixed, basis = {}, {}
+    for name, disc, value, kind in rows:
+        if disc is None:
+            fixed.setdefault(name, set()).add(kind)
+        elif disc in BASIS_DISCRIMINATORS:
+            basis.setdefault(name, set()).add(kind)
+    assert {n: k for n, k in fixed.items() if len(k) > 1} == {}
+    assert {n: k for n, k in basis.items() if len(k) > 1} == {}
+    both = {n for n in fixed.keys() & basis.keys() if fixed[n] != basis[n]}
+    assert both == set()
 
 
 def test_attribute_start_time_limits_registered_unit_accepted(fresh_db):
@@ -1441,8 +1463,9 @@ def test_interconnecting_converter_setpoints_two_discriminator(db):
 # Basis resolvability invariant: every pu convention names a unit_basis_rules
 # entry and every base ref resolves to a real, reachable column.
 # generate_unit_registry.py does not validate this, so this is the only check
-# that catches a typo'd ref or a new pu column with no rule.
-ATTRIBUTES_BASE_REF_EXEMPT = {("attributes", "magnitude"), ("attributes", "voltage_limits")}
+# that catches a typo'd ref or a new pu column with no rule. An attributes row
+# has no same-row base: it resolves against its owning entity's row, so it
+# needs a rule but carries no base ref.
 
 
 def _table_exists(conn, table):
@@ -1500,10 +1523,10 @@ def _resolves_ref(conn, table, ref):
 
 
 def test_pu_conventions_have_resolvable_basis(db):
-    """THE resolvability invariant. For every unit='pu' convention (excluding
-    the two documented attributes exemptions): (a) a unit_basis_rules row
-    exists for its quantity_kind, (b) it names at least one base ref, and (c)
-    every base_power_ref/base_voltage_ref it declares resolves."""
+    """THE resolvability invariant. For every unit='pu' convention: (a) a
+    unit_basis_rules row exists for its quantity_kind, (b) it names at least one
+    base ref, and (c) every base_power_ref/base_voltage_ref it declares resolves.
+    attributes rows need (a) only and must name no ref."""
     rows = db.execute(
         "SELECT table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref "
         "FROM unit_conventions WHERE unit = 'pu'"
@@ -1512,26 +1535,17 @@ def test_pu_conventions_have_resolvable_basis(db):
 
     rule_types = {r[0] for r in db.execute("SELECT quantity_kind FROM unit_basis_rules")}
 
-    exempt_seen = set()
     failures = []
     for table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref in rows:
-        key = (table_name, column_name)
-        if table_name == "attributes":
-            exempt_seen.add(key)
-            if key not in ATTRIBUTES_BASE_REF_EXEMPT:
-                failures.append(
-                    f"{table_name}.{column_name}: pu attributes row not in the "
-                    "documented base-ref exemption allowlist"
-                )
-            continue
-
+        if table_name == "attributes" and (base_power_ref or base_voltage_ref):
+            failures.append(f"attributes.{column_name}: an attributes row has no same-row base")
         if quantity_kind not in rule_types:
             failures.append(
                 f"{table_name}.{column_name}: no unit_basis_rules row for "
                 f"quantity_kind={quantity_kind}"
             )
 
-        if base_power_ref is None and base_voltage_ref is None:
+        if table_name != "attributes" and base_power_ref is None and base_voltage_ref is None:
             failures.append(
                 f"{table_name}.{column_name}: pu row carries neither "
                 "base_power_ref nor base_voltage_ref"
@@ -1549,10 +1563,6 @@ def test_pu_conventions_have_resolvable_basis(db):
                 )
 
     assert failures == [], "\n".join(failures)
-    assert exempt_seen == ATTRIBUTES_BASE_REF_EXEMPT, (
-        "attributes pu rows exempt from base refs must be EXACTLY "
-        f"{ATTRIBUTES_BASE_REF_EXEMPT}, got {exempt_seen}"
-    )
 
 
 # parameter_units CHECK constraint, on every table that carries the column (derived
@@ -1898,6 +1908,19 @@ def test_column_units_view_row_count_matches_unit_conventions(db):
     (view_count,) = db.execute("SELECT COUNT(*) FROM column_units").fetchone()
     (conv_count,) = db.execute("SELECT COUNT(*) FROM unit_conventions").fetchone()
     assert view_count == conv_count == EXPECTED_UNIT_CONVENTIONS
+
+
+def test_operational_data_states_each_attribute_unit(fresh_db):
+    """One attribute name holds pu or MW per component; the view says which."""
+    for entity_id, unit in ((1, "pu"), (2, "MW")):
+        make_entity(fresh_db, entity_id)
+        limits = '{"min": 0.5, "max": 1.0}'
+        insert_attribute(fresh_db, entity_id, "active_power_limits", limits, unit, "ActivePower")
+    rows = fresh_db.execute(
+        "SELECT entity_id, active_power_limit_min, active_power_limit_unit "
+        "FROM operational_data ORDER BY entity_id"
+    ).fetchall()
+    assert rows == [(1, 0.5, "pu"), (2, 0.5, "MW")]
 
 
 def test_parameter_units_arms_share_quantity_kind(db):

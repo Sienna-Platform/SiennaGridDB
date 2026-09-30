@@ -13,7 +13,9 @@
       "attribute_channel": [
         "power_trajectory",
         "start_time_limits",
-        "start_types"
+        "start_types",
+        "time_at_status",
+        "dynamic_injector"
       ],
       "db_only": [
         "production_cost"
@@ -27,6 +29,9 @@
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
         "prime_mover_type": "REFERENCES prime_mover_types (name)"
       },
+      "attribute_channel": [
+        "dynamic_injector"
+      ],
       "db_only": [
         "production_cost"
       ]
@@ -42,7 +47,12 @@
       "attribute_channel": [
         "efficiency",
         "active_power_limits_pump",
-        "turbine_type"
+        "turbine_type",
+        "time_at_status",
+        "active_power_pump",
+        "minimum_time",
+        "transition_time",
+        "dynamic_injector"
       ],
       "db_only": [
         "production_cost"
@@ -56,16 +66,54 @@
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
         "prime_mover_type": "REFERENCES prime_mover_types (name)",
         "storage_technology_type": "REFERENCES storage_technology_types (name)"
-      }
+      },
+      "attribute_channel": [
+        "dynamic_injector"
+      ]
     },
-    "hydro_reservoirs": {},
+    "hydro_reservoirs": {
+      "attribute_channel": [
+        "upstream_turbines",
+        "downstream_turbines",
+        "upstream_reservoirs"
+      ]
+    },
     "loads": {
       "renames": {
         "bus": "balancing_topology"
       },
       "foreign_keys": {
         "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
-      }
+      },
+      "attribute_channel": [
+        "available",
+        "active_power",
+        "reactive_power",
+        "max_active_power",
+        "max_reactive_power",
+        "conformity",
+        "operation_cost",
+        "constant_active_power",
+        "constant_reactive_power",
+        "current_active_power",
+        "current_reactive_power",
+        "impedance_active_power",
+        "impedance_reactive_power",
+        "max_constant_active_power",
+        "max_constant_reactive_power",
+        "max_current_active_power",
+        "max_current_reactive_power",
+        "max_impedance_active_power",
+        "max_impedance_reactive_power",
+        "alpha",
+        "beta",
+        "motor_technology",
+        "rating",
+        "reactive_power_limits",
+        "active_power_limits",
+        "load_balance_time_horizon",
+        "dynamic_injector"
+      ]
     },
     "transmission_lines": {
       "renames": {
@@ -75,6 +123,15 @@
       "foreign_keys": {
         "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
       },
+      "attribute_channel": [
+        "available",
+        "active_power_flow",
+        "reactive_power_flow",
+        "rating_b",
+        "rating_c",
+        "angle_limits",
+        "flow_limits"
+      ],
       "db_only": [
         "line_length",
         "lte_rating",
@@ -85,6 +142,12 @@
       "foreign_keys": {
         "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
       },
+      "attribute_channel": [
+        "available",
+        "active_power_flow",
+        "from_area",
+        "to_area"
+      ],
       "db_only": [
         "arc_id",
         "max_flow_from",
@@ -125,7 +188,6 @@
       "attribute_channel": [
         "loss",
         "r",
-        "transfer_setpoint",
         "scheduled_dc_voltage",
         "rectifier_bridges",
         "rectifier_delay_angle",
@@ -165,8 +227,6 @@
         "dc_control_to",
         "ac_control_from",
         "ac_control_to",
-        "dc_setpoint_from",
-        "dc_setpoint_to",
         "ac_setpoint_from",
         "ac_setpoint_to",
         "converter_loss_from",
@@ -203,7 +263,15 @@
       },
       "foreign_keys": {
         "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      }
+      },
+      "attribute_channel": [
+        "available",
+        "active_power_flow",
+        "active_power_limits_from",
+        "active_power_limits_to",
+        "l",
+        "c"
+      ]
     },
     "two_winding_transformers": {
       "foreign_keys": {
@@ -225,6 +293,19 @@
       ]
     },
     "balancing_topologies": {
+      "attribute_channel": [
+        "number",
+        "bustype",
+        "angle",
+        "magnitude",
+        "voltage_limits",
+        "available",
+        "load_zone",
+        "base_power",
+        "power_units",
+        "peak_active_power",
+        "peak_reactive_power"
+      ],
       "db_only": [
         "description"
       ]
@@ -239,7 +320,7 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ]
     },
@@ -251,7 +332,7 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ]
     },
@@ -259,7 +340,7 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ],
       "db_only": [
@@ -271,26 +352,59 @@
       "foreign_keys": {
         "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
       },
-      "skip": [
+      "attribute_channel": [
         "dynamic_injector"
       ]
     },
     "interconnecting_converters": {
       "renames": {
         "voltage_setpoint_units": "parameter_units"
-      }
+      },
+      "attribute_channel": [
+        "available",
+        "active_power",
+        "active_power_limits",
+        "reactive_power_limits",
+        "rating",
+        "dc_voltage_droop",
+        "loss_function",
+        "dynamic_injector"
+      ]
     },
     "facts_control_devices": {
       "renames": {
         "voltage_setpoint_units": "parameter_units"
-      }
+      },
+      "attribute_channel": [
+        "available",
+        "control_mode",
+        "max_shunt_current",
+        "reactive_power_required",
+        "dynamic_injector"
+      ]
     },
-    "transport_technologies": {},
+    "transport_technologies": {
+      "attribute_channel": [
+        "capacity_limits",
+        "start_region",
+        "end_region",
+        "start_node",
+        "end_node",
+        "line_loss",
+        "resistance",
+        "reactance",
+        "voltage"
+      ]
+    },
     "demand_technologies": {
       "attribute_channel": [
         "peak_demand_mw",
         "value_of_lost_load",
-        "unserved_demand_curve"
+        "unserved_demand_curve",
+        "conformity",
+        "growth_rate",
+        "new_construction_year",
+        "new_demand_mw"
       ],
       "db_only": [
         "power_systems_type"
@@ -307,6 +421,15 @@
         "from_id": "REFERENCES entities (id) ON DELETE CASCADE",
         "to_id": "REFERENCES entities (id) ON DELETE CASCADE"
       }
+    },
+    "planning_regions": {
+      "attribute_channel": [
+        "base_power",
+        "power_units",
+        "peak_active_power",
+        "peak_reactive_power",
+        "load_response"
+      ]
     }
   }
 }

@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 1; -- first released schema version; bump on every schema or registry change
+PRAGMA user_version = 2; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS thermal_generators;
 
@@ -626,6 +626,8 @@ CREATE TABLE attributes (
 -- numbers, node references, zone ids). Unit-validation triggers otherwise
 -- classify any numeric JSON value as physical and demand a unit; listing the
 -- pair here exempts it, instead of inventing a Dimensionless unit for a key.
+-- Self-describing payloads (loss and cost curves that carry their own
+-- power_units) are exempt the same way: no single unit fits the whole value.
 -- Scoped by TYPE: a name is not an identifier on every component type.
 CREATE TABLE attribute_identifiers (
     TYPE TEXT NOT NULL,
@@ -648,7 +650,45 @@ VALUES
     ('NodalACTransportTechnology', 'start_node', 'Transport technology from-node reference'),
     ('NodalHVDCTransportTechnology', 'start_node', 'Transport technology from-node reference'),
     ('NodalACTransportTechnology', 'end_node', 'Transport technology to-node reference'),
-    ('NodalHVDCTransportTechnology', 'end_node', 'Transport technology to-node reference');
+    ('NodalHVDCTransportTechnology', 'end_node', 'Transport technology to-node reference'),
+    ('AreaInterchange', 'from_area', 'Exporting area reference'),
+    ('AreaInterchange', 'to_area', 'Importing area reference'),
+    ('TwoTerminalVSCLine', 'remote_bus_control_from', 'Remotely regulated bus reference'),
+    ('TwoTerminalVSCLine', 'remote_bus_control_to', 'Remotely regulated bus reference'),
+    ('AggregateTransportTechnology', 'start_region', 'Transport technology from-region reference'),
+    ('AggregateTransportTechnology', 'end_region', 'Transport technology to-region reference'),
+    ('HydroReservoir', 'upstream_turbines', 'Turbine id references'),
+    ('HydroReservoir', 'downstream_turbines', 'Turbine id references'),
+    ('HydroReservoir', 'upstream_reservoirs', 'Reservoir id references'),
+    ('InterconnectingConverter', 'loss_function', 'Loss curve payload with its own power_units'),
+    ('InterruptiblePowerLoad', 'operation_cost', 'Cost payload with its own power_units'),
+    ('InterruptibleStandardLoad', 'operation_cost', 'Cost payload with its own power_units'),
+    ('ShiftablePowerLoad', 'operation_cost', 'Cost payload with its own power_units'),
+    ('TwoTerminalGenericHVDCLine', 'loss', 'Loss curve payload with its own power_units'),
+    ('TwoTerminalLCCLine', 'loss', 'Loss curve payload with its own power_units'),
+    ('TwoTerminalVSCLine', 'converter_loss_from', 'Loss curve payload with its own power_units'),
+    ('TwoTerminalVSCLine', 'converter_loss_to', 'Loss curve payload with its own power_units'),
+    ('EnergyReservoirStorage', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ExponentialLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('FACTSControlDevice', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('FixedAdmittance', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('HydroDispatch', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('HydroPumpTurbine', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('HydroTurbine', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('InterconnectingConverter', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('InterruptiblePowerLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('InterruptibleStandardLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('MotorLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('PowerLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('RenewableDispatch', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('RenewableNonDispatch', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ShiftablePowerLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('Source', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('StandardLoad', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('SwitchedAdmittance', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('SynchronousCondenser', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ThermalMultiStart', 'dynamic_injector', 'Dynamic injection device reference'),
+    ('ThermalStandard', 'dynamic_injector', 'Dynamic injection device reference');
 
 -- Optional entity data not required for modeling (geolocation, outages, ...).
 CREATE TABLE supplemental_attributes (
@@ -1035,9 +1075,8 @@ CREATE TABLE point_to_point_bids (
 -- Both terminals are AC buses, DC side internal -- unlike tmodel_hvdc_lines,
 -- which runs between DC buses for multi-terminal networks.
 -- Some attribute units depend on a basis choice or a sibling control mode
--- (LCC impedances, VSC dc_setpoint_*) and are left unregistered in
--- column_conventions.json: the registry can't reach a sibling that is itself
--- an attribute, so each such row states its own unit.
+-- (LCC impedances, VSC ac_setpoint_*): each arm is registered, and each row
+-- states the arm its own discriminator field selects.
 CREATE TABLE two_terminal_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
