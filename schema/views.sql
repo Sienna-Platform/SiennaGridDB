@@ -159,3 +159,42 @@ WHERE
         WHERE
             v.uri = a.uri
     );
+
+-- Every stored SingleTimeSeries value with its UTC timestamp, 'YYYY-MM-DDTHH:MM:SS.sssZ':
+-- step k is initial_timestamp + k * resolution as in infrastore (Period::add_to), a calendar
+-- step keeping the day, clamped to the month's end (2024-01-31 + 1 month = 2024-02-29).
+CREATE VIEW IF NOT EXISTS time_series_values AS
+SELECT
+    a.id AS association_id,
+    a.owner_id,
+    a.owner_type,
+    a.owner_category,
+    a.name,
+    a.time_series_type,
+    CASE
+        WHEN a.step_ms IS NOT NULL THEN strftime(
+            '%Y-%m-%dT%H:%M:%fZ', (a.t0_ms + v.timestep * a.step_ms) / 1000.0, 'unixepoch'
+        )
+        -- 'start of month' first: SQLite's '+N months' rolls Jan 31 over into March
+        ELSE strftime(
+            '%Y-%m-', a.initial_timestamp, 'start of month',
+            printf('%+d months', v.timestep * a.step_months)
+        ) || printf('%02d', min(
+            CAST(strftime('%d', a.initial_timestamp) AS INTEGER),
+            CAST(strftime('%d', a.initial_timestamp, 'start of month',
+                printf('%+d months', v.timestep * a.step_months + 1), '-1 day') AS INTEGER)
+        )) || strftime('T%H:%M:%fZ', a.initial_timestamp)
+    END AS timestamp,
+    v.timestep,
+    v.element,
+    v.value,
+    a.units
+FROM
+    time_series_associations a
+    -- The value layout: only this source would change if values were stored another way.
+    -- CROSS JOIN keeps associations outermost, so each one's steps are read once.
+    CROSS JOIN static_time_series v ON v.uri = a.uri
+WHERE
+    -- Forecasts are left out: a forecast value also has an issue time, and overlapping
+    -- DeterministicSingleTimeSeries windows would make one stored value several rows.
+    a.time_series_type = 'SingleTimeSeries';

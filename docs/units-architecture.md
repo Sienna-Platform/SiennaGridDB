@@ -193,6 +193,32 @@ Composite elements (`tuple(N,dtype)` and the function-data kinds) keep every raw
 A NaN is stored as a NULL `value`, because SQLite has no NaN and binds one as NULL; infinities stay REAL.
 The layout reads neither `element_type` nor `element_shape`, so a `DeterministicSingleTimeSeries` row carrying `element_shape` `[]` for a composite source changes nothing; every association that declares an `array_shape` must declare the stored one, and the inserters check that against the sidecar, even for an array the database already holds.
 
+**Timestamps: the `time_series_values` view.**
+No row stores a timestamp: step `k` of a series is `initial_timestamp + k * resolution`, computed in UTC exactly as infrastore's `Period::add_to` does, so there is no DST gap or repeat.
+Three generated columns on `time_series_associations` hold that arithmetic, parsed once per association when the row is written: `t0_ms` (`initial_timestamp` in Unix milliseconds), and either `step_ms` for a fixed resolution (`PT1H`, `P1D`, `PT0.25S`, `P1DT1H30M0.5S`) or `step_months` for a calendar one (`P1M`, `P1Y`, `P1Y6M`).
+A fixed step is `t0_ms + k * step_ms`.
+A calendar step adds `k * step_months` months to the start month and keeps the initial day, clamped to the target month's last day, as chrono's `checked_add_months` does: from Jan 31 a monthly series reads Jan 31, Feb 29, Mar 31, Apr 30.
+They are GridDB's own columns, outside the infrastore mirror, and `PRAGMA table_info` hides them.
+`time_series_values` joins every `SingleTimeSeries` association to its stored values and spells each timestamp `YYYY-MM-DDTHH:MM:SS.sssZ` (UTC, millisecond precision, the same width on every row, so text order is time order).
+Its columns are `association_id`, `owner_id`, `owner_type`, `owner_category`, `name`, `time_series_type`, `timestamp`, `timestep`, `element`, `value` and `units`.
+It uses only SQLite built-ins available since 3.38, so older readers such as DuckDB's SQLite scanner (SQLite 3.38.1) read it too.
+The timestamp is computed per row, so a filter on it scans the association's values, while a filter on `timestep` uses the `(uri, timestep, element)` index:
+
+```sql
+-- One series, 06:00 to 17:00 UTC, by timestamp
+SELECT timestamp, element, value FROM time_series_values
+WHERE association_id = 7300
+  AND timestamp BETWEEN '2026-07-22T06:00:00.000Z' AND '2026-07-22T17:00:00.000Z';
+
+-- The same window by timestep: initial_timestamp is 00:00 and the resolution PT1H
+SELECT timestamp, element, value FROM time_series_values
+WHERE association_id = 7300 AND timestep BETWEEN 6 AND 17;
+```
+
+A zoneless series (`time_reference` `zoneless`) is read the same way, so its `Z` names the wall clock it was written in, not an instant.
+Forecasts are not in the view: a forecast value has an issue time (its window's start) as well as a target time, and `DeterministicSingleTimeSeries` windows overlap, so one stored value would be several rows.
+Only the view's join to `static_time_series` depends on the value layout; storing values another way changes that source and nothing else.
+
 **Arrays are shared, and cleaned up with their last association.**
 The inserters store an array's values only the first time its `uri` appears in the database.
 Deleting an association, directly or through its owner's cascade, deletes the `uri`'s values only when no remaining association names it (`delete_orphan_static_time_series`, and its twin for a `uri` update).
@@ -345,6 +371,8 @@ GridDB's `time_series_associations` (with its `feature_sets` companion) and
 (`crates/infrastore-core/src/metadata/schema.rs`), so association rows written here deserialize
 straight into a store at the modeling stage. The mirror is the contract; consequences worth
 knowing:
+
+The generated step columns of `time_series_associations` (`t0_ms`, `step_ms`, `step_months`, §4) are GridDB's own, derived from the mirrored ones and hidden from `PRAGMA table_info`.
 
 **`owner_category` and `time_series_type` hold the wire spelling, not infrastore's on-disk
 codes.** Infrastore packs both as `INTEGER` (`::code`) for a measured index-size win at its own

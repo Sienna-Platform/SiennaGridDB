@@ -368,6 +368,22 @@ ORDER BY cca.entity_id;
 Both were run against a database built from `schema/schema.sql` + `triggers.sql` +
 `unit_registry.sql` + `views.sql` on this branch.
 
+### Time series values by time
+
+The `time_series_values` view lists every stored `SingleTimeSeries` value with its owner, `timestep`, `element`, `units` and a UTC `timestamp` spelled `YYYY-MM-DDTHH:MM:SS.sssZ`.
+Step `k` is `initial_timestamp + k * resolution`, as infrastore computes it: fixed resolutions add whole milliseconds, and calendar ones (`P1M`, `P1Y`) keep the initial day, clamped to the month's end.
+Forecasts are not in it; see `docs/units-architecture.md` §4 for why and for how the steps are stored.
+Slice by timestamp, or by timestep, which uses an index and is faster:
+
+```sql
+SELECT timestamp, element, value FROM time_series_values
+WHERE association_id = 7300
+  AND timestamp BETWEEN '2026-07-22T06:00:00.000Z' AND '2026-07-22T17:00:00.000Z';
+
+SELECT owner_id, value FROM time_series_values
+WHERE name = 'max_active_power' AND timestep = 5;
+```
+
 ## Insert SDKs
 
 `sdk/` holds three small packages that insert Sienna OpenAPI SDK objects into a GridDB
@@ -392,6 +408,7 @@ written out in that file.
   Reading needs infrastore (Python extra `sienna-griddb-tools[time-series]`, Julia `InfraStore.jl` loaded).
   The rows are reported unsupported without it, without a sidecar (a `time_series_storage_file` that does not exist counts as none), in the TypeScript SDK (no HDF5 reader), for `NonSequentialTimeSeries`, for owners with no table, and for element types whose values are not `f64`.
   After an insert, `dangling_time_series_references` lists any cost payload reference that no association resolves, and `orphaned_time_series` lists values and associations that lost each other.
+  `time_series_values` reads every `SingleTimeSeries` value with its UTC timestamp ([Time series values by time](#time-series-values-by-time)).
   See `docs/units-architecture.md` §4 and §6 for the value layout and the `features_hash` contract.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never

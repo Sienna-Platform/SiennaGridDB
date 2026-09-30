@@ -822,7 +822,42 @@ CREATE TABLE time_series_associations (
     -- set, even an empty one.
     features_hash TEXT NOT NULL CHECK (
         length(features_hash) = 64 AND features_hash NOT GLOB '*[^0-9a-f]*'
-    )
+    ),
+    -- Derived by GridDB, outside the infrastore mirror (PRAGMA table_info hides them):
+    -- the time_series_values view's step arithmetic, parsed once per association.
+    -- t0_ms is initial_timestamp in Unix milliseconds.
+    t0_ms INTEGER GENERATED ALWAYS AS (
+        CAST(strftime('%s', initial_timestamp) AS INTEGER) * 1000
+        + CAST(substr(strftime('%f', initial_timestamp), 4) AS INTEGER)
+    ) STORED,
+    -- A calendar resolution (P1M, P1Y, P1Y6M) in months, else NULL.
+    step_months INTEGER GENERATED ALWAYS AS (
+        CASE WHEN instr(resolution, 'T') = 0 AND instr(resolution, 'W') = 0
+            AND instr(resolution, 'D') = 0
+            AND (instr(resolution, 'Y') OR instr(resolution, 'M')) THEN
+            iif(instr(resolution, 'Y'), 12 * CAST(substr(resolution, 2) AS INTEGER), 0)
+            + iif(instr(resolution, 'M'), CAST(substr(resolution,
+                max(instr(resolution, 'Y'), 1) + 1) AS INTEGER), 0)
+        END
+    ) STORED,
+    -- A fixed resolution (PT1H, P1D, PT0.25S, P1DT1H30M0.5S) in milliseconds, else NULL.
+    step_ms INTEGER GENERATED ALWAYS AS (
+        CASE WHEN instr(resolution, 'Y') = 0
+            AND (instr(resolution, 'M') = 0
+                OR instr(resolution, 'T') BETWEEN 1 AND instr(resolution, 'M'))
+            AND (instr(resolution, 'W') OR instr(resolution, 'D') OR instr(resolution, 'T')) THEN
+            604800000 * iif(instr(resolution, 'W'), CAST(substr(resolution, 2) AS INTEGER), 0)
+            + 86400000 * iif(instr(resolution, 'D'), CAST(substr(resolution,
+                max(instr(resolution, 'W'), 1) + 1) AS INTEGER), 0)
+            + 3600000 * iif(instr(resolution, 'H'), CAST(substr(resolution,
+                instr(resolution, 'T') + 1) AS INTEGER), 0)
+            + 60000 * iif(instr(resolution, 'M'), CAST(substr(resolution,
+                max(instr(resolution, 'T'), instr(resolution, 'H')) + 1) AS INTEGER), 0)
+            + iif(instr(resolution, 'S'), CAST(round(1000 * CAST(substr(resolution,
+                max(instr(resolution, 'T'), instr(resolution, 'H'), instr(resolution, 'M')) + 1)
+                AS REAL)) AS INTEGER), 0)
+        END
+    ) STORED
 ) strict;
 
 -- Feature sets are content-addressed by the SHA-256 of the feature map and
