@@ -830,23 +830,27 @@ CREATE TABLE time_series_associations (
         CAST(strftime('%s', initial_timestamp) AS INTEGER) * 1000
         + CAST(substr(strftime('%f', initial_timestamp), 4) AS INTEGER)
     ) STORED,
-    -- A calendar resolution (P1M, P1Y, P1Y6M) in months, else NULL.
+    -- A calendar resolution (P1M, P1Y, P1Y6M) in months, else NULL. NULL too past
+    -- infrastore's i32 months: CAST caps an overflow, which turns REAL, at 2^63 - 1.
     step_months INTEGER GENERATED ALWAYS AS (
         CASE WHEN instr(resolution, 'T') = 0 AND instr(resolution, 'W') = 0
             AND instr(resolution, 'D') = 0
-            AND (instr(resolution, 'Y') OR instr(resolution, 'M')) THEN
+            AND (instr(resolution, 'Y') OR instr(resolution, 'M')) THEN nullif(min(CAST(
             iif(instr(resolution, 'Y'), 12 * CAST(substr(resolution, 2) AS INTEGER), 0)
             + iif(instr(resolution, 'M'), CAST(substr(resolution,
                 max(instr(resolution, 'Y'), 1) + 1) AS INTEGER), 0)
-        END
+        AS INTEGER), 2147483648), 2147483648) END
     ) STORED,
     -- A fixed resolution (PT1H, P1D, PT0.25S, P1DT1H30M0.5S) in milliseconds, else NULL.
+    -- NULL too past infrastore's i64 ms: summed from -1, a step that fits ends below 2^63 - 1,
+    -- and one that does not ends there or turns REAL, which CAST caps there.
     step_ms INTEGER GENERATED ALWAYS AS (
         CASE WHEN instr(resolution, 'Y') = 0
             AND (instr(resolution, 'M') = 0
                 OR instr(resolution, 'T') BETWEEN 1 AND instr(resolution, 'M'))
-            AND (instr(resolution, 'W') OR instr(resolution, 'D') OR instr(resolution, 'T')) THEN
-            604800000 * iif(instr(resolution, 'W'), CAST(substr(resolution, 2) AS INTEGER), 0)
+            AND (instr(resolution, 'W') OR instr(resolution, 'D') OR instr(resolution, 'T'))
+            THEN nullif(CAST(-1
+            + 604800000 * iif(instr(resolution, 'W'), CAST(substr(resolution, 2) AS INTEGER), 0)
             + 86400000 * iif(instr(resolution, 'D'), CAST(substr(resolution,
                 max(instr(resolution, 'W'), 1) + 1) AS INTEGER), 0)
             + 3600000 * iif(instr(resolution, 'H'), CAST(substr(resolution,
@@ -858,15 +862,16 @@ CREATE TABLE time_series_associations (
                 max(instr(resolution, 'T'), instr(resolution, 'H'), instr(resolution, 'M')) + 1)
                 AS INTEGER) + iif(instr(resolution, '.'), CAST(substr(replace(resolution,
                 'S', '00'), instr(resolution, '.') + 1, 3) AS INTEGER), 0), 0)
-        END
+        AS INTEGER), 9223372036854775807) + 1 END
     ) STORED,
     -- Reject what time_series_values cannot read: an initial_timestamp SQLite does not
-    -- parse, or whose date does not exist (SQLite reads 2026-02-30 as March 2).
+    -- parse (so no lowercase 't' or ':60' leap second, both RFC 3339), or whose date does
+    -- not exist (SQLite reads 2026-02-30 as March 2).
     CHECK (initial_timestamp IS NULL OR (t0_ms IS NOT NULL
         AND date(substr(initial_timestamp, 1, 10)) IS substr(initial_timestamp, 1, 10))),
-    -- ... or a resolution outside P[nY][nM][nW][nD][T[nH][nM][n[.fff]S]], positive and one
-    -- kind (calendar or fixed): every spelling infrastore's Period emits, and all it parses
-    -- but repeated or out-of-order designators and surrounding blanks.
+    -- ... or a resolution outside P[nY][nM][nW][nD][T[nH][nM][n[.fff]S]], mixing calendar and
+    -- fixed, or past 2^63 - 1 ms or 2^31 - 1 months. Of what infrastore parses, this rejects
+    -- repeated or out-of-order designators, blanks, lowercase units, a trailing T, signs, zero.
     CHECK (resolution IS NULL
         -- the usual spellings skip the grammar below, which costs microseconds a row
         OR resolution = 'PT1H' OR resolution = 'PT15M' OR resolution = 'PT5M' OR (

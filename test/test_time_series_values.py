@@ -230,6 +230,17 @@ UNREADABLE = [
     "P1M1M", "P1MT1H", "P1MT1M", "P1Y2D", "P1.5D", "PT1.5H", "PT1.S", "PT.5S",
     "PT1.2.3S", "PT0.0001S", "PT0S", "P0D", "P0M",
 ]
+# The largest steps infrastore reads (i64 milliseconds, i32 months), and ones past them
+LARGEST = {
+    "P106751991167DT7H12M55.807S": (9223372036854775807, None),
+    "PT9223372036854775.807S": (9223372036854775807, None),
+    "P2147483647M": (None, 2147483647), "P178956970Y7M": (None, 2147483647),
+}
+TOO_LARGE = [
+    "P106751991167DT7H12M55.808S", "PT9223372036854775.808S", "PT29511361688711019917S",
+    "P15250284453W", "P99999999999999999999D", "P2147483648M", "P178956970Y8M",
+    "P178956971Y", "P99999999999999999999M", "P99999999999999999999Y",
+]
 
 
 def stored_steps(conn, association_id):
@@ -245,10 +256,27 @@ def test_other_iso_spellings_are_read(fresh_db, resolution):
     assert stored_steps(fresh_db, assoc) == OTHER_SPELLINGS[resolution]
 
 
-@pytest.mark.parametrize("resolution", UNREADABLE)
+@pytest.mark.parametrize("resolution", UNREADABLE + TOO_LARGE)
 def test_a_resolution_the_view_cannot_read_is_rejected(fresh_db, resolution):
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed: resolution"):
         add_series(fresh_db, "u1", resolution, "2026-01-01T00:00:00Z", 0)
+
+
+@pytest.mark.parametrize("resolution", LARGEST)
+def test_the_largest_steps_are_read(fresh_db, resolution):
+    assoc = add_series(fresh_db, "u1", resolution, "2026-01-01T00:00:00Z", 0)
+    assert stored_steps(fresh_db, assoc) == LARGEST[resolution]
+
+
+def test_the_step_bounds_are_infrastore_s():
+    infrastore = pytest.importorskip("infrastore")
+    np = pytest.importorskip("numpy")
+    start = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    for resolution in LARGEST:
+        infrastore.SingleTimeSeries(start, resolution, np.zeros(1), "x")
+    for resolution in TOO_LARGE:
+        with pytest.raises(infrastore.InvalidParameterError):
+            infrastore.SingleTimeSeries(start, resolution, np.zeros(1), "x")
 
 
 @pytest.mark.parametrize(
