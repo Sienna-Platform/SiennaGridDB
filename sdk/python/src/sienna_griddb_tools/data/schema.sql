@@ -920,7 +920,74 @@ CREATE TABLE time_series_associations (
     -- set, even an empty one.
     features_hash TEXT NOT NULL CHECK (
         length(features_hash) = 64 AND features_hash NOT GLOB '*[^0-9a-f]*'
-    )
+    ),
+    -- Derived by GridDB, outside the infrastore mirror (PRAGMA table_info hides them):
+    -- the time_series_values view's step arithmetic, parsed once per association.
+    -- t0_ms is initial_timestamp in Unix milliseconds.
+    t0_ms INTEGER GENERATED ALWAYS AS (
+        CAST(strftime('%s', initial_timestamp) AS INTEGER) * 1000
+        + CAST(substr(strftime('%f', initial_timestamp), 4) AS INTEGER)
+    ) STORED,
+    -- A calendar resolution (P1M, P1Y, P1Y6M) in months, else NULL.
+    step_months INTEGER GENERATED ALWAYS AS (
+        CASE WHEN instr(resolution, 'T') = 0 AND instr(resolution, 'W') = 0
+            AND instr(resolution, 'D') = 0
+            AND (instr(resolution, 'Y') OR instr(resolution, 'M')) THEN
+            iif(instr(resolution, 'Y'), 12 * CAST(substr(resolution, 2) AS INTEGER), 0)
+            + iif(instr(resolution, 'M'), CAST(substr(resolution,
+                max(instr(resolution, 'Y'), 1) + 1) AS INTEGER), 0)
+        END
+    ) STORED,
+    -- A fixed resolution (PT1H, P1D, PT0.25S, P1DT1H30M0.5S) in milliseconds, else NULL.
+    step_ms INTEGER GENERATED ALWAYS AS (
+        CASE WHEN instr(resolution, 'Y') = 0
+            AND (instr(resolution, 'M') = 0
+                OR instr(resolution, 'T') BETWEEN 1 AND instr(resolution, 'M'))
+            AND (instr(resolution, 'W') OR instr(resolution, 'D') OR instr(resolution, 'T')) THEN
+            604800000 * iif(instr(resolution, 'W'), CAST(substr(resolution, 2) AS INTEGER), 0)
+            + 86400000 * iif(instr(resolution, 'D'), CAST(substr(resolution,
+                max(instr(resolution, 'W'), 1) + 1) AS INTEGER), 0)
+            + 3600000 * iif(instr(resolution, 'H'), CAST(substr(resolution,
+                instr(resolution, 'T') + 1) AS INTEGER), 0)
+            + 60000 * iif(instr(resolution, 'M'), CAST(substr(resolution,
+                max(instr(resolution, 'T'), instr(resolution, 'H')) + 1) AS INTEGER), 0)
+            + iif(instr(resolution, 'S'), CAST(round(1000 * CAST(substr(resolution,
+                max(instr(resolution, 'T'), instr(resolution, 'H'), instr(resolution, 'M')) + 1)
+                AS REAL)) AS INTEGER), 0)
+        END
+    ) STORED,
+    -- Reject what time_series_values cannot read: an initial_timestamp SQLite does not
+    -- parse, or whose date does not exist (SQLite reads 2026-02-30 as March 2).
+    CHECK (initial_timestamp IS NULL OR (t0_ms IS NOT NULL
+        AND date(substr(initial_timestamp, 1, 10)) IS substr(initial_timestamp, 1, 10))),
+    -- ... or a resolution outside P[nY][nM][nW][nD][T[nH][nM][n[.fff]S]], positive and one
+    -- kind (calendar or fixed): every spelling infrastore's Period emits, and all it parses
+    -- but repeated or out-of-order designators and surrounding blanks.
+    CHECK (resolution IS NULL
+        -- the usual spellings skip the grammar below, which costs microseconds a row
+        OR resolution = 'PT1H' OR resolution = 'PT15M' OR resolution = 'PT5M' OR (
+        resolution GLOB 'P*'
+        -- every designator and the point follow a digit, and every number ends in one
+        AND resolution NOT GLOB '*[^0-9][YMWDHS.]*'
+        AND resolution NOT GLOB '*[0-9T]'
+        AND resolution NOT GLOB '*[0-9]T*'
+        AND (resolution NOT GLOB '*.*' OR (resolution NOT GLOB '*.*.*' AND (
+            resolution GLOB '*.[0-9]S' OR resolution GLOB '*.[0-9][0-9]S'
+            OR resolution GLOB '*.[0-9][0-9][0-9]S')))
+        -- nothing else, and the designators once each in ISO order (an M before T is months)
+        AND replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+            replace(resolution, '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''),
+            '6', ''), '7', ''), '8', ''), '9', ''), '.', '') = 'P'
+            || iif(instr(resolution, 'Y'), 'Y', '')
+            || iif(instr(resolution, 'M')
+                AND NOT (instr(resolution, 'T') BETWEEN 1 AND instr(resolution, 'M')), 'M', '')
+            || iif(instr(resolution, 'W'), 'W', '')
+            || iif(instr(resolution, 'D'), 'D', '')
+            || iif(instr(resolution, 'T'), 'T' || iif(instr(resolution, 'H'), 'H', '')
+                || iif(instr(resolution, 'T') BETWEEN 1 AND instr(resolution, 'M'), 'M', '')
+                || iif(instr(resolution, 'S'), 'S', ''), '')
+        AND coalesce(step_ms, step_months, 0) > 0
+    ))
 ) strict;
 
 -- Feature sets are content-addressed by the SHA-256 of the feature map and
