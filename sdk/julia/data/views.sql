@@ -176,7 +176,7 @@ SELECT
             '%Y-%m-%dT%H:%M:%fZ', (a.t0_ms + v.timestep * a.step_ms) / 1000.0, 'unixepoch'
         )
         -- 'start of month' first: SQLite's '+N months' rolls Jan 31 over into March
-        ELSE strftime(
+        WHEN a.step_months IS NOT NULL THEN strftime(
             '%Y-%m-', a.initial_timestamp, 'start of month',
             printf('%+d months', v.timestep * a.step_months)
         ) || printf('%02d', min(

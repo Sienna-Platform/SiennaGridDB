@@ -136,6 +136,13 @@ def test_nan_is_a_null_value_with_its_timestamp(fresh_db):
     ).fetchall() == [("2026-01-01T00:00:00.000Z", None)]
 
 
+def test_no_resolution_means_no_timestamp(fresh_db):
+    """The CHECK lets a NULL resolution in: the view then gives no timestamp, not the
+    initial one on every step."""
+    assoc = add_series(fresh_db, "u1", None, "2026-01-01T00:00:00Z", 3)
+    assert view_stamps(fresh_db, assoc) == [None, None, None]
+
+
 def test_one_row_per_single_time_series_value(fresh_db):
     """A forecast sharing the array adds no rows: forecasts are not in the view."""
     add_series(fresh_db, "u1", "PT1H", "2026-01-01T00:00:00Z", 3, width=2)
