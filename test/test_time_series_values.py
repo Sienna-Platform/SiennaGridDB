@@ -34,6 +34,10 @@ CASES = {
         "2024-02-29T00:00:00.000Z", "2025-02-28T00:00:00.000Z",
         "2026-02-28T00:00:00.000Z", "2027-02-28T00:00:00.000Z",
         "2028-02-29T00:00:00.000Z"]),
+    # Months are added in UTC, from Jan 31 here; SQLite 3.38 misread this start as 08.000
+    "calendar from an offset with a fraction": ("P1M", "2024-02-01T01:00:08.001+02:00", [
+        "2024-01-31T23:00:08.001Z", "2024-02-29T23:00:08.001Z",
+        "2024-03-31T23:00:08.001Z"]),
     "compound calendar": ("P1Y6M", "2023-08-31T00:00:00Z", [
         "2023-08-31T00:00:00.000Z", "2025-02-28T00:00:00.000Z",
         "2026-08-31T00:00:00.000Z"]),
@@ -136,6 +140,13 @@ def test_nan_is_a_null_value_with_its_timestamp(fresh_db):
     ).fetchall() == [("2026-01-01T00:00:00.000Z", None)]
 
 
+def test_no_resolution_means_no_timestamp(fresh_db):
+    """The CHECK lets a NULL resolution in: the view then gives no timestamp, not the
+    initial one on every step."""
+    assoc = add_series(fresh_db, "u1", None, "2026-01-01T00:00:00Z", 3)
+    assert view_stamps(fresh_db, assoc) == [None, None, None]
+
+
 def test_one_row_per_single_time_series_value(fresh_db):
     """A forecast sharing the array adds no rows: forecasts are not in the view."""
     add_series(fresh_db, "u1", "PT1H", "2026-01-01T00:00:00Z", 3, width=2)
@@ -210,12 +221,25 @@ OTHER_SPELLINGS = {
     "PT01H": (3600000, None), "PT3600S": (3600000, None), "PT60M": (3600000, None),
     "PT24H": (86400000, None), "P1W2D": (777600000, None), "PT1M30S": (90000, None),
     "P1DT0.5S": (86400500, None), "P18M": (None, 18), "P1Y6M": (None, 18),
+    # past 2^53 ms, where a float would drop the last second
+    "PT9007199254740993S": (9007199254740993000, None),
 }
 UNREADABLE = [
     "", "P", "PT", "P1", "P1DT", "1H", "pt1h", "-PT1H", "PT1H ", "PTH", "P1H", "PT1D",
     "P1D1H", "PT1H30", "PT1HM", "PT1H1H", "PT1M1H", "PT1S1M", "P1D2D", "P2D1W", "P1M2Y",
     "P1M1M", "P1MT1H", "P1MT1M", "P1Y2D", "P1.5D", "PT1.5H", "PT1.S", "PT.5S",
     "PT1.2.3S", "PT0.0001S", "PT0S", "P0D", "P0M",
+]
+# The largest steps infrastore reads (i64 milliseconds, i32 months), and ones past them
+LARGEST = {
+    "P106751991167DT7H12M55.807S": (9223372036854775807, None),
+    "PT9223372036854775.807S": (9223372036854775807, None),
+    "P2147483647M": (None, 2147483647), "P178956970Y7M": (None, 2147483647),
+}
+TOO_LARGE = [
+    "P106751991167DT7H12M55.808S", "PT9223372036854775.808S", "PT29511361688711019917S",
+    "P15250284453W", "P99999999999999999999D", "P2147483648M", "P178956970Y8M",
+    "P178956971Y", "P99999999999999999999M", "P99999999999999999999Y",
 ]
 
 
@@ -232,10 +256,27 @@ def test_other_iso_spellings_are_read(fresh_db, resolution):
     assert stored_steps(fresh_db, assoc) == OTHER_SPELLINGS[resolution]
 
 
-@pytest.mark.parametrize("resolution", UNREADABLE)
+@pytest.mark.parametrize("resolution", UNREADABLE + TOO_LARGE)
 def test_a_resolution_the_view_cannot_read_is_rejected(fresh_db, resolution):
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed: resolution"):
         add_series(fresh_db, "u1", resolution, "2026-01-01T00:00:00Z", 0)
+
+
+@pytest.mark.parametrize("resolution", LARGEST)
+def test_the_largest_steps_are_read(fresh_db, resolution):
+    assoc = add_series(fresh_db, "u1", resolution, "2026-01-01T00:00:00Z", 0)
+    assert stored_steps(fresh_db, assoc) == LARGEST[resolution]
+
+
+def test_the_step_bounds_are_infrastore_s():
+    infrastore = pytest.importorskip("infrastore")
+    np = pytest.importorskip("numpy")
+    start = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    for resolution in LARGEST:
+        infrastore.SingleTimeSeries(start, resolution, np.zeros(1), "x")
+    for resolution in TOO_LARGE:
+        with pytest.raises(infrastore.InvalidParameterError):
+            infrastore.SingleTimeSeries(start, resolution, np.zeros(1), "x")
 
 
 @pytest.mark.parametrize(

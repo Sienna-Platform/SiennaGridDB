@@ -309,15 +309,16 @@ SELECT
         WHEN a.step_ms IS NOT NULL THEN strftime(
             '%Y-%m-%dT%H:%M:%fZ', (a.t0_ms + v.timestep * a.step_ms) / 1000.0, 'unixepoch'
         )
-        -- 'start of month' first: SQLite's '+N months' rolls Jan 31 over into March
-        ELSE strftime(
-            '%Y-%m-', a.initial_timestamp, 'start of month',
+        -- 'start of month' first: SQLite's '+N months' rolls Jan 31 over into March.
+        -- t0_ms, not initial_timestamp: SQLite 3.38 reads '08.001-04:00' as 08.000.
+        WHEN a.step_months IS NOT NULL THEN strftime(
+            '%Y-%m-', a.t0_ms / 1000.0, 'unixepoch', 'start of month',
             printf('%+d months', v.timestep * a.step_months)
         ) || printf('%02d', min(
-            CAST(strftime('%d', a.initial_timestamp) AS INTEGER),
-            CAST(strftime('%d', a.initial_timestamp, 'start of month',
+            CAST(strftime('%d', a.t0_ms / 1000.0, 'unixepoch') AS INTEGER),
+            CAST(strftime('%d', a.t0_ms / 1000.0, 'unixepoch', 'start of month',
                 printf('%+d months', v.timestep * a.step_months + 1), '-1 day') AS INTEGER)
-        )) || strftime('T%H:%M:%fZ', a.initial_timestamp)
+        )) || strftime('T%H:%M:%fZ', a.t0_ms / 1000.0, 'unixepoch')
     END AS timestamp,
     v.timestep,
     v.element,
