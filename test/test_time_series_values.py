@@ -203,3 +203,61 @@ def test_view_matches_infrastore_on_the_synthetic_case(tmp_path):
         store.close()
     assert len(ours) >= 5
     assert ours == theirs
+
+
+# Spellings infrastore parses but never emits, with their span in ms or months
+OTHER_SPELLINGS = {
+    "PT01H": (3600000, None), "PT3600S": (3600000, None), "PT60M": (3600000, None),
+    "PT24H": (86400000, None), "P1W2D": (777600000, None), "PT1M30S": (90000, None),
+    "P1DT0.5S": (86400500, None), "P18M": (None, 18), "P1Y6M": (None, 18),
+}
+UNREADABLE = [
+    "", "P", "PT", "P1", "P1DT", "1H", "pt1h", "-PT1H", "PT1H ", "PTH", "P1H", "PT1D",
+    "P1D1H", "PT1H30", "PT1HM", "PT1H1H", "PT1M1H", "PT1S1M", "P1D2D", "P2D1W", "P1M2Y",
+    "P1M1M", "P1MT1H", "P1MT1M", "P1Y2D", "P1.5D", "PT1.5H", "PT1.S", "PT.5S",
+    "PT1.2.3S", "PT0.0001S", "PT0S", "P0D", "P0M",
+]
+
+
+def stored_steps(conn, association_id):
+    return conn.execute(
+        "SELECT step_ms, step_months FROM time_series_associations WHERE id = ?",
+        (association_id,),
+    ).fetchone()
+
+
+@pytest.mark.parametrize("resolution", OTHER_SPELLINGS)
+def test_other_iso_spellings_are_read(fresh_db, resolution):
+    assoc = add_series(fresh_db, "u1", resolution, "2026-01-01T00:00:00Z", 0)
+    assert stored_steps(fresh_db, assoc) == OTHER_SPELLINGS[resolution]
+
+
+@pytest.mark.parametrize("resolution", UNREADABLE)
+def test_a_resolution_the_view_cannot_read_is_rejected(fresh_db, resolution):
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed: resolution"):
+        add_series(fresh_db, "u1", resolution, "2026-01-01T00:00:00Z", 0)
+
+
+@pytest.mark.parametrize(
+    "initial", ["", "garbage", "12:00", "2460000.5", "2026-13-01T00:00:00Z",
+                "2026-02-30T00:00:00Z", "2026-01-01T25:00:00Z"]
+)
+def test_an_initial_timestamp_the_view_cannot_read_is_rejected(fresh_db, initial):
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed: initial"):
+        add_series(fresh_db, "u1", "PT1H", initial, 0)
+
+
+def test_every_period_infrastore_emits_is_read(fresh_db):
+    """infrastore's canonical spelling of a fixed span or month count reads back as it."""
+    infrastore = pytest.importorskip("infrastore")
+    np = pytest.importorskip("numpy")
+    ms = [1, 999, 1000, 1500, 59999, 60000, 90000, 3599999, 3600000, 86399999, 86400000,
+          86400001, 90061001, 604800000, 31536000000]
+    months = [1, 3, 11, 12, 18, 24, 120]
+    start = datetime.datetime(2026, 1, 31, tzinfo=datetime.timezone.utc)
+    periods = [(datetime.timedelta(milliseconds=n), (n, None)) for n in ms]
+    periods += [(f"P{n}M", (None, n)) for n in months]
+    for i, (period, steps) in enumerate(periods):
+        spelled = infrastore.SingleTimeSeries(start, period, np.zeros(2), "x").resolution
+        assoc = add_series(fresh_db, f"u{i}", spelled, "2026-01-31T00:00:00Z", 0)
+        assert stored_steps(fresh_db, assoc) == steps, spelled

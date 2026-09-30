@@ -199,6 +199,8 @@ Three generated columns on `time_series_associations` hold that arithmetic, pars
 A fixed step is `t0_ms + k * step_ms`.
 A calendar step adds `k * step_months` months to the start month and keeps the initial day, clamped to the target month's last day, as chrono's `checked_add_months` does: from Jan 31 a monthly series reads Jan 31, Feb 29, Mar 31, Apr 30.
 They are GridDB's own columns, outside the infrastore mirror, and `PRAGMA table_info` hides them.
+Two CHECKs reject a row the view could not read: an `initial_timestamp` SQLite does not parse or whose date does not exist (SQLite would read `2026-02-30` as March 2), and a `resolution` outside `P[nY][nM][nW][nD][T[nH][nM][n[.fff]S]]`, mixing calendar and fixed parts, or not positive.
+That grammar holds every spelling infrastore's `Period` emits, and all it parses but repeated or out-of-order designators and surrounding blanks.
 `time_series_values` joins every `SingleTimeSeries` association to its stored values and spells each timestamp `YYYY-MM-DDTHH:MM:SS.sssZ` (UTC, millisecond precision, the same width on every row, so text order is time order).
 Its columns are `association_id`, `owner_id`, `owner_type`, `owner_category`, `name`, `time_series_type`, `timestamp`, `timestep`, `element`, `value` and `units`.
 It uses only SQLite built-ins available since 3.38, so older readers such as DuckDB's SQLite scanner (SQLite 3.38.1) read it too.
