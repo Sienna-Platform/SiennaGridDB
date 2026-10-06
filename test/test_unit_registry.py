@@ -56,6 +56,8 @@ COMPLETENESS_ALLOWLIST = {
     ("facts_control_devices", "max_reactive_power"),
     # penalty cost with no unit annotation in the schemas
     ("transmission_interfaces", "violation_penalty"),
+    # StorageCapitalCost.interconnection_cost has no unit annotation in the schemas
+    ("storage_technologies", "interconnection_cost"),
 }
 
 
