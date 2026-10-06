@@ -17,14 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Pinned to the SiennaSchemas release this schema was generated against.
-      # Bump deliberately, together with a registry regeneration -- tracking main
-      # would let an upstream vocabulary change break CI on an unrelated PR.
+      # .schema-version pins the SiennaSchemas release the generated tables and
+      # registry come from. update-schema.yml moves it; tracking main would let
+      # an upstream change break CI on an unrelated PR.
+      - name: Read the pinned SiennaSchemas release
+        id: schemas
+        run: echo "ref=$(cat .schema-version)" >> "$GITHUB_OUTPUT"
+
       - name: Checkout SiennaSchemas
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/SiennaSchemas
-          ref: v0.1.0
+          ref: ${{ steps.schemas.outputs.ref }}
           path: SiennaSchemas
 
       # TODO after psy6 merges to PowerSystems main: drop `ref`.
@@ -72,8 +76,10 @@ jobs:
           python3 scripts/generate_unit_registry.py --units-json SiennaSchemas/Core/units.json
           git diff --exit-code schema/unit_registry.sql
 
-      - name: Check generated DDL staleness and drift
-        run: python3 scripts/generate_sql_schema.py --schemas-path SiennaSchemas --check --diff
+      # Fails on any schema file or property with no decision in schema_map.json /
+      # sql_codegen_map.json, and on generated tables or conventions that are stale.
+      - name: Check the generated tables against the schemas
+        run: python3 scripts/generate_sql_schema.py --schemas-path SiennaSchemas --check
 
       - name: Cross-repo units sync check
         run: python3 scripts/check_units_sync.py --schemas-path SiennaSchemas --psy-path PowerSystems.jl --db griddb-example.sqlite

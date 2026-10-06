@@ -10,77 +10,101 @@ import pytest
 # SCHEMAS_PATH is passed explicitly to codegen subprocesses so they never fall
 # back to a default that does not exist in the CI layout (conftest resolves
 # nested vs sibling).
-from conftest import SCHEMA_DIR, SCHEMAS_PATH, SCRIPTS_DIR, load_schemas_json
+from conftest import SCHEMA_DIR, SCHEMAS_PATH, SCRIPTS_DIR
 
 sys.path.insert(0, str(SCRIPTS_DIR))
+import generate_sql_schema as codegen
 from generate_sql_schema import units_comment
 
 GENERATE_SCRIPT = SCRIPTS_DIR / "generate_sql_schema.py"
-GENERATED_SQL = SCHEMA_DIR / "generated_schema.sql"
 SCHEMA_MAP = SCHEMA_DIR / "schema_map.json"
 CODEGEN_MAP = SCHEMA_DIR / "sql_codegen_map.json"
 
 
-@pytest.fixture(scope="module")
-def generated_db():
-    conn = sqlite3.connect(":memory:")
-    conn.executescript(GENERATED_SQL.read_text(encoding="utf-8"))
-    yield conn
-    conn.close()
+def _schema_map():
+    return json.loads(SCHEMA_MAP.read_text(encoding="utf-8"))
 
 
-def test_generated_sql_builds_clean(generated_db):
-    tables = {
-        row[0]
-        for row in generated_db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-    }
-    mapped = set(json.loads(SCHEMA_MAP.read_text(encoding="utf-8"))["tables"])
-    assert mapped <= tables
+def _codegen_map():
+    return json.loads(CODEGEN_MAP.read_text(encoding="utf-8"))["tables"]
 
 
-def test_generated_sql_is_not_stale():
+def test_generated_outputs_are_not_stale():
+    """schema.sql's generated region and the derived unit conventions match a
+    fresh generation from the pinned schemas."""
     result = subprocess.run(
-        [sys.executable, str(GENERATE_SCRIPT), "--schemas-path", SCHEMAS_PATH,
-         "--check"],
+        [sys.executable, str(GENERATE_SCRIPT), "--schemas-path", SCHEMAS_PATH, "--check"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_diff_reports_no_type_mismatches():
-    result = subprocess.run(
-        [sys.executable, str(GENERATE_SCRIPT), "--schemas-path", SCHEMAS_PATH,
-         "--diff"],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_every_generated_table_has_entity_id_pk(generated_db):
-    mapped = json.loads(SCHEMA_MAP.read_text(encoding="utf-8"))["tables"]
-    for table in mapped:
-        info = generated_db.execute(f"PRAGMA table_info({table})").fetchall()
+def test_every_mapped_table_is_built_with_entity_id_pk(fresh_db):
+    for table in _schema_map()["tables"]:
+        info = fresh_db.execute(f"PRAGMA table_info({table})").fetchall()
+        assert info, f"{table} is mapped but not in the built database"
         pk_cols = [row[1] for row in info if row[5] == 1]
         assert pk_cols == ["id"], f"{table} PK is {pk_cols}"
 
 
-def test_attribute_channel_properties_not_columns(generated_db):
+def test_attribute_channel_properties_not_columns(fresh_db):
     """Properties routed to the attributes table must not appear as columns."""
-    codegen = json.loads(CODEGEN_MAP.read_text(encoding="utf-8"))["tables"]
-    for table, cfg in codegen.items():
-        channel = cfg.get("attribute_channel", [])
-        if not channel:
-            continue
-        cols = {
-            row[1]
-            for row in generated_db.execute(f"PRAGMA table_info({table})").fetchall()
-        }
-        leaked = cols & set(channel)
+    for table, cfg in _codegen_map().items():
+        cols = {row[1] for row in fresh_db.execute(f"PRAGMA table_info({table})")}
+        leaked = cols & set(cfg.get("attribute_channel", []))
         assert not leaked, f"{table}: attribute-channel properties as columns: {leaked}"
+
+
+def test_unmapped_schema_file_fails_the_inventory():
+    """A component the schemas add, with no table and no exclusion, is an error."""
+    schema_map = _schema_map()
+    assert codegen.inventory_problems(str(SCHEMAS_PATH), schema_map) == []
+    del schema_map["tables"]["sources"]
+    problems = codegen.inventory_problems(str(SCHEMAS_PATH), schema_map)
+    assert problems == [
+        "Operations/StaticInjection/Source.json is neither mapped to a table "
+        "nor excluded in schema_map.json"
+    ]
+
+
+def test_property_without_disposition_fails():
+    """A property the schemas add fails until sql_codegen_map.json places it, and
+    a disposition for a property the schemas dropped fails too."""
+    resolver = codegen.RefResolver(str(SCHEMAS_PATH))
+    components = _schema_map()["tables"]["sources"]
+    merged = codegen.merge_components(components, resolver)
+    cfg = _codegen_map()["sources"]
+    assert codegen.disposition_problems("sources", merged, cfg) == []
+
+    cfg["columns"].pop("internal_angle")
+    cfg["skip"] = cfg.get("skip", []) + ["no_such_property"]
+    problems = codegen.disposition_problems("sources", merged, cfg)
+    assert any(p.startswith("sources.internal_angle (Source) has no disposition") for p in problems)
+    assert "sources.no_such_property is in skip but no mapped component defines it" in problems
+
+
+def test_attribute_name_with_two_quantities_fails():
+    """attributes conventions key on the name alone, so two components that
+    route one name with different quantity kinds are an error."""
+    a = {"table": "attributes", "column": "level", "quantity_kind": "Volume", "unit": "m3"}
+    b = {"table": "attributes", "column": "level", "quantity_kind": "Elevation", "unit": "m",
+         "discriminator_value": "HEAD"}
+    _, _, problems = codegen.merge_attribute_rows(
+        [("t1", "level", [a], []), ("t2", "level", [b], [])]
+    )
+    assert problems == ["attributes.level has more than one quantity kind: "
+                        "Elevation in t2; Volume in t1"]
+
+
+def test_x_quantity_applies_only_to_the_arms_it_allows():
+    """HydroReservoir annotates one x-quantity (Elevation) on a field whose arms
+    are m, m3 and MWh; each other arm takes the one kind its unit identifies."""
+    units_index = codegen.load_units_index(str(SCHEMAS_PATH))
+    node = {"x-quantity": "Elevation"}
+    assert codegen.arm_quantity(node, "m", units_index) == "Elevation"
+    assert codegen.arm_quantity(node, "m3", units_index) == "Volume"
+    assert codegen.arm_quantity(node, "MWh", units_index) == "ElectricalEnergy"
 
 
 def test_branch_parameters_are_first_class_columns(fresh_db):
@@ -158,10 +182,10 @@ def test_branch_parameter_columns_store_values(fresh_db):
 
     make_entity(fresh_db, 1, entity_table="transmission_lines", entity_type="Line")
     fresh_db.execute(
-        "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, power_units, base_power) "
+        "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, power_units, base_power, angle_limits) "
         "VALUES (1, 'line1', ?, 100.0, 0.01, 0.1, "
         "json('{\"from\": 0.005, \"to\": 0.005}'), "
-        "json('{\"from\": 0.0, \"to\": 0.0}'), 'COMPONENT_BASE', 100.0)",
+        "json('{\"from\": 0.0, \"to\": 0.0}'), 'COMPONENT_BASE', 100.0, '{\"min\": -1.0, \"max\": 1.0}')",
         (_arc(1),),
     )
     row = fresh_db.execute(
@@ -176,8 +200,8 @@ def test_branch_parameter_columns_store_values(fresh_db):
     with pytest.raises(sqlite3.IntegrityError, match="r >= 0"):
         fresh_db.execute(
             "INSERT INTO transmission_lines "
-            "(id, name, arc_id, continuous_rating, r, x, power_units, base_power) "
-            "VALUES (2, 'line2', ?, 100.0, -0.5, 0.1, 'COMPONENT_BASE', 100.0)",
+            "(id, name, arc_id, continuous_rating, r, x, power_units, base_power, angle_limits) "
+            "VALUES (2, 'line2', ?, 100.0, -0.5, 0.1, 'COMPONENT_BASE', 100.0, '{\"min\": -1.0, \"max\": 1.0}')",
             (_arc(2),),
         )
 
@@ -224,6 +248,8 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     } == {
         ("rating", "COMPONENT_BASE"): ("ApparentPower", "pu"),
         ("rating", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
+        ("operational_flow_limit", "COMPONENT_BASE"): ("ActivePower", "pu"),
+        ("operational_flow_limit", "NATURAL_UNITS"): ("ActivePower", "MW"),
     }
 
 
@@ -268,8 +294,8 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
 def test_transformer_circuits_columns_and_units(fresh_db):
     """Circuit r/x are first-class impedance columns stored flexibly in pu on the
     component base OR natural-units ohm, recorded per row by parameter_units exactly
-    as transmission_lines does it, and the two MinMax control bands are
-    registered per control_objective value."""
+    as transmission_lines does it. Each control band has one fixed physical
+    quantity (SiennaSchemas 0.2 split the control_objective-multiplexed bands)."""
     cols = {
         row[1]: row[2]
         for row in fresh_db.execute("PRAGMA table_info(transformer_circuits)")
@@ -278,8 +304,10 @@ def test_transformer_circuits_columns_and_units(fresh_db):
     assert cols["x"] == "REAL"
     assert cols["tap"] == "REAL"
     assert cols["alpha"] == "REAL"
-    assert cols["control_limits"] == "TEXT"
-    assert cols["controlled_quantity_limits"] == "TEXT"
+    for band in ("tap_ratio_limits", "phase_angle_limits", "controlled_voltage_limits",
+                 "controlled_reactive_power_flow_limits", "controlled_active_power_flow_limits"):
+        assert cols[band] == "TEXT"
+    assert "control_limits" not in cols
     assert cols["parameter_units"] == "TEXT"
     assert "name" not in cols  # circuits are unnamed subcomponents
 
@@ -300,6 +328,9 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("base_power", "ApparentPower", "MVA"),
         ("base_voltage_primary", "Voltage", "kV"),
         ("base_voltage_secondary", "Voltage", "kV"),
+        ("tap_ratio_limits", "Dimensionless", "1"),
+        ("phase_angle_limits", "Angle", "rad"),
+        ("controlled_voltage_limits", "Voltage", "pu"),
     }
 
     assert {
@@ -334,40 +365,18 @@ def test_transformer_circuits_columns_and_units(fresh_db):
         ("active_power_flow", "NATURAL_UNITS"): ("ActivePower", "MW"),
         ("reactive_power_flow", "COMPONENT_BASE"): ("ReactivePower", "pu"),
         ("reactive_power_flow", "NATURAL_UNITS"): ("ReactivePower", "MVAr"),
+        ("operational_flow_limit", "COMPONENT_BASE"): ("ActivePower", "pu"),
+        ("operational_flow_limit", "NATURAL_UNITS"): ("ActivePower", "MW"),
+        ("controlled_active_power_flow_limits", "COMPONENT_BASE"): ("ActivePower", "pu"),
+        ("controlled_active_power_flow_limits", "NATURAL_UNITS"): ("ActivePower", "MW"),
+        ("controlled_reactive_power_flow_limits", "COMPONENT_BASE"): ("ReactivePower", "pu"),
+        ("controlled_reactive_power_flow_limits", "NATURAL_UNITS"): ("ReactivePower", "MVAr"),
     }
 
-    control_bands = {
-        (col, disc): (qt, unit)
-        for col, disc, qt, unit in fresh_db.execute(
-            "SELECT column_name, discriminator_value, quantity_kind, unit "
-            "FROM unit_conventions WHERE table_name = 'transformer_circuits' "
-            "AND discriminator_column = 'control_objective'"
-        )
-    }
-    angle_objectives = {
-        "ACTIVE_POWER_FLOW", "ACTIVE_POWER_FLOW_DISABLED",
-        "ASYMMETRIC_ACTIVE_POWER_FLOW", "ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED",
-    }
-    schema_objectives = set(
-        load_schemas_json("Operations/common.json")["$defs"][
-            "TransformerControlObjective"
-        ]["enum"]
-    )
-    objectives = {disc for (col, disc) in control_bands if col == "control_limits"}
-    assert objectives == schema_objectives
-    assert objectives == {
-        disc for (col, disc) in control_bands if col == "controlled_quantity_limits"
-    }
-    for objective in objectives:
-        if objective in angle_objectives:
-            assert control_bands[("control_limits", objective)] == ("Angle", "rad")
-            assert control_bands[("controlled_quantity_limits", objective)] == (
-                "ActivePower", "MW",
-            )
-        else:
-            assert control_bands[("control_limits", objective)] == (
-                "Dimensionless", "1",
-            )
+    assert not fresh_db.execute(
+        "SELECT 1 FROM unit_conventions WHERE table_name = 'transformer_circuits' "
+        "AND discriminator_column = 'control_objective'"
+    ).fetchall()
 
 
 def test_transformer_tables_magnetizing_shunt_units(fresh_db):

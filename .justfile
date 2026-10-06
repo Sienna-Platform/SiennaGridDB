@@ -37,6 +37,10 @@ create-views db=db-name: create-unit-registry
 new-db db=db-name: create-schema create-triggers create-unit-registry create-views
     @{{sqlite-command}} {{sqlite-options}} {{db}} "select count(*) from entities;"
 
+# Regenerate the component tables in schema.sql and their unit conventions from the schemas.
+generate-schema schemas="../SiennaSchemas":
+    @{{python-command}} scripts/generate_sql_schema.py --schemas-path {{schemas}}
+
 # Regenerate the checked-in unit registry from units.json + column_conventions.json.
 generate-registry:
     @{{python-command}} scripts/generate_unit_registry.py

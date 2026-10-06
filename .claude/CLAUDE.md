@@ -40,7 +40,7 @@ SiennaSchemas/Core/units.json  +  schema/column_conventions.json (DB-owned colum
 
 Cross-repo paths are **flags with `../` defaults, not a required layout**: `generate_unit_registry.py --units-json`, `check_units_sync.py --schemas-path` / `--psy-path` / `--db`. CI checks the sibling repos out flat and passes explicit paths, so don't assume a sibling checkout — pass the flag.
 
-- `schema/schema.sql` (tables), `schema/triggers.sql` (integrity: entity-existence, arc-type, hydro-topology), and `schema/views.sql` (`column_units`, `operational_data`) are **hand-written and authoritative**. `scripts/generate_sql_schema.py` plus `schema/sql_codegen_map.json` produce the *reference* projection `schema/generated_schema.sql` from the SiennaSchemas components; CI checks staleness and reports drift against the hand-written DDL via `--diff`.
+- **The component tables are generated.** `scripts/generate_sql_schema.py` (`just generate-schema`) writes every `schema_map.json` table into the marked region at the end of `schema/schema.sql`, and the `"source": "schemas"` entries of `column_conventions.json`. It is closed-world: a schema file not mapped or `excluded`, or a property with no disposition in `sql_codegen_map.json`, fails generation and CI (`--check`). Never edit the region; edit the maps and regenerate. The rest of `schema.sql`, `triggers.sql` (integrity: entity-existence, arc-type, hydro-topology), and `views.sql` (`column_units`, `operational_data`, the service views) are hand-written. `.schema-version` pins the SiennaSchemas release; `update-schema.yml` moves it on each `schema-release` dispatch.
 - No converter loads a PSY `System` into these tables or back. Table shapes and `column_conventions.json` deliberately mirror PSY fields (natural units; `operation_cost` JSON blobs must use `NATURAL_UNITS`; `base_power` per-unitization columns) so the future bridge is mechanical.
 - **AC vs DC topologies**: `entity_types.is_dc` marks the DC side of the network (PSY `DCBus`). All three point-to-point HVDC variants (`TwoTerminalGenericHVDCLine`, `TwoTerminalLCCLine`, `TwoTerminalVSCLine`) live in one `two_terminal_hvdc_lines` table, discriminated by `converter_type` (`GENERIC` | `LCC` | `VSC`). `tmodel_hvdc_lines` is different: it's the DC-network branch running between two `is_dc = 1` topologies — the multi-terminal HVDC building block, not a point-to-point device.
 
@@ -88,8 +88,9 @@ python3 -c "import json;print(sorted({e['column'] for e in json.load(open('schem
 ## Warnings / stale bits
 
 - **`schema/schema.sql` DROPs all tables** — test-only; never apply to a live dataset.
-- `schema/coverage_decisions.json` is a decision record, not a gate: nothing reads it, and the generated-DDL drift report prints coverage gaps without failing on them. Expect it to drift from `sql_codegen_map.json`.
-- No table records **which devices contribute to which service**. Service/reserve membership has no association table here and no schema upstream, unlike `supplemental_attribute_associations`. If reserve participation needs to round-trip, that gap is the blocker.
+- `schema/coverage_decisions.json` holds the rules for choosing a disposition; `sql_codegen_map.json` holds the enforced result. Nothing reads the former.
+- **Which devices contribute to which service** is only `service_associations` rows (SiennaSchemas `ServiceAssociation`), never a list on the service or the device.
+  The service views in `views.sql` (`service_contributors`, `interface_branch_directions`, `interface_direction_violations`, `service_bid_offers`, `service_bids`, `service_offer_violations`) read it.
 
 <tone_preference>
 Keep outputs reasonably concise. Lead with the outcome, and let the build gates stand in for extra verification passes.

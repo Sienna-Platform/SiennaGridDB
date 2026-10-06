@@ -1,6 +1,12 @@
 {
-  "description": "SiennaGridDB DB-table -> SiennaSchemas component map. Consumed by scripts/check_units_sync.py to resolve every unit_conventions/column_conventions row (keyed by DB table+column) to the same-named property on each mapped schema component, and to reach the same-named PowerSystems.jl struct for the PSY-descriptor layer. 'file' paths are relative to the SiennaSchemas checkout root (default ../SiennaSchemas). 'is_psy' marks components that also correspond to a PowerSystems.jl generated struct (checked in layer L3); Investments technology components have no PSY struct (is_psy=false) so they are skipped by L3. Derived from column_conventions.json tables + the schema file inventory; four technology schemas noted as deleted-on-main are not mapped. Every listed file is verified to exist by the checker before use.",
+  "description": "SiennaGridDB DB-table -> SiennaSchemas component map. 'tables' lists the components each generated table stores; scripts/generate_sql_schema.py writes those tables into schema/schema.sql, and scripts/check_units_sync.py resolves each column_conventions row to the same-named property on each component. 'file' paths are relative to the SiennaSchemas root. 'is_psy' marks components with a same-named PowerSystems.jl struct (layer L3 of check_units_sync.py). 'excluded' maps a schema file or directory prefix to the reason it has no generated table; generate_sql_schema.py fails on any schema file that is neither mapped nor excluded, so a new component in a schema release needs a decision here.",
   "tables": {
+    "planning_regions": [
+      {"component": "Area", "file": "Core/Topology/Area.json", "is_psy": true}
+    ],
+    "arcs": [
+      {"component": "Arc", "file": "Core/Topology/Arc.json", "is_psy": true}
+    ],
     "thermal_generators": [
       {"component": "ThermalStandard", "file": "Operations/StaticInjection/ThermalStandard.json", "is_psy": true},
       {"component": "ThermalMultiStart", "file": "Operations/StaticInjection/ThermalMultiStart.json", "is_psy": true}
@@ -30,11 +36,18 @@
       {"component": "ShiftablePowerLoad", "file": "Operations/StaticInjection/ShiftablePowerLoad.json", "is_psy": true}
     ],
     "transmission_lines": [
-      {"component": "Line", "file": "Operations/Branch/Line.json", "is_psy": true},
-      {"component": "MonitoredLine", "file": "Operations/Branch/MonitoredLine.json", "is_psy": true}
+      {"component": "Line", "file": "Operations/Branch/Line.json", "is_psy": true}
     ],
     "transmission_interchanges": [
       {"component": "AreaInterchange", "file": "Operations/Branch/AreaInterchange.json", "is_psy": true}
+    ],
+    "reserves": [
+      {"component": "OnlineReserve", "file": "Operations/Service/OnlineReserve.json", "is_psy": true},
+      {"component": "OfflineReserve", "file": "Operations/Service/OfflineReserve.json", "is_psy": true},
+      {"component": "GroupReserve", "file": "Operations/Service/GroupReserve.json", "is_psy": true}
+    ],
+    "transmission_interfaces": [
+      {"component": "TransmissionInterface", "file": "Operations/Service/TransmissionInterface.json", "is_psy": true}
     ],
     "discrete_controlled_ac_branches": [
       {"component": "DiscreteControlledACBranch", "file": "Operations/Branch/DiscreteControlledACBranch.json", "is_psy": true}
@@ -76,7 +89,8 @@
     ],
     "balancing_topologies": [
       {"component": "ACBus", "file": "Core/Topology/ACBus.json", "is_psy": true},
-      {"component": "DCBus", "file": "Core/Topology/DCBus.json", "is_psy": true}
+      {"component": "DCBus", "file": "Core/Topology/DCBus.json", "is_psy": true},
+      {"component": "LoadZone", "file": "Core/Topology/LoadZone.json", "is_psy": true}
     ],
     "supply_technologies": [
       {"component": "SupplyTechnology", "file": "Investments/Technologies/SupplyTechnology.json", "is_psy": false}
@@ -101,5 +115,30 @@
     "point_to_point_bids": [
       {"component": "PointToPointBid", "file": "Operations/Market/PointToPointBid.json", "is_psy": true}
     ]
+  },
+  "excluded": {
+    "Core/Associations/SupplementalAttributeAssociation.json": "Hand-written supplemental_attribute_associations table, which mirrors the infrastore catalog.",
+    "Core/SupplementalAttributes/": "Stored as typed JSON in the hand-written supplemental_attributes table.",
+    "Core/SystemDocument.json": "Document envelope, not a component.",
+    "Dynamics/": "Dynamic components are out of scope for the database.",
+    "Investments/Associations/RequirementAssociation.json": "No table yet.",
+    "Investments/Financials/PortfolioFinancialData.json": "No table yet.",
+    "Investments/Financials/TechnologyFinancialData.json": "Stored as the financial_data JSON column of the technology tables.",
+    "Investments/PortfolioDocument.json": "Document envelope, not a component.",
+    "Investments/Requirements/": "No table yet.",
+    "Investments/SupplementalAttributes/": "Stored as typed JSON in the hand-written supplemental_attributes table.",
+    "Investments/Technologies/ColocatedSupplyStorageTechnology.json": "No table yet.",
+    "Investments/Technologies/DemandSideTechnology.json": "No table yet.",
+    "Operations/Associations/CombinedCycleAssociation.json": "Hand-written combined_cycle_associations table.",
+    "Operations/Associations/PlantAssociation.json": "Hand-written plant_associations table.",
+    "Operations/Associations/ServiceAssociation.json": "Hand-written service_associations table.",
+    "Operations/Associations/TradingHubAssociation.json": "Hand-written trading_hub_associations table.",
+    "Operations/Associations/VoltageControlAssociation.json": "No table yet.",
+    "Operations/Branch/GenericArcImpedance.json": "No table yet.",
+    "Operations/Market/BilateralTransaction.json": "No table yet.",
+    "Operations/Service/AGC.json": "No table yet.",
+    "Operations/StaticInjection/HybridSystem.json": "No table yet.",
+    "Operations/SupplementalAttributes/": "Stored as typed JSON in supplemental_attributes, or in plants for the plant types.",
+    "TimeSeries/": "Hand-written time_series_associations and static_time_series tables, which mirror the infrastore catalog."
   }
 }

@@ -21,9 +21,9 @@ import pytest
 from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
-EXPECTED_QUANTITY_TYPES = 41
-EXPECTED_ALLOWED_UNITS = 66
-EXPECTED_UNIT_CONVENTIONS = 405
+EXPECTED_QUANTITY_TYPES = 42
+EXPECTED_ALLOWED_UNITS = 67
+EXPECTED_UNIT_CONVENTIONS = 534
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -54,6 +54,8 @@ COMPLETENESS_ALLOWLIST = {
     # non-binding sentinel ceiling, not unit-converted on the PSY side (no x-unit
     # in the schema; see schema.sql's facts_control_devices comment)
     ("facts_control_devices", "max_reactive_power"),
+    # penalty cost with no unit annotation in the schemas
+    ("transmission_interfaces", "violation_penalty"),
 }
 
 
@@ -644,8 +646,10 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, parameter_units=None):
         "INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)",
         (arc_eid, from_eid, to_eid),
     )
-    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x", "power_units", "base_power"]
-    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x, "COMPONENT_BASE", 100.0]
+    cols = ["id", "name", "arc_id", "continuous_rating", "r", "x", "power_units", "base_power",
+            "angle_limits"]
+    vals = [entity_id, f"line_{entity_id}", arc_eid, 100.0, r, x, "COMPONENT_BASE", 100.0,
+            '{"min": -1.0, "max": 1.0}']
     if parameter_units is not None:
         cols.append("parameter_units")
         vals.append(parameter_units)
@@ -831,7 +835,7 @@ def _storage_cost(charge_pu="NATURAL_UNITS", discharge_pu="NATURAL_UNITS"):
 
 def _insert_storage_unit(conn, unit_id, topo_id, operation_cost):
     conn.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES ('BA')")
-    conn.execute("INSERT OR IGNORE INTO storage_technology_types(name) VALUES ('LI')")
+    conn.execute("INSERT OR IGNORE INTO storage_technology_types(name) VALUES ('LIB')")
     make_entity(conn, unit_id, entity_table="storage_units")
     conn.execute(
         "INSERT INTO storage_units("
@@ -839,7 +843,7 @@ def _insert_storage_unit(conn, unit_id, topo_id, operation_cost):
         "rating, base_power, power_units, storage_capacity, storage_level_limits, "
         "initial_storage_capacity_level, input_active_power_limits, "
         "output_active_power_limits, efficiency, operation_cost) "
-        "VALUES (?, 'su', 'BA', 'LI', ?, 1.0, 1.0, 'COMPONENT_BASE', 1.0, "
+        "VALUES (?, 'su', 'BA', 'LIB', ?, 1.0, 1.0, 'COMPONENT_BASE', 1.0, "
         "'{\"min\":0,\"max\":1}', 0.0, '{\"min\":0,\"max\":1}', "
         "'{\"min\":0,\"max\":1}', '{\"in\":0.9,\"out\":0.9}', ?)",
         (unit_id, topo_id, operation_cost),
@@ -851,8 +855,8 @@ def _insert_storage_technology(conn, tech_id, operation_costs):
     make_entity(conn, tech_id, entity_table="storage_technologies")
     conn.execute(
         "INSERT INTO storage_technologies("
-        "id, name, prime_mover_type, region, power_systems_type, financial_data, "
-        "operation_costs) VALUES (?, 'st', 'BA', '[\"r\"]', 'EnergyReservoirStorage', "
+        "id, name, prime_mover_type, storage_tech, region, power_systems_type, financial_data, "
+        "operation_costs) VALUES (?, 'st', 'BA', 'LIB', '[\"r\"]', 'EnergyReservoirStorage', "
         "'{}', ?)",
         (tech_id, operation_costs),
     )
@@ -1293,19 +1297,22 @@ def test_flexible_basis_columns_registered(db):
 
 
 def test_merged_hvdc_columns_registered(db):
-    """The consolidated two_terminal_hvdc_lines registers its own columns; the
-    variant-specific fields live in attributes instead."""
+    """The consolidated two_terminal_hvdc_lines registers its own columns (natural
+    arm shown); the variant-specific fields live in attributes instead."""
     rows = dict(
         db.execute(
             "SELECT column_name, quantity_kind || '/' || unit FROM unit_conventions "
-            "WHERE table_name='two_terminal_hvdc_lines'"
+            "WHERE table_name='two_terminal_hvdc_lines' "
+            "AND ifnull(discriminator_value, 'NATURAL_UNITS') = 'NATURAL_UNITS'"
         ).fetchall()
     )
     assert rows == {
         "active_power_flow": "ActivePower/MW",
-        "active_power_limits_from": "ActivePower/MW",
-        "active_power_limits_to": "ActivePower/MW",
         "base_power": "ApparentPower/MVA",
+        "operational_flow_limit": "ActivePower/MW",
+        "rating": "ApparentPower/MVA",
+        "rating_from": "ApparentPower/MVA",
+        "rating_to": "ApparentPower/MVA",
         "reactive_power_limits_from": "ReactivePower/MVAr",
         "reactive_power_limits_to": "ReactivePower/MVAr",
     }
@@ -1315,89 +1322,62 @@ def test_merged_hvdc_columns_registered(db):
         ).fetchone(), f"{gone} conventions outlived the table"
 
 
+# Attribute conventions derive from the schemas' x-unit / x-units annotations
+# (generate_sql_schema.py). A power_units-discriminated field registers both arms,
+# so an attributes row must use one of them; the trigger accepts any registered arm.
 @pytest.mark.parametrize(
     "name,expected",
     [
-        # Physical quantities registered on attributes.
-        ("magnitude", "Voltage/pu"),
-        ("base_voltage", "Voltage/kV"),
-        ("angle", "Angle/rad"),
-        ("angle_limits", "Angle/rad"),
-        ("active_power_flow", "ActivePower/MW"),
-        ("reactive_power_flow", "ReactivePower/MVAr"),
-        ("max_active_power", "ActivePower/MW"),
-        ("time_at_status", "OperationalDuration/min"),
-        ("load_response", "PowerPerFrequency/MW/Hz"),
-        ("voltage", "Voltage/kV"),
-        ("value_of_lost_load", "CostPerEnergy/USD/MWh"),
-        ("start_fuel_mmbtu_per_mw", "StartFuelPerCapacity/MMBtu/MW"),
-        # A per-length impedance: Core/units.json has no ohm/km or pu/km, so no
-        # valid pair exists to register and each row must state its own unit.
-        ("resistance", None),
-        ("reactance", None),
-        # Curve blobs whose numeric leaves carry different dimensions.
-        ("unserved_demand_curve", None),
-        # Unambiguous unit -> registered, so a writer cannot get it wrong.
-        ("rectifier_delay_angle", "Angle/deg"),
-        ("inverter_extinction_angle_limits", "Angle/deg"),
-        ("rectifier_bridges", "Dimensionless/1"),
-        ("inverter_base_voltage", "Voltage/kV"),
-        ("dc_current", "CurrentFlow/A"),
-        ("rating_from", "ApparentPower/MVA"),
-        ("reactive_power_to", "ReactivePower/MVAr"),
-        ("rmpct_from", "Fraction/1"),
-        # Unit depends on a basis choice or a sibling control mode. A convention's
-        # discriminator_column names a sibling *column*, which an attributes row
-        # does not have, so these stay unregistered and each row carries its own
-        # unit/quantity_kind (validated against allowed_units by the insert trigger).
-        ("r", None),
-        ("rectifier_rc", None),
-        ("scheduled_dc_voltage", None),
-        ("g", None),
-        ("voltage_limits_from", None),
-        ("dc_setpoint_from", None),
-        ("ac_setpoint_to", None),
-        ("transfer_setpoint", None),
-        ("dc_voltage_droop_from", None),
-        ("loss", None),
-        ("converter_loss_from", None),
+        ("angle_limits", ["Angle/rad"]),
+        ("time_at_status", ["OperationalDuration/min"]),
+        ("load_response", ["PowerPerFrequency/MW/Hz"]),
+        ("voltage", ["Voltage/kV"]),
+        ("value_of_lost_load", ["CostPerEnergy/USD/MWh"]),
+        # SiennaSchemas 0.2 annotates the LCC angles in rad.
+        ("rectifier_delay_angle", ["Angle/rad"]),
+        ("inverter_extinction_angle_limits", ["Angle/rad"]),
+        ("rectifier_bridges", ["Dimensionless/1"]),
+        ("inverter_base_voltage", ["Voltage/kV"]),
+        ("dc_current", ["CurrentFlow/A"]),
+        ("rmpct_from", ["Fraction/1"]),
+        # 0.2 made HVDC impedances and voltages natural units only.
+        ("r", ["Resistance/ohm"]),
+        ("rectifier_rc", ["Resistance/ohm"]),
+        ("scheduled_dc_voltage", ["Voltage/kV"]),
+        ("voltage_limits_from", ["Voltage/kV"]),
+        ("reactive_power_to", ["ReactivePower/MVAr", "ReactivePower/pu"]),
+        # Curves with no unit annotation are attribute_identifiers instead.
+        ("loss", []),
+        ("converter_loss_from", []),
+        # Removed by 0.2 (one field per quantity replaced the mode-multiplexed ones).
+        ("dc_setpoint_from", []),
+        ("transfer_setpoint", []),
     ],
 )
 def test_demoted_hvdc_attribute_conventions(db, name, expected):
     rows = db.execute(
-        "SELECT quantity_kind || '/' || unit FROM unit_conventions "
+        "SELECT DISTINCT quantity_kind || '/' || unit FROM unit_conventions "
         "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
         (name,),
     ).fetchall()
-    if expected is None:
-        assert rows == [], f"attributes.{name} should stay unregistered, got {rows}"
-    else:
-        assert [r[0] for r in rows] == [expected]
+    assert sorted(r[0] for r in rows) == expected
 
 
 @pytest.mark.parametrize(
     "name,expected",
     [
-        # ThermalMultiStart fields routed through attribute_channel (C8):
-        # unambiguous units get a fixed convention, same as time_at_status.
-        ("start_time_limits", "OperationalDuration/min"),
-        ("start_types", "Dimensionless/1"),
-        # power_units-discriminated, same reason r/dc_setpoint_* stay unregistered
-        # above: the discriminator column lives on thermal_generators, not on the
-        # attributes row itself.
-        ("power_trajectory", None),
+        ("start_time_limits", ["OperationalDuration/min"]),
+        ("start_types", ["Dimensionless/1"]),
+        ("power_trajectory", ["ActivePower/MW", "ActivePower/pu"]),
     ],
 )
 def test_thermal_multistart_attribute_conventions(db, name, expected):
     rows = db.execute(
-        "SELECT quantity_kind || '/' || unit FROM unit_conventions "
+        "SELECT DISTINCT quantity_kind || '/' || unit FROM unit_conventions "
         "WHERE table_name='attributes' AND LOWER(column_name)=LOWER(?)",
         (name,),
     ).fetchall()
-    if expected is None:
-        assert rows == [], f"attributes.{name} should stay unregistered, got {rows}"
-    else:
-        assert [r[0] for r in rows] == [expected]
+    assert sorted(r[0] for r in rows) == expected
 
 
 def test_attribute_start_time_limits_registered_unit_accepted(fresh_db):
@@ -1423,26 +1403,30 @@ def test_attribute_start_time_limits_wrong_unit_rejected(fresh_db):
         )
 
 
-def test_interconnecting_converter_setpoints_two_discriminator(db):
-    """InterconnectingConverter dc_setpoint/ac_setpoint are mode-multiplexed by
-    dc_control/ac_control, the same enums used by TwoTerminalVSCLine; their
-    voltage-mode rows carry a second discriminator (parameter_units) so pu vs kV is
-    also explicit."""
+def test_interconnecting_converter_setpoints_one_quantity_each(db):
+    """SiennaSchemas 0.2 replaced the mode-multiplexed dc_setpoint/ac_setpoint
+    with one setpoint per physical quantity, each with a fixed unit; voltage
+    fields are natural units only."""
     rows = set(db.execute(
-        "SELECT column_name, discriminator_value, discriminator_value_2, quantity_kind, unit "
+        "SELECT column_name, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name='interconnecting_converters' "
-        "AND column_name IN ('dc_setpoint','ac_setpoint')"
+        "AND column_name LIKE '%setpoint'"
     ).fetchall())
-    assert ('dc_setpoint','DC_POWER',None,'ActivePower','MW') in rows
-    assert ('dc_setpoint','DC_VOLTAGE','COMPONENT_BASE','Voltage','pu') in rows
-    assert ('ac_setpoint','AC_VOLTAGE','NATURAL_UNITS','Voltage','kV') in rows
+    assert rows == {
+        ("dc_power_setpoint", "COMPONENT_BASE", "ActivePower", "pu"),
+        ("dc_power_setpoint", "NATURAL_UNITS", "ActivePower", "MW"),
+        ("dc_voltage_setpoint", None, "Voltage", "kV"),
+        ("ac_voltage_setpoint", None, "Voltage", "kV"),
+        ("power_factor_setpoint", None, "PowerFactor", "1"),
+    }
 
 
 # Basis resolvability invariant: every pu convention names a unit_basis_rules
 # entry and every base ref resolves to a real, reachable column.
 # generate_unit_registry.py does not validate this, so this is the only check
-# that catches a typo'd ref or a new pu column with no rule.
-ATTRIBUTES_BASE_REF_EXEMPT = {("attributes", "magnitude"), ("attributes", "voltage_limits")}
+# that catches a typo'd ref or a new pu column with no rule. An attributes row
+# has no same-row base: it resolves against its owning entity's row, so it
+# needs a rule but carries no base ref.
 
 
 def _table_exists(conn, table):
@@ -1500,10 +1484,10 @@ def _resolves_ref(conn, table, ref):
 
 
 def test_pu_conventions_have_resolvable_basis(db):
-    """THE resolvability invariant. For every unit='pu' convention (excluding
-    the two documented attributes exemptions): (a) a unit_basis_rules row
-    exists for its quantity_kind, (b) it names at least one base ref, and (c)
-    every base_power_ref/base_voltage_ref it declares resolves."""
+    """THE resolvability invariant. For every unit='pu' convention: (a) a
+    unit_basis_rules row exists for its quantity_kind, (b) it names at least one
+    base ref, and (c) every base_power_ref/base_voltage_ref it declares resolves.
+    attributes rows need (a) only and must name no ref."""
     rows = db.execute(
         "SELECT table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref "
         "FROM unit_conventions WHERE unit = 'pu'"
@@ -1512,26 +1496,17 @@ def test_pu_conventions_have_resolvable_basis(db):
 
     rule_types = {r[0] for r in db.execute("SELECT quantity_kind FROM unit_basis_rules")}
 
-    exempt_seen = set()
     failures = []
     for table_name, column_name, quantity_kind, base_power_ref, base_voltage_ref in rows:
-        key = (table_name, column_name)
-        if table_name == "attributes":
-            exempt_seen.add(key)
-            if key not in ATTRIBUTES_BASE_REF_EXEMPT:
-                failures.append(
-                    f"{table_name}.{column_name}: pu attributes row not in the "
-                    "documented base-ref exemption allowlist"
-                )
-            continue
-
+        if table_name == "attributes" and (base_power_ref or base_voltage_ref):
+            failures.append(f"attributes.{column_name}: an attributes row has no same-row base")
         if quantity_kind not in rule_types:
             failures.append(
                 f"{table_name}.{column_name}: no unit_basis_rules row for "
                 f"quantity_kind={quantity_kind}"
             )
 
-        if base_power_ref is None and base_voltage_ref is None:
+        if table_name != "attributes" and base_power_ref is None and base_voltage_ref is None:
             failures.append(
                 f"{table_name}.{column_name}: pu row carries neither "
                 "base_power_ref nor base_voltage_ref"
@@ -1549,10 +1524,6 @@ def test_pu_conventions_have_resolvable_basis(db):
                 )
 
     assert failures == [], "\n".join(failures)
-    assert exempt_seen == ATTRIBUTES_BASE_REF_EXEMPT, (
-        "attributes pu rows exempt from base refs must be EXACTLY "
-        f"{ATTRIBUTES_BASE_REF_EXEMPT}, got {exempt_seen}"
-    )
 
 
 # parameter_units CHECK constraint, on every table that carries the column (derived
@@ -1610,8 +1581,9 @@ def _build_transmission_line(conn, base_id, parameter_units):
     make_entity(conn, base_id, entity_table="transmission_lines", entity_type="Line")
     conn.execute(
         "INSERT INTO transmission_lines"
-        "(id, name, arc_id, continuous_rating, r, x, parameter_units, power_units, base_power) "
-        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?, 'COMPONENT_BASE', 100.0)",
+        "(id, name, arc_id, continuous_rating, r, x, parameter_units, power_units, base_power, "
+        "angle_limits) VALUES (?, ?, ?, 100.0, 0.01, 0.1, ?, 'COMPONENT_BASE', 100.0, "
+        "'{\"min\": -1.0, \"max\": 1.0}')",
         (base_id, f"line_{base_id}", arc, parameter_units),
     )
 
@@ -1620,8 +1592,8 @@ def _build_transformer_circuit(conn, base_id, parameter_units):
     arc = _provision_arc(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="transformer_circuits", entity_type="Circuit")
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, parameter_units, power_units, base_power) "
-        "VALUES (?, ?, ?, 'COMPONENT_BASE', 100.0)",
+        "INSERT INTO transformer_circuits(id, arc_id, parameter_units, rating, power_units, base_power) "
+        "VALUES (?, ?, ?, 100.0, 'COMPONENT_BASE', 100.0)",
         (base_id, arc, parameter_units),
     )
 
@@ -1673,39 +1645,15 @@ def _build_source(conn, base_id, parameter_units):
     )
 
 
-def _build_tmodel_hvdc_line(conn, base_id, parameter_units):
-    arc = _provision_arc(conn, base_id * 100, is_dc=1)
-    make_entity(conn, base_id, entity_table="tmodel_hvdc_lines", entity_type="TModelHVDCLine")
-    conn.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, parameter_units, base_current) "
-        "VALUES (?, ?, ?, 0.01, ?, 100.0)",
-        (base_id, f"tm_{base_id}", arc, parameter_units),
-    )
-
-
 def _build_facts_control_device(conn, base_id, parameter_units):
     bus = _provision_bus(conn, base_id * 100)
     make_entity(conn, base_id, entity_table="facts_control_devices", entity_type="FACTSControlDevice")
     conn.execute(
         "INSERT INTO facts_control_devices"
-        "(id, name, bus, voltage_setpoint, parameter_units, power_units, base_power) "
-        "VALUES (?, ?, ?, 1.0, ?, 'COMPONENT_BASE', 100.0)",
+        "(id, name, bus, voltage_setpoint, parameter_units, power_units, base_power, "
+        "max_shunt_current, reactive_power_required) "
+        "VALUES (?, ?, ?, 1.0, ?, 'COMPONENT_BASE', 100.0, 9999.0, 0.0)",
         (base_id, f"facts_{base_id}", bus, parameter_units),
-    )
-
-
-def _build_interconnecting_converter(conn, base_id, parameter_units):
-    ac_bus = _provision_bus(conn, base_id * 100, is_dc=0)
-    dc_bus = _provision_bus(conn, base_id * 100 + 1, is_dc=1)
-    make_entity(
-        conn, base_id, entity_table="interconnecting_converters",
-        entity_type="InterconnectingConverter",
-    )
-    conn.execute(
-        "INSERT INTO interconnecting_converters"
-        "(id, name, bus, dc_bus, parameter_units, power_units, base_power) "
-        "VALUES (?, ?, ?, ?, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, f"conv_{base_id}", ac_bus, dc_bus, parameter_units),
     )
 
 
@@ -1714,9 +1662,7 @@ UNIT_BASIS_BUILDERS = {
     "transformer_circuits": _build_transformer_circuit,
     "three_winding_transformers": _build_three_winding_transformer,
     "sources": _build_source,
-    "tmodel_hvdc_lines": _build_tmodel_hvdc_line,
     "facts_control_devices": _build_facts_control_device,
-    "interconnecting_converters": _build_interconnecting_converter,
 }
 
 
@@ -1777,15 +1723,14 @@ def test_switched_admittance_admittance_units_conventions(db):
     rows = db.execute(
         "SELECT column_name, discriminator_column, discriminator_value, quantity_kind, unit "
         "FROM unit_conventions WHERE table_name = 'switched_admittance' "
-        "AND column_name IN ('Y_increase', 'solved_admittance', 'admittance_limits')"
+        "AND column_name IN ('Y_increase', 'solved_admittance', 'voltage_limits')"
     ).fetchall()
     assert set(rows) == {
         ("Y_increase", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
         ("Y_increase", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
         ("solved_admittance", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
         ("solved_admittance", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
-        ("admittance_limits", "admittance_units", "NATURAL_UNITS", "Susceptance", "S"),
-        ("admittance_limits", "admittance_units", "COMPONENT_MVAR", "ReactivePower", "MVAr"),
+        ("voltage_limits", None, None, "Voltage", "pu"),
     }
 
 
