@@ -55,7 +55,7 @@ def component_tables(inputs):
     return {t: list(c) for t, c in inputs["schema_map"].items()}
 
 
-def attribute_plan(name, comp, prop_name, prop, resolver, units_index):
+def attribute_plan(name, comp, prop_name, prop, resolver, units_index, unit_override):
     """How the runtimes write one attribute-channel field.
 
     Mirrors the conventions generate_sql_schema.py registers for the field:
@@ -64,7 +64,9 @@ def attribute_plan(name, comp, prop_name, prop, resolver, units_index):
     attribute_identifiers lets through with no unit.
     """
     entry = {"node": prop, "file": comp["file"], "owners": [name]}
-    convs, owners, problems = attribute_rows(prop_name, entry, resolver, units_index)
+    convs, owners, problems = attribute_rows(
+        prop_name, entry, resolver, units_index, unit_override
+    )
     if problems:
         raise ManifestError("; ".join(problems))
     if any("discriminator_column_2" in c for c in convs):
@@ -149,7 +151,10 @@ def component_entry(conn, resolver, inputs, table, comp, rank, units_index):
             continue
         elif prop_name in attribute_channel:
             attributes.append(
-                attribute_plan(name, comp, prop_name, prop, resolver, units_index)
+                attribute_plan(
+                    name, comp, prop_name, prop, resolver, units_index,
+                    cfg.get("attribute_units", {}).get(prop_name),
+                )
             )
         elif prop_name in skip:
             skipped.append(prop_name)

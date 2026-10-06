@@ -979,8 +979,13 @@
           "unit_field": "power_units"
         },
         {
-          "arms": {},
-          "exempt": true,
+          "arms": {
+            "": {
+              "quantity_kind": "Dimensionless",
+              "unit": "1"
+            }
+          },
+          "exempt": false,
           "field": "efficiency",
           "unit_field": null
         },
