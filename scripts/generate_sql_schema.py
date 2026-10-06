@@ -38,7 +38,8 @@ A new schema release therefore fails here until each new property is assigned
 to exactly one of:
   columns            a column; the value is an override object (may be empty)
   attribute_channel  a row in the generic `attributes` table
-  decomposed         split into DB-only columns (listed in `columns` with "sql")
+  decomposed         split into DB-only columns (listed in `columns` with "sql");
+                     the value maps each column to its JSON path in the property
   skip               not persisted
 
 Column overrides (all optional):
@@ -75,11 +76,14 @@ Modes:
 """
 
 import argparse
+import functools
 import json
 import os
+import re
 import sys
 
 from _common import load_json, sql_literal
+from generate_unit_registry import UNIT_BASIS_RULES
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_SCHEMAS_PATH = os.path.normpath(os.path.join(REPO_ROOT, "..", "SiennaSchemas"))
@@ -101,19 +105,11 @@ NON_SCHEMA_DIRS = {"docs", "scripts", "tests", "node_modules"}
 
 DISPOSITIONS = ("columns", "attribute_channel", "decomposed", "skip")
 
-# The pu base each quantity kind divides by, per generate_unit_registry.py's
-# UNIT_BASIS_RULES. A pu convention gets these same-row columns unless the
-# column overrides them with unit_base.
+# The pu base columns of each quantity kind. A pu convention gets these same-row
+# columns unless the column overrides them with unit_base.
 PU_BASES = {
-    "ActivePower": ("base_power",),
-    "ReactivePower": ("base_power",),
-    "ApparentPower": ("base_power",),
-    "ActivePowerChangeRate": ("base_power",),
-    "Voltage": ("base_voltage",),
-    "Resistance": ("base_power", "base_voltage"),
-    "Reactance": ("base_power", "base_voltage"),
-    "Susceptance": ("base_power", "base_voltage"),
-    "Conductance": ("base_power", "base_voltage"),
+    rule["quantity_kind"]: tuple(sorted(set(re.findall(r"base_\w+", rule["base_expression"]))))
+    for rule in UNIT_BASIS_RULES
 }
 
 
@@ -123,39 +119,30 @@ class GenerationError(Exception):
         self.problems = problems
 
 
-class RefResolver:
-    """Resolves relative-file $refs the way bundle_specs.py does."""
-
-    def __init__(self, schemas_root):
-        self.schemas_root = schemas_root
-        self.cache = {}
-
-    def doc(self, rel_path):
-        norm = os.path.normpath(rel_path)
-        if norm not in self.cache:
-            self.cache[norm] = load_json(os.path.join(self.schemas_root, norm))
-        return self.cache[norm]
-
-    def resolve(self, ref, current_rel_file):
-        file_part, _, frag = ref.partition("#")
-        if file_part:
-            base_dir = os.path.dirname(current_rel_file)
-            target_rel = os.path.normpath(os.path.join(base_dir, file_part))
-        else:
-            target_rel = current_rel_file
-        node = self.doc(target_rel)
-        for part in [p for p in frag.split("/") if p]:
-            node = node[part]
-        return node, target_rel
+@functools.lru_cache(maxsize=None)
+def schema_doc(schemas_root, rel_path):
+    return load_json(os.path.join(schemas_root, os.path.normpath(rel_path)))
 
 
-def sql_type_for(prop, resolver, rel_file):
+def resolve_ref(schemas_root, ref, current_rel_file):
+    """Resolves a relative-file $ref the way bundle_specs.py does."""
+    file_part, _, frag = ref.partition("#")
+    target_rel = current_rel_file
+    if file_part:
+        target_rel = os.path.normpath(os.path.join(os.path.dirname(current_rel_file), file_part))
+    node = schema_doc(schemas_root, target_rel)
+    for part in [p for p in frag.split("/") if p]:
+        node = node[part]
+    return node, target_rel
+
+
+def sql_type_for(prop, schemas_root, rel_file):
     """Returns (json_kind, enum_values, type_nullable).
 
     json_kind is one of integer/number/boolean/string/json.
     """
     if "$ref" in prop:
-        target, _ = resolver.resolve(prop["$ref"], rel_file)
+        target, _ = resolve_ref(schemas_root, prop["$ref"], rel_file)
         if "enum" in target:
             return "string", list(target["enum"]), False
         return "json", None, False
@@ -187,34 +174,6 @@ def discriminator_check(column, prop):
         return None
     values = ", ".join(sql_literal(v) for v in sorted(disc["mapping"]))
     return f"json_extract({column}, '$.{disc['propertyName']}') IN ({values})"
-
-
-def _units_entry(key, value, renames):
-    """Render one x-units entry. A dict value is a nested discriminator (a field
-    whose unit depends on a second discriminator column); a plain value is a
-    unit string."""
-    if isinstance(value, dict):
-        disc2 = value.get("x-unit-discriminator", "?")
-        disc2 = renames.get(disc2, disc2)
-        inner = ", ".join(f"{k2}: {v2}" for k2, v2 in sorted(value.get("x-units", {}).items()))
-        return f"{key}: per {disc2} [{inner}]"
-    return f"{key}: {value}"
-
-
-def units_comment(prop, renames):
-    # The discriminator names a sibling column, so the table's renames apply to
-    # it the same way they apply to the column itself.
-    if "x-units" in prop:
-        disc = prop.get("x-unit-discriminator", "?")
-        disc = renames.get(disc, disc)
-        units_map = prop["x-units"]
-        nested = any(isinstance(v, dict) for v in units_map.values())
-        sep = "; " if nested else ", "
-        pairs = sep.join(_units_entry(k, v, renames) for k, v in sorted(units_map.items()))
-        return f" -- Units: per {disc} ({pairs})"
-    if "x-unit" in prop:
-        return f" -- Units: {prop['x-unit']}"
-    return ""
 
 
 # --------------------------------------------------------------------------- inventory
@@ -260,14 +219,14 @@ def inventory_problems(schemas_root, schema_map):
 # --------------------------------------------------------------------------- tables
 
 
-def merge_components(components, resolver):
+def merge_components(components, schemas_root):
     """Union of the components' properties, in first-seen order.
 
     Returns {prop: {"node", "file", "owners", "required_all"}}.
     """
     merged = {}
     for comp in components:
-        doc = resolver.doc(comp["file"])
+        doc = schema_doc(schemas_root, comp["file"])
         required = set(doc.get("required", []))
         for pname, pnode in doc.get("properties", {}).items():
             entry = merged.setdefault(
@@ -322,13 +281,13 @@ def disposition_problems(table, merged, cfg):
     return problems
 
 
-def column_decl(prop, entry, override, resolver, renames):
-    """Return (column name, declaration line without separator, units comment)."""
+def column_decl(prop, entry, override, schemas_root, renames):
+    """Return (column name, declaration line without separator)."""
     column = renames.get(prop, prop)
     if prop == "id":
-        return column, "id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE", ""
+        return column, "id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE"
     node = entry["node"]
-    kind, enum_values, type_nullable = sql_type_for(node, resolver, entry["file"])
+    kind, enum_values, type_nullable = sql_type_for(node, schemas_root, entry["file"])
     sql_type = {"integer": "INTEGER", "number": "REAL", "boolean": "INTEGER",
                 "string": "TEXT", "json": "TEXT"}[kind]
     not_null = override.get("not_null", entry["required_all"] and not type_nullable)
@@ -357,7 +316,7 @@ def column_decl(prop, entry, override, resolver, renames):
     parts.extend(f"CHECK ({c})" for c in checks)
     if "references" in override:
         parts.append(f"REFERENCES {override['references']}")
-    return column, " ".join(parts), units_comment(node, renames)
+    return column, " ".join(parts)
 
 
 def quantity_of(node, units_index):
@@ -367,11 +326,7 @@ def quantity_of(node, units_index):
     units = set()
     if "x-unit" in node:
         units.add(node["x-unit"])
-    for value in node.get("x-units", {}).values():
-        if isinstance(value, dict):
-            units.update(value.get("x-units", {}).values())
-        else:
-            units.add(value)
+    units.update(node.get("x-units", {}).values())
     kinds = None
     for unit in units:
         allowed = units_index.get(unit, set())
@@ -398,18 +353,8 @@ def unit_arms(node, renames):
     if "x-units" not in node:
         return [{"unit": node["x-unit"]}]
     disc = renames.get(node["x-unit-discriminator"], node["x-unit-discriminator"])
-    arms = []
-    for value, unit in sorted(node["x-units"].items()):
-        if isinstance(unit, dict):
-            disc2 = renames.get(unit["x-unit-discriminator"], unit["x-unit-discriminator"])
-            for value2, unit2 in sorted(unit["x-units"].items()):
-                arms.append({"discriminator_column": disc, "discriminator_value": value,
-                             "discriminator_column_2": disc2,
-                             "discriminator_value_2": value2, "unit": unit2})
-        else:
-            arms.append({"discriminator_column": disc, "discriminator_value": value,
-                         "unit": unit})
-    return arms
+    return [{"discriminator_column": disc, "discriminator_value": value, "unit": unit}
+            for value, unit in sorted(node["x-units"].items())]
 
 
 def has_unit(node):
@@ -465,7 +410,7 @@ def column_conventions(table, prop, entry, override, renames, columns_present, u
     return out, problems
 
 
-def attribute_rows(prop, entry, resolver, units_index, unit_override=None):
+def attribute_rows(prop, entry, schemas_root, units_index, unit_override=None):
     """Return (conventions, identifier owners, problems) for an attribute-channel property.
 
     The attributes table keys conventions by name alone, so every component
@@ -487,7 +432,7 @@ def attribute_rows(prop, entry, resolver, units_index, unit_override=None):
     if unit_override is not None:
         arm = {"unit": unit_override["unit"]}
         return [convention("attributes", prop, unit_override["quantity_kind"], arm, node)], [], []
-    kind = sql_type_for(node, resolver, entry["file"])[0]
+    kind = sql_type_for(node, schemas_root, entry["file"])[0]
     if kind in ("integer", "number"):
         return [convention("attributes", prop, "Dimensionless", {"unit": "1"}, node)], [], []
     if kind == "json":
@@ -495,8 +440,8 @@ def attribute_rows(prop, entry, resolver, units_index, unit_override=None):
     return [], [], []
 
 
-def emit_table(table, components, cfg, resolver, units_index):
-    merged = merge_components(components, resolver)
+def emit_table(table, components, cfg, schemas_root, units_index):
+    merged = merge_components(components, schemas_root)
     problems = disposition_problems(table, merged, cfg)
     if problems:
         return None, [], [], set(), problems
@@ -523,10 +468,9 @@ def emit_table(table, components, cfg, resolver, units_index):
             body.append((f"{prop} {override['sql']}", override.get("comment")))
             present.add(prop)
             continue
-        column, decl, units = column_decl(prop, merged[prop], override, resolver, renames)
+        column, decl = column_decl(prop, merged[prop], override, schemas_root, renames)
         present.add(column)
-        comment = override.get("comment") or (units[len(" -- "):] if units else None)
-        body.append((decl, comment))
+        body.append((decl, override.get("comment")))
     for prop, override in columns.items():
         if "sql" not in override:
             derived, conv_problems = column_conventions(
@@ -541,12 +485,12 @@ def emit_table(table, components, cfg, resolver, units_index):
     unit_overrides = cfg.get("attribute_units", {})
     for prop in cfg.get("attribute_channel", []):
         for comp in components:
-            node = resolver.doc(comp["file"])["properties"].get(prop)
+            node = schema_doc(schemas_root, comp["file"])["properties"].get(prop)
             if node is None:
                 continue
             entry = {"node": node, "file": comp["file"], "owners": [comp["component"]]}
             convs, owners, attr_problems = attribute_rows(
-                prop, entry, resolver, units_index, unit_overrides.get(prop)
+                prop, entry, schemas_root, units_index, unit_overrides.get(prop)
             )
             attributes.append((prop, convs, owners))
             problems.extend(attr_problems)
@@ -619,7 +563,6 @@ def identifiers_sql(identifiers):
 
 def generate(schemas_path):
     """Return (region text, derived conventions, {table: columns}). Raises GenerationError."""
-    resolver = RefResolver(schemas_path)
     units_index = load_units_index(schemas_path)
     schema_map = load_json(SCHEMA_MAP)
     codegen = load_json(CODEGEN_MAP)["tables"]
@@ -635,7 +578,7 @@ def generate(schemas_path):
     table_columns = {}
     for table, components in schema_map["tables"].items():
         ddl, convs, attrs, present, table_problems = emit_table(
-            table, components, codegen.get(table, {}), resolver, units_index
+            table, components, codegen.get(table, {}), schemas_path, units_index
         )
         problems.extend(table_problems)
         if ddl:

@@ -14,7 +14,6 @@ from conftest import SCHEMA_DIR, SCHEMAS_PATH, SCRIPTS_DIR
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 import generate_sql_schema as codegen
-from generate_sql_schema import units_comment
 
 GENERATE_SCRIPT = SCRIPTS_DIR / "generate_sql_schema.py"
 SCHEMA_MAP = SCHEMA_DIR / "schema_map.json"
@@ -71,9 +70,8 @@ def test_unmapped_schema_file_fails_the_inventory():
 def test_property_without_disposition_fails():
     """A property the schemas add fails until sql_codegen_map.json places it, and
     a disposition for a property the schemas dropped fails too."""
-    resolver = codegen.RefResolver(str(SCHEMAS_PATH))
     components = _schema_map()["tables"]["sources"]
-    merged = codegen.merge_components(components, resolver)
+    merged = codegen.merge_components(components, str(SCHEMAS_PATH))
     cfg = _codegen_map()["sources"]
     assert codegen.disposition_problems("sources", merged, cfg) == []
 
@@ -414,56 +412,3 @@ def test_transformer_tables_magnetizing_shunt_units(fresh_db):
             ("magnetizing_shunt.real", "Conductance", "pu"),
         ]
 
-
-def test_units_comment_plain_x_unit_unchanged():
-    assert units_comment({"x-unit": "MW"}, {}) == " -- Units: MW"
-    assert units_comment({}, {}) == ""
-
-
-def test_units_comment_flat_x_units_unchanged():
-    """A flat x-units map (no nested discriminator) renders as ', '-joined
-    'key: value' pairs, sorted by key."""
-    prop = {
-        "x-unit-discriminator": "parameter_units",
-        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "ohm"},
-    }
-    assert units_comment(prop, {}) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: ohm)"
-
-
-def test_units_comment_discriminator_renamed():
-    """The table's renames apply to the discriminator name in the comment: the
-    discriminator names a sibling column, so a renamed column
-    (voltage_setpoint_units -> parameter_units, as interconnecting_converters and
-    facts_control_devices do) must not leave the comment pointing at the upstream
-    name."""
-    prop = {
-        "x-unit-discriminator": "voltage_setpoint_units",
-        "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
-    }
-    renames = {"voltage_setpoint_units": "parameter_units"}
-    assert units_comment(prop, renames) == " -- Units: per parameter_units (COMPONENT_BASE: pu, NATURAL_UNITS: kV)"
-
-
-def test_units_comment_nested_x_units():
-    """A nested x-units value (dc_setpoint_from-shaped: unit depends on a SECOND
-    discriminator) renders both discriminators and the pu/kV pair."""
-    prop = {
-        "x-unit-discriminator": "dc_control_from",
-        "x-units": {
-            "DC_POWER": "MW",
-            "DC_VOLTAGE": {
-                "x-unit-discriminator": "voltage_units",
-                "x-units": {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "kV"},
-            },
-        },
-    }
-    comment = units_comment(prop, {})
-    assert "dc_control_from" in comment
-    assert "DC_POWER: MW" in comment
-    assert "voltage_units" in comment
-    assert "COMPONENT_BASE: pu" in comment
-    assert "NATURAL_UNITS: kV" in comment
-    assert comment == (
-        " -- Units: per dc_control_from (DC_POWER: MW; "
-        "DC_VOLTAGE: per voltage_units [COMPONENT_BASE: pu, NATURAL_UNITS: kV])"
-    )

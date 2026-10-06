@@ -1,5 +1,5 @@
 {
-  "description": "SiennaGridDB SQL codegen config, consumed by scripts/generate_sql_schema.py. One entry per schema_map.json table. Every property of every mapped component must appear in exactly one of: 'columns' (a column; the value holds overrides), 'attribute_channel' (a row in the generic attributes table), 'decomposed' (split into the DB-only columns it lists), or 'skip' (not stored). A 'columns' entry with 'sql' is a DB-only column with no schema property; its value is the raw declaration after the column name. Column overrides: 'column' (DB name), 'references' (FK target), 'not_null', 'default' (null removes the schema default), 'checks' (extra CHECK expressions), 'comment', and 'unit_base' (base_power_ref / base_voltage_ref for derived pu unit conventions). Table keys: 'comment' (lines above the CREATE TABLE) and 'constraints' (table-level constraints). Columns are emitted in 'columns' order. Rules for choosing a disposition: schema/coverage_decisions.json.",
+  "description": "SiennaGridDB SQL codegen config, consumed by scripts/generate_sql_schema.py. One entry per schema_map.json table. Every property of every mapped component must appear in exactly one of: 'columns' (a column; the value holds overrides), 'attribute_channel' (a row in the generic attributes table), 'decomposed' (split into DB-only columns; maps each column to its JSON path in the property), or 'skip' (not stored). A 'columns' entry with 'sql' is a DB-only column with no schema property; its value is the raw declaration after the column name. Column overrides: 'column' (DB name), 'references' (FK target), 'not_null', 'default' (null removes the schema default), 'checks' (extra CHECK expressions), 'comment', and 'unit_base' (base_power_ref / base_voltage_ref for derived pu unit conventions). Table keys: 'comment' (lines above the CREATE TABLE) and 'constraints' (table-level constraints). Columns are emitted in 'columns' order. Rules for choosing a disposition: schema/coverage_decisions.json.",
   "tables": {
     "planning_regions": {
       "columns": {
@@ -258,7 +258,7 @@
         "from_area": {"references": "planning_regions (id) ON DELETE CASCADE"},
         "to_area": {"references": "planning_regions (id) ON DELETE CASCADE"}
       },
-      "decomposed": {"flow_limits": ["max_flow_from", "max_flow_to"]}
+      "decomposed": {"flow_limits": {"max_flow_from": "flow_limits.from_to", "max_flow_to": "flow_limits.to_from"}}
     },
     "reserves": {
       "comment": [
@@ -497,7 +497,7 @@
         "base_power": {"checks": ["base_power > 0"]}
       },
       "skip": ["dynamic_injector"],
-      "decomposed": {"Y": ["y_g", "y_b"]}
+      "decomposed": {"Y": {"y_g": "Y.real", "y_b": "Y.imag"}}
     },
     "switched_admittance": {
       "comment": [
@@ -689,7 +689,7 @@
         "operation_costs": {"not_null": true, "default": {"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
         "financial_data": {}
       },
-      "decomposed": {"capital_costs": ["capital_costs_charge", "capital_costs_discharge", "capital_costs_energy", "interconnection_cost"]}
+      "decomposed": {"capital_costs": {"capital_costs_charge": "capital_costs.charge_capital_cost", "capital_costs_discharge": "capital_costs.discharge_capital_cost", "capital_costs_energy": "capital_costs.energy_capital_cost", "interconnection_cost": "capital_costs.interconnection_cost"}}
     },
     "transport_technologies": {
       "columns": {
