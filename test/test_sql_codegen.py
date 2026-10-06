@@ -97,6 +97,21 @@ def test_attribute_name_with_two_quantities_fails():
                         "Elevation in t2; Volume in t1"]
 
 
+def test_unitless_attribute_under_a_registered_name_fails():
+    """The unit trigger checks a registered name before the identifier
+    exemption, so a name cannot be registered on one component and exempt on
+    another (HydroPumpTurbine's object-valued efficiency is the real case)."""
+    conv = {"table": "attributes", "column": "efficiency", "quantity_kind": "Dimensionless",
+            "unit": "1"}
+    _, _, problems = codegen.merge_attribute_rows(
+        [("t", "efficiency", [conv], []), ("t", "efficiency", [], ["HydroPumpTurbine"])]
+    )
+    assert problems == [
+        "attributes.efficiency: HydroPumpTurbine stores it with no unit, but another "
+        "component registers a unit for the name; set attribute_units for it"
+    ]
+
+
 def test_x_quantity_applies_only_to_the_arms_it_allows():
     """HydroReservoir annotates one x-quantity (Elevation) on a field whose arms
     are m, m3 and MWh; each other arm takes the one kind its unit identifies."""
