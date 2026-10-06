@@ -4,12 +4,7 @@ export class GridDBToolsError extends Error {
     this.name = new.target.name;
   }
 }
-export class DatabaseExistsError extends GridDBToolsError {}
-export class SQLiteVersionError extends GridDBToolsError {}
-export class ManifestMismatchError extends GridDBToolsError {}
 export class InsertError extends GridDBToolsError {}
-export class UnsupportedComponentError extends GridDBToolsError {}
-export class GapValueError extends GridDBToolsError {}
 export class EncodeError extends Error {}
 
 export type JsonObject = Record<string, unknown>;

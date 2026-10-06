@@ -20,15 +20,6 @@ class InsertReport:
     def add_unsupported(self, key, n):
         self.unsupported[key] = self.unsupported.get(key, 0) + n
 
-    def merge(self, other):
-        for key, n in other.inserted.items():
-            self.add_inserted(key, n)
-        for type_name, fields in other.skipped_fields.items():
-            for field_name, n in fields.items():
-                self.add_skipped(type_name, field_name, n)
-        for key, n in other.unsupported.items():
-            self.add_unsupported(key, n)
-
     def to_dict(self):
         return {
             "inserted": self.inserted,

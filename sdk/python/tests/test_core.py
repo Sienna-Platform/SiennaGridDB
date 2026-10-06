@@ -4,9 +4,8 @@ import sqlite3
 import pytest
 
 from sienna_griddb_tools import (
-    DatabaseExistsError,
+    GridDBToolsError,
     InsertReport,
-    ManifestMismatchError,
     create_database,
     open_database,
     seed_vocabulary,
@@ -43,14 +42,11 @@ def test_value_at():
     assert value_at(obj, "c.d") is None
 
 
-def test_report_merge_and_json():
+def test_report_json():
     a = InsertReport()
-    a.add_inserted("ACBus")
+    a.add_inserted("ACBus", 3)
     a.add_skipped("ACBus", "number")
-    b = InsertReport()
-    b.add_inserted("ACBus", 2)
-    b.add_unsupported("LoadZone", 1)
-    a.merge(b)
+    a.add_unsupported("LoadZone", 1)
     assert json.loads(a.to_json()) == {
         "inserted": {"ACBus": 3},
         "skipped_fields": {"ACBus": {"number": 1}},
@@ -60,14 +56,14 @@ def test_report_merge_and_json():
 
 def test_manifest_loads():
     manifest = load_manifest()
-    assert "ThermalStandard" in manifest.components
-    assert "bus" in manifest.components["ThermalStandard"].known_fields
+    assert "ThermalStandard" in manifest["components"]
+    assert "bus" in manifest["components"]["ThermalStandard"]["known_fields"]
 
 
 def test_create_database_seeds_vocabulary(tmp_path):
     conn = create_database(str(tmp_path / "a.sqlite"))
     n = conn.execute("SELECT count(*) FROM entity_types").fetchone()[0]
-    assert n == len(load_manifest().vocabulary["entity_types"])
+    assert n == len(load_manifest()["vocabulary"]["entity_types"])
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     seed_vocabulary(conn)
     assert conn.execute("SELECT count(*) FROM entity_types").fetchone()[0] == n
@@ -76,7 +72,7 @@ def test_create_database_seeds_vocabulary(tmp_path):
 def test_create_database_refuses_existing_path(tmp_path):
     path = tmp_path / "a.sqlite"
     path.write_bytes(b"")
-    with pytest.raises(DatabaseExistsError):
+    with pytest.raises(FileExistsError):
         create_database(str(path))
 
 
@@ -89,5 +85,5 @@ def test_open_database_checks_user_version(tmp_path):
     raw = sqlite3.connect(path)
     raw.execute("PRAGMA user_version = 99")
     raw.close()
-    with pytest.raises(ManifestMismatchError):
+    with pytest.raises(GridDBToolsError, match="user_version 99"):
         open_database(path)

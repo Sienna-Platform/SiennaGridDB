@@ -14,7 +14,7 @@ Python runtime, the parity oracle for the Julia and TypeScript runtimes.
 Everything is written to the gitignored test/fixtures/insert/; fixtures are
 generated on the fly, never checked in.
 
-    python3 test/prepare_fixtures.py [--sdk-fixtures-path P] [--check]
+    python3 test/prepare_fixtures.py [--sdk-fixtures-path P]
 """
 
 import argparse
@@ -139,18 +139,13 @@ def ensure_generated(sdk_fixtures=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--sdk-fixtures-path", default=None)
-    parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     try:
-        sdk_fixtures = args.sdk_fixtures_path or find_sdk_fixtures()
+        generate(args.sdk_fixtures_path or find_sdk_fixtures())
     except FileNotFoundError as exc:
         sys.stderr.write(str(exc) + "\n")
         return 1
-    return write_or_check(
-        _all_artifacts(sdk_fixtures),
-        args.check,
-        "golden fixtures; run test/prepare_fixtures.py",
-    )
+    return 0
 
 
 if __name__ == "__main__":

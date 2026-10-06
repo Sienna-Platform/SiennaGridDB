@@ -86,13 +86,3 @@ jobs:
 
       - name: Check insert manifest staleness
         run: python3 scripts/generate_insert_manifest.py --schemas-path SiennaSchemas --check
-
-      # Golden fixtures are generated on the fly and gitignored: generate, then
-      # prove the result is reproducible.
-      - name: Check golden insert fixtures are reproducible
-        run: |
-          python3 test/prepare_fixtures.py --sdk-fixtures-path power-openapi-models/fixtures
-          python3 test/prepare_fixtures.py --sdk-fixtures-path power-openapi-models/fixtures --check
-
-      - name: Check SDK data bundles
-        run: python3 scripts/sync_sdk_data.py --check

@@ -1,7 +1,7 @@
 """
 Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database.
 
-All mapping lives in the bundled `data/insert_manifest.json`; this package only binds
+All mapping lives in the repository's `schema/insert_manifest.json`; this package only binds
 values into the manifest's SQL. Load `PowerOpenAPIModels` as well to insert SDK models
 and `SystemDocument`s directly.
 """
@@ -19,14 +19,10 @@ export create_database,
     insert_document!,
     InsertReport,
     GridDBToolsError,
-    DatabaseExistsError,
-    SQLiteVersionError,
-    ManifestMismatchError,
-    InsertError,
-    UnsupportedComponentError,
-    GapValueError
+    InsertError
 
-const DATA_DIR = joinpath(@__DIR__, "..", "data")
+# The package lives in the GridDB repository, and Pkg clones the whole repository.
+const DATA_DIR = joinpath(@__DIR__, "..", "..", "..", "schema")
 
 include("errors.jl")
 include("report.jl")

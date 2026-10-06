@@ -47,12 +47,12 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
             seed_vocabulary!(db)
             @test count_rows(db, "entity_types") == n
             close(db)
-            @test_throws DatabaseExistsError create_database(path)
+            @test_throws GridDBToolsError create_database(path)
             db = open_database(path)
             @test first(DBInterface.execute(db, "PRAGMA foreign_keys"))[1] == 1
             DBInterface.execute(db, "PRAGMA user_version = 99")
             close(db)
-            @test_throws ManifestMismatchError open_database(path)
+            @test_throws GridDBToolsError open_database(path)
         end
     end
 

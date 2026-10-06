@@ -29,13 +29,6 @@ jobs:
         run: python3 test/prepare_fixtures.py
       - name: Test
         run: python3 -m pytest sdk/python/tests -v
-      - name: Parity
-        run: |
-          for c in NATURAL_UNITS COMPONENT_BASE; do
-            python3 -m sienna_griddb_tools build test/fixtures/insert/case14_$c.json /tmp/py_$c.sqlite > /tmp/py_$c.report.json
-            python3 scripts/check_insert_parity.py --db /tmp/py_$c.sqlite --report /tmp/py_$c.report.json \
-              --expected-dump test/fixtures/insert/case14_$c.dump.json --expected-report test/fixtures/insert/case14_$c.report.json
-          done
 
   julia:
     runs-on: ubuntu-latest

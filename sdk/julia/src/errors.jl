@@ -1,20 +1,19 @@
-abstract type GridDBToolsError <: Exception end
-
-for name in (
-    :DatabaseExistsError,
-    :SQLiteVersionError,
-    :ManifestMismatchError,
-    :InsertError,
-    :UnsupportedComponentError,
-    :GapValueError,
-)
-    @eval begin
-        struct $name <: GridDBToolsError
-            msg::String
-        end
-        Base.showerror(io::IO, e::$name) = print(io, $(string(name)), ": ", e.msg)
-    end
+"""
+A database could not be created or opened.
+"""
+struct GridDBToolsError <: Exception
+    msg::String
 end
+
+"""
+A row or field could not be written, or `strict=true` met data GridDB cannot store.
+"""
+struct InsertError <: Exception
+    msg::String
+end
+
+Base.showerror(io::IO, e::GridDBToolsError) = print(io, "GridDBToolsError: ", e.msg)
+Base.showerror(io::IO, e::InsertError) = print(io, "InsertError: ", e.msg)
 
 struct EncodeError <: Exception
     msg::String

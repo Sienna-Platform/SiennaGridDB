@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { existsSync } from "node:fs";
-import { DatabaseExistsError, ManifestMismatchError, SQLiteVersionError } from "./errors.js";
+import { GridDBToolsError } from "./errors.js";
 import { dataText, loadManifest } from "./manifest.js";
 
 export type Connection = Database.Database;
@@ -19,7 +19,7 @@ function connect(path: string): Connection {
   const found = db.prepare("SELECT sqlite_version() AS v").get() as { v: string };
   if (!versionAtLeast(found.v, [3, 45, 0])) {
     db.close();
-    throw new SQLiteVersionError(`SQLite ${found.v} is older than the required 3.45.0`);
+    throw new GridDBToolsError(`SQLite ${found.v} is older than the required 3.45.0`);
   }
   db.pragma("foreign_keys = ON");
   return db;
@@ -31,7 +31,7 @@ export function openDatabase(path: string): Connection {
   const expected = loadManifest().schema_user_version;
   if (found !== expected) {
     db.close();
-    throw new ManifestMismatchError(
+    throw new GridDBToolsError(
       `${path} has user_version ${found}; this package writes schema version ${expected}`,
     );
   }
@@ -53,7 +53,7 @@ export function seedVocabulary(db: Connection): void {
 
 export function createDatabase(path: string): Connection {
   if (existsSync(path)) {
-    throw new DatabaseExistsError(`${path} already exists; createDatabase never overwrites`);
+    throw new GridDBToolsError(`${path} already exists; createDatabase never overwrites`);
   }
   const db = connect(path);
   for (const name of SCHEMA_FILES) db.exec(dataText(name));

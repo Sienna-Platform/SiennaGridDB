@@ -68,7 +68,7 @@ end
 
 function skip_field!(report::InsertReport, strict::Bool, type_name, field, what)
     if strict
-        throw(GapValueError("$what: field $(repr(field)) has no column in GridDB"))
+        throw(InsertError("$what: field $(repr(field)) has no column in GridDB"))
     end
     add_skipped!(report, type_name, field)
     return nothing
@@ -76,7 +76,7 @@ end
 
 function mark_unsupported!(report::InsertReport, strict::Bool, key, n::Int, reason)
     if strict
-        throw(UnsupportedComponentError("$key ($n rows): $reason"))
+        throw(InsertError("$key ($n rows): $reason"))
     end
     add_unsupported!(report, key, n)
     return nothing
@@ -124,11 +124,6 @@ function write_row!(cache, plan::ComponentPlan, obj::AbstractDict, report, stric
     for attr in plan.attributes
         write_attribute!(cache, report, strict, plan, attr, obj, what)
     end
-    for gap in plan.gaps
-        if !isnothing(get(obj, gap, nothing))
-            skip_field!(report, strict, plan.type_name, gap, what)
-        end
-    end
     unknown = String[k for k in keys(obj) if !(k in plan.known_fields || isnothing(obj[k]))]
     for key in sort!(unknown)
         skip_field!(report, strict, plan.type_name, key, what)
@@ -144,9 +139,7 @@ function write_entity!(cache, plan::ComponentPlan, obj::AbstractDict)
 end
 
 function note_unsupported!(report, strict, type_name::AbstractString, n::Int)
-    reason =
-        get(manifest().unsupported_components, type_name, "not a GridDB component type")
-    mark_unsupported!(report, strict, type_name, n, reason)
+    mark_unsupported!(report, strict, type_name, n, "not a GridDB component type")
     return nothing
 end
 

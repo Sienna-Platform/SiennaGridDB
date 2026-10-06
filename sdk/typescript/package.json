@@ -11,7 +11,8 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "bin": { "griddb-tools": "./dist/cli.js" },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "mkdir -p data && cp ../../schema/schema.sql ../../schema/triggers.sql ../../schema/unit_registry.sql ../../schema/views.sql ../../schema/insert_manifest.json data/ && tsc -p tsconfig.json",
+    "prepack": "npm run build",
     "test": "npm run build && vitest run"
   },
   "dependencies": { "better-sqlite3": "^12.4.1" },

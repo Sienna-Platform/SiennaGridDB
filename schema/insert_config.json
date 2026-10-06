@@ -1,5 +1,5 @@
 {
-  "description": "Hand-written, inserter-owned mapping additions consumed by scripts/insert_manifest.py. Holds only what schema_map.json and sql_codegen_map.json do not: entity-type flags, per-component constant columns, the JSON path of each column a decomposed property is stored in, and the component types / document sections the inserter cannot store (with the reason).",
+  "description": "Hand-written, inserter-owned mapping additions consumed by scripts/insert_manifest.py. Holds only what schema_map.json and sql_codegen_map.json do not: entity-type flags, per-component constant columns, and the document sections the inserter cannot store (with the reason).",
   "association_sections": [
     ["supplemental_attribute_associations", "Core/Associations/SupplementalAttributeAssociation.json"],
     ["plant_associations", "Operations/Associations/PlantAssociation.json"],
@@ -11,22 +11,6 @@
     "TwoTerminalGenericHVDCLine": {"converter_type": "GENERIC"},
     "TwoTerminalLCCLine": {"converter_type": "LCC"},
     "TwoTerminalVSCLine": {"converter_type": "VSC"}
-  },
-  "derived": {
-    "AreaInterchange": {
-      "max_flow_from": {"path": "flow_limits.from_to", "encode": "real"},
-      "max_flow_to": {"path": "flow_limits.to_from", "encode": "real"}
-    },
-    "FixedAdmittance": {
-      "y_g": {"path": "Y.real", "encode": "real"},
-      "y_b": {"path": "Y.imag", "encode": "real"}
-    },
-    "StorageTechnology": {
-      "capital_costs_charge": {"path": "capital_costs.charge_capital_cost", "encode": "json"},
-      "capital_costs_discharge": {"path": "capital_costs.discharge_capital_cost", "encode": "json"},
-      "capital_costs_energy": {"path": "capital_costs.energy_capital_cost", "encode": "json"},
-      "interconnection_cost": {"path": "capital_costs.interconnection_cost", "encode": "real"}
-    }
   },
   "entity_type_flags": {
     "ACBus": {"is_topology": true, "is_dc": false},
@@ -40,7 +24,6 @@
     "ThermalPowerPlant"
   ],
   "supplemental_attribute_dirs": ["Core/SupplementalAttributes", "Operations/SupplementalAttributes"],
-  "unsupported_components": {},
   "unsupported_sections": {
     "ext": "no table in schema.sql",
     "time_series_associations": "features -> features_hash/feature_sets hashing contract is unspecified",

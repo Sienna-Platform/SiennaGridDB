@@ -5,28 +5,8 @@ class GridDBToolsError(Exception):
     """Base class for every error this package raises."""
 
 
-class DatabaseExistsError(GridDBToolsError):
-    """create_database was pointed at a path that already exists."""
-
-
-class SQLiteVersionError(GridDBToolsError):
-    """The linked SQLite library is older than GridDB requires."""
-
-
-class ManifestMismatchError(GridDBToolsError):
-    """The database or manifest is not the version this package was built for."""
-
-
 class InsertError(GridDBToolsError):
-    """A row could not be written; wraps the SQLite or encoding failure."""
-
-
-class UnsupportedComponentError(GridDBToolsError):
-    """strict=True and the input holds a type or section GridDB cannot store."""
-
-
-class GapValueError(GridDBToolsError):
-    """strict=True and a field with no DB home carries a value."""
+    """A row or field could not be written, or strict=True met data GridDB cannot store."""
 
 
 def describe(type_name, obj):

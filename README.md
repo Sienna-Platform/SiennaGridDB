@@ -384,10 +384,9 @@ out in that file.
 
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
 - **Every field has a home.** `sql_codegen_map.json` places every property of a supported
-  component, so `schema/insert_gaps.json` is empty. A decomposed property needs an
-  `insert_config.json` `derived` path for each of its columns, or manifest generation
-  fails. A field the schemas do not define is counted in the report as skipped;
-  `strict` mode raises instead.
+  component, or manifest generation fails. A decomposed property maps each of its columns
+  to a JSON path in the same file. A field the schemas do not define is counted in the
+  report as skipped; `strict` mode raises instead.
 - **Attribute units.** An attribute row gets the unit the registry holds for its arm: a
   `power_units` field is written in `pu` or `MW` by the row's own `power_units`. A
   unitless reference or curve is written with no unit, under its `attribute_identifiers`
@@ -398,20 +397,15 @@ out in that file.
   `ext`, and the component types `schema_map.json` excludes are reported, not written.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
-  checked in. CI builds a database from them with each runtime and requires identical
+  checked in. The Python runtime produces the expected outputs; CI builds a database
+  from the inputs with the Julia and TypeScript runtimes and requires identical
   canonical dumps (`scripts/check_insert_parity.py`).
-- **Large-system smoke test (local only).** `just insert-cats` inserts a CATS
-  CaliforniaTestSystem `system.json` into a fresh database, then reconciles table row
-  counts against the report and classifies every skipped field. Set the CATS source
-  directory with `CATS_DIR` or `python3 scripts/insert_experiment.py --cats-dir PATH`
-  (a CATS clone holding `CATS-CaliforniaTestSystem/`); `--document PATH` inserts any
-  other export.
-  CATS is far too large for CI; this is a development task and never runs there. Known
-  blocker: the current CATS export serializes `status` as booleans while the schema
-  treats it as a string enum, so insertion raises `InsertError` until CATS is
-  re-exported with the current serializer.
+- **Schema files.** The runtimes read `schema/` directly, so nothing is copied by hand.
+  The Python package links each file from `schema/`, and the Julia package reads the
+  repository's `schema/` directory. The TypeScript `build` script copies the files into
+  its gitignored `data/`.
 
-After changing any mapping input: `just generate-insert-manifest && just sync-sdk-data`.
+After changing any mapping input: `just generate-insert-manifest`.
 
 ## Code generation
 

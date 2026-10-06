@@ -5,12 +5,10 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import {
   createDatabase,
-  GapValueError,
   insertComponent,
   insertComponents,
   insertDocument,
   InsertError,
-  UnsupportedComponentError,
   type Connection,
   type JsonObject,
 } from "../src/index.js";
@@ -48,7 +46,7 @@ test.skipIf(!hasGolden).each(CASES)("golden %s matches the expected report and r
 test.skipIf(!hasGolden)("strict gap rolls back", () => {
   const db = fresh();
   const bus = { ...loneBus(golden()), angel: 0.1 };
-  expect(() => insertComponent(db, "ACBus", bus, { strict: true })).toThrow(GapValueError);
+  expect(() => insertComponent(db, "ACBus", bus, { strict: true })).toThrow(InsertError);
   expect(count(db, "entities")).toBe(0);
 });
 
@@ -56,7 +54,7 @@ test("unsupported type", () => {
   const db = fresh();
   expect(insertComponents(db, "HybridSystem", [{ id: 1 }]).unsupported).toEqual({ HybridSystem: 1 });
   expect(() => insertComponents(db, "HybridSystem", [{ id: 1 }], { strict: true })).toThrow(
-    UnsupportedComponentError,
+    InsertError,
   );
 });
 

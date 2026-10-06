@@ -1,20 +1,19 @@
 """Tests for scripts/insert_manifest.py (SDK component -> INSERT manifest)."""
 
 import sqlite3
+import subprocess
 import sys
 
 import pytest
 
-from conftest import SCHEMAS_PATH, SCRIPTS_DIR, load_schemas_json
+from conftest import SCHEMA_DIR, SCHEMAS_PATH, SCRIPTS_DIR, load_schemas_json
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 from check_units_sync import build_db
 from insert_manifest import (
     ManifestError,
-    RefResolver,
     build_manifest,
     component_entry,
-    component_tables,
     compute_ranks,
     default_literal,
     load_inputs,
@@ -29,7 +28,7 @@ def manifest():
 
 @pytest.fixture(scope="module")
 def component_files():
-    tables = component_tables(load_inputs())
+    tables = load_inputs()["schema_map"]
     return {c["component"]: c["file"] for comps in tables.values() for c in comps}
 
 
@@ -38,7 +37,7 @@ def test_every_schema_property_is_classified_exactly_once(manifest, component_fi
         props = set(load_schemas_json(component_files[name])["properties"])
         roots = {b["path"].split(".")[0] for b in entry["bindings"]}
         attrs = {a["field"] for a in entry["attributes"]}
-        groups = [roots, attrs, set(entry["skip"]), set(entry["gaps"])]
+        groups = [roots, attrs, set(entry["skip"])]
         assert set().union(*groups) == props, name
         assert sum(len(g) for g in groups) == len(props), f"{name}: overlapping classes"
 
@@ -112,17 +111,26 @@ def test_derived_columns_bind_json_paths(manifest):
     assert "flow_limits.to_from" in paths
 
 
+def _area_interchange_entry(inputs):
+    conn = build_db(SCHEMA_DIR)
+    comp = {"component": "AreaInterchange", "file": "Operations/Branch/AreaInterchange.json"}
+    return component_entry(conn, str(SCHEMAS_PATH), inputs, "transmission_interchanges", comp, 0, {})
+
+
 def test_not_null_column_without_source_blocks_generation():
     inputs = load_inputs()
-    inputs["config"]["derived"] = {}
-    conn = build_db(SCHEMA_DIR)
-    resolver = RefResolver(str(SCHEMAS_PATH))
-    comp = {
-        "component": "AreaInterchange",
-        "file": "Operations/Branch/AreaInterchange.json",
-    }
+    cfg = inputs["codegen"]["transmission_interchanges"]
+    del cfg["decomposed"]
+    cfg["skip"] = [*cfg.get("skip", []), "flow_limits"]
     with pytest.raises(ManifestError, match="max_flow_from"):
-        component_entry(conn, resolver, inputs, "transmission_interchanges", comp, 0, {})
+        _area_interchange_entry(inputs)
+
+
+def test_property_with_no_disposition_blocks_generation():
+    inputs = load_inputs()
+    del inputs["codegen"]["transmission_interchanges"]["decomposed"]
+    with pytest.raises(ManifestError, match=r"AreaInterchange\.flow_limits"):
+        _area_interchange_entry(inputs)
 
 
 def _attributes(manifest, component):
@@ -160,16 +168,6 @@ def test_attribute_arms_match_the_registry(manifest, db):
                 assert key in registered, f"{name}: {key}"
 
 
-def test_decomposed_property_needs_every_derived_path():
-    inputs = load_inputs()
-    del inputs["config"]["derived"]["FixedAdmittance"]["y_b"]
-    conn = build_db(SCHEMA_DIR)
-    resolver = RefResolver(str(SCHEMAS_PATH))
-    comp = {"component": "FixedAdmittance", "file": "Operations/StaticInjection/FixedAdmittance.json"}
-    with pytest.raises(ManifestError, match=r"decomposed Y .*y_b"):
-        component_entry(conn, resolver, inputs, "fixed_admittance", comp, 0, {})
-
-
 def test_vocabulary(manifest):
     types = {t["name"]: t for t in manifest["vocabulary"]["entity_types"]}
     assert types["ACBus"]["is_topology"] is True
@@ -179,8 +177,7 @@ def test_vocabulary(manifest):
     assert "OTHER" in manifest["vocabulary"]["fuels"]
 
 
-def test_unsupported_entries(manifest):
-    assert manifest["unsupported_components"] == {}
+def test_unsupported_sections(manifest):
     assert set(manifest["unsupported_sections"]) == {
         "ext",
         "time_series_associations",
@@ -192,12 +189,6 @@ def test_render_is_deterministic():
     assert render(build_manifest(str(SCHEMAS_PATH))) == render(
         build_manifest(str(SCHEMAS_PATH))
     )
-
-
-import json  # noqa: E402
-import subprocess  # noqa: E402
-
-from conftest import SCHEMA_DIR  # noqa: E402
 
 
 def test_checked_in_manifest_is_current():
@@ -214,9 +205,3 @@ def test_checked_in_manifest_is_current():
     )
     assert result.returncode == 0, result.stderr
 
-
-def test_gap_file_is_empty():
-    """sql_codegen_map.json gives every property of every mapped component a
-    home, so the inserter drops no field of a supported component."""
-    gaps = json.loads((SCHEMA_DIR / "insert_gaps.json").read_text(encoding="utf-8"))["gaps"]
-    assert gaps == {}

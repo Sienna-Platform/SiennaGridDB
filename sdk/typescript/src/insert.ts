@@ -4,9 +4,7 @@ import { seedVocabulary } from "./db.js";
 import { canonicalJson, encode, isNull, valueAt, type SqlValue } from "./encode.js";
 import {
   EncodeError,
-  GapValueError,
   InsertError,
-  UnsupportedComponentError,
   describe,
   type JsonObject,
 } from "./errors.js";
@@ -71,13 +69,13 @@ function params(bindings: Binding[], obj: JsonObject, what: string): SqlValue[] 
 
 function skip(report: InsertReport, strict: boolean, typeName: string, field: string, what: string) {
   if (strict) {
-    throw new GapValueError(`${what}: field ${JSON.stringify(field)} has no column in GridDB`);
+    throw new InsertError(`${what}: field ${JSON.stringify(field)} has no column in GridDB`);
   }
   report.addSkipped(typeName, field);
 }
 
 function unsupported(report: InsertReport, strict: boolean, key: string, n: number, reason: string) {
-  if (strict) throw new UnsupportedComponentError(`${key} (${n} rows): ${reason}`);
+  if (strict) throw new InsertError(`${key} (${n} rows): ${reason}`);
   report.addUnsupported(key, n);
 }
 
@@ -106,9 +104,6 @@ function writeRow(
       what,
     );
   }
-  for (const gap of plan.gaps) {
-    if (!isNull(obj[gap])) skip(report, strict, plan.typeName, gap, what);
-  }
   const unknown = Object.keys(obj).filter((k) => !plan.knownFields.has(k) && !isNull(obj[k]));
   for (const key of unknown.sort()) skip(report, strict, plan.typeName, key, what);
   report.addInserted(plan.typeName);
@@ -125,10 +120,9 @@ function planFor(
   report: InsertReport,
   strict: boolean,
 ): ComponentPlan | undefined {
-  const m = loadManifest();
-  if (typeName in m.components) return m.components[typeName];
-  const reason = m.unsupported_components[typeName] ?? "not a GridDB component type";
-  unsupported(report, strict, typeName, n, reason);
+  const components = loadManifest().components;
+  if (typeName in components) return components[typeName];
+  unsupported(report, strict, typeName, n, "not a GridDB component type");
   return undefined;
 }
 

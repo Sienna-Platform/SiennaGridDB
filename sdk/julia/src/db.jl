@@ -9,7 +9,7 @@ function connect(path::AbstractString)
     db = SQLite.DB(path)
     found = VersionNumber(scalar(db, "SELECT sqlite_version()"))
     if found < MIN_SQLITE
-        throw(SQLiteVersionError("SQLite $found is older than the required $MIN_SQLITE"))
+        throw(GridDBToolsError("SQLite $found is older than the required $MIN_SQLITE"))
     end
     DBInterface.execute(db, "PRAGMA foreign_keys = ON")
     return db
@@ -38,7 +38,7 @@ function open_database(path::AbstractString)
     if found != expected
         close(db)
         throw(
-            ManifestMismatchError(
+            GridDBToolsError(
                 "$path has user_version $found; this package writes schema version $expected",
             ),
         )
@@ -71,7 +71,7 @@ end
 
 function create_database(path::AbstractString)
     if ispath(path)
-        throw(DatabaseExistsError("$path already exists; create_database never overwrites"))
+        throw(GridDBToolsError("$path already exists; create_database never overwrites"))
     end
     db = connect(path)
     for name in SCHEMA_FILES

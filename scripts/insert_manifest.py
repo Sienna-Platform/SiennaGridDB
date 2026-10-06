@@ -7,16 +7,22 @@ unit_registry.sql (the database is the source of truth for columns, defaults, an
 foreign keys -- no DDL parsing). generate_insert_manifest.py is the CLI.
 """
 
+import graphlib
 import json
 import os
 
 from _common import load_json, sql_literal
 from check_units_sync import build_db
-from generate_sql_schema import RefResolver, attribute_rows, load_units_index, sql_type_for
+from generate_sql_schema import (
+    attribute_rows,
+    load_units_index,
+    resolve_ref,
+    schema_doc,
+    sql_type_for,
+)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
-MANIFEST_VERSION = 2
 
 ENCODING_BY_KIND = {
     "integer": "int",
@@ -25,6 +31,8 @@ ENCODING_BY_KIND = {
     "string": "text",
     "json": "json",
 }
+# A decomposed part is a number or a structured value.
+ENCODING_BY_SQL_TYPE = {"INTEGER": "int", "REAL": "real", "TEXT": "json"}
 
 
 class ManifestError(Exception):
@@ -32,12 +40,12 @@ class ManifestError(Exception):
 
 
 def table_columns(conn, table):
-    """{column: {"notnull", "default", "hidden"}} in declaration order."""
+    """{column: {"type", "notnull", "default", "hidden"}} in declaration order."""
     rows = conn.execute(f"PRAGMA table_xinfo('{table}')").fetchall()
     if not rows:
         raise ManifestError(f"table {table} does not exist in schema.sql")
     return {
-        row[1]: {"notnull": bool(row[3]), "default": row[4], "hidden": row[6] != 0}
+        row[1]: {"type": row[2], "notnull": bool(row[3]), "default": row[4], "hidden": row[6] != 0}
         for row in rows
     }
 
@@ -50,12 +58,7 @@ def load_inputs(schema_dir=SCHEMA_DIR):
     }
 
 
-def component_tables(inputs):
-    """{table: [{"component", "file"}]} from schema_map.json."""
-    return {t: list(c) for t, c in inputs["schema_map"].items()}
-
-
-def attribute_plan(name, comp, prop_name, prop, resolver, units_index, unit_override):
+def attribute_plan(name, comp, prop_name, prop, schemas_root, units_index, unit_override):
     """How the runtimes write one attribute-channel field.
 
     Mirrors the conventions generate_sql_schema.py registers for the field:
@@ -65,7 +68,7 @@ def attribute_plan(name, comp, prop_name, prop, resolver, units_index, unit_over
     """
     entry = {"node": prop, "file": comp["file"], "owners": [name]}
     convs, owners, problems = attribute_rows(
-        prop_name, entry, resolver, units_index, unit_override
+        prop_name, entry, schemas_root, units_index, unit_override
     )
     if problems:
         raise ManifestError("; ".join(problems))
@@ -80,27 +83,16 @@ def attribute_plan(name, comp, prop_name, prop, resolver, units_index, unit_over
 
 
 def compute_ranks(conn, tables):
-    deps = {t: set() for t in tables}
-    for table in tables:
-        for row in conn.execute(f"PRAGMA foreign_key_list('{table}')"):
-            ref = row[2]
-            if ref in deps and ref != table:
-                deps[table].add(ref)
+    deps = {
+        t: {r[2] for r in conn.execute(f"PRAGMA foreign_key_list('{t}')") if r[2] in tables and r[2] != t}
+        for t in tables
+    }
     ranks = {}
-
-    def visit(table, stack):
-        if table in ranks:
-            return ranks[table]
-        if table in stack:
-            raise ManifestError("foreign-key cycle: " + " -> ".join([*stack, table]))
-        rank = 0
-        for dep in sorted(deps[table]):
-            rank = max(rank, 1 + visit(dep, [*stack, table]))
-        ranks[table] = rank
-        return rank
-
-    for table in sorted(tables):
-        visit(table, [])
+    try:
+        for table in graphlib.TopologicalSorter(deps).static_order():
+            ranks[table] = max((ranks[d] + 1 for d in deps[table]), default=0)
+    except graphlib.CycleError as err:
+        raise ManifestError("foreign-key cycle: " + " -> ".join(err.args[1])) from err
     return ranks
 
 
@@ -111,63 +103,54 @@ def default_literal(prop, column):
     return column["default"]
 
 
-def component_entry(conn, resolver, inputs, table, comp, rank, units_index):
+def component_entry(conn, schemas_root, inputs, table, comp, rank, units_index):
     cfg = inputs["codegen"].get(table, {})
     config = inputs["config"]
     renames = {p: o["column"] for p, o in cfg.get("columns", {}).items() if "column" in o}
     attribute_channel = set(cfg.get("attribute_channel", []))
     skip = set(cfg.get("skip", []))
     name = comp["component"]
-    derived = config["derived"].get(name, {})
     constants = config["constants"].get(name, {})
-    derived_sources = {spec["path"].split(".")[0] for spec in derived.values()}
     columns = table_columns(conn, table)
-    props = resolver.doc(comp["file"]).get("properties", {})
+    props = schema_doc(schemas_root, comp["file"]).get("properties", {})
     if "id" not in props:
         raise ManifestError(f"{name} has no id property")
-    # A decomposed property is stored only through the derived columns, so every
-    # target column needs a JSON path, or the inserter would drop part of it.
-    for prop_name, targets in cfg.get("decomposed", {}).items():
-        missing = [t for t in targets if t not in derived]
-        if prop_name in props and missing:
-            raise ManifestError(
-                f"{name}: decomposed {prop_name} has no insert_config derived path for {missing}"
-            )
+    decomposed = {p: t for p, t in cfg.get("decomposed", {}).items() if p in props}
 
     bound = {}
     attributes = []
-    gaps = []
     skipped = []
     for prop_name, prop in props.items():
         column = renames.get(prop_name, prop_name)
         if column in columns and not columns[column]["hidden"]:
-            kind = sql_type_for(prop, resolver, comp["file"])[0]
+            kind = sql_type_for(prop, schemas_root, comp["file"])[0]
             bound[column] = {
                 "path": prop_name,
                 "encode": ENCODING_BY_KIND[kind],
                 "default": default_literal(prop, columns[column]),
             }
-        elif prop_name in derived_sources:
+        elif prop_name in decomposed:
             continue
         elif prop_name in attribute_channel:
             attributes.append(
                 attribute_plan(
-                    name, comp, prop_name, prop, resolver, units_index,
+                    name, comp, prop_name, prop, schemas_root, units_index,
                     cfg.get("attribute_units", {}).get(prop_name),
                 )
             )
         elif prop_name in skip:
             skipped.append(prop_name)
         else:
-            gaps.append(prop_name)
-    for column, spec in derived.items():
-        if column not in columns:
-            raise ManifestError(f"{name}: derived column {table}.{column} does not exist")
-        bound[column] = {
-            "path": spec["path"],
-            "encode": spec["encode"],
-            "default": columns[column]["default"],
-        }
+            raise ManifestError(
+                f"{name}.{prop_name} has no column, attribute channel, decomposed, or skip entry"
+            )
+    for targets in decomposed.values():
+        for column, path in targets.items():
+            bound[column] = {
+                "path": path,
+                "encode": ENCODING_BY_SQL_TYPE[columns[column]["type"]],
+                "default": columns[column]["default"],
+            }
 
     for column, info in columns.items():
         if info["hidden"] or column in bound or column in constants:
@@ -205,11 +188,10 @@ def component_entry(conn, resolver, inputs, table, comp, rank, units_index):
         "bindings": bindings,
         "attributes": sorted(attributes, key=lambda a: a["field"]),
         "skip": sorted(skipped),
-        "gaps": sorted(gaps),
     }
 
 
-def vocabulary(resolver, inputs, component_names, schemas_path):
+def vocabulary(inputs, component_names, schemas_path):
     config = inputs["config"]
     flags = config["entity_type_flags"]
     entity_types = set(component_names)
@@ -230,14 +212,14 @@ def vocabulary(resolver, inputs, component_names, schemas_path):
     }
     for table, ref in sorted(config["vocabulary_enums"].items()):
         rel_file, _, frag = ref.partition("#")
-        node, _ = resolver.resolve("#" + frag, rel_file)
+        node, _ = resolve_ref(schemas_path, "#" + frag, rel_file)
         vocab[table] = sorted(node["enum"])
     return vocab
 
 
-def association_entry(conn, resolver, section, rel_file):
+def association_entry(conn, schemas_root, section, rel_file):
     columns = table_columns(conn, section)
-    props = resolver.doc(rel_file)["properties"]
+    props = schema_doc(schemas_root, rel_file)["properties"]
     names = [p for p in props if p in columns]
     missing = sorted(set(props) - set(names))
     if missing:
@@ -245,7 +227,7 @@ def association_entry(conn, resolver, section, rel_file):
     bindings = [
         {
             "path": p,
-            "encode": ENCODING_BY_KIND[sql_type_for(props[p], resolver, rel_file)[0]],
+            "encode": ENCODING_BY_KIND[sql_type_for(props[p], schemas_root, rel_file)[0]],
         }
         for p in names
     ]
@@ -256,30 +238,27 @@ def association_entry(conn, resolver, section, rel_file):
 def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
     inputs = load_inputs(schema_dir)
     config = inputs["config"]
-    resolver = RefResolver(schemas_path)
     conn = build_db(schema_dir)
-    tables = component_tables(inputs)
+    tables = inputs["schema_map"]
     ranks = compute_ranks(conn, tables)
     units_index = load_units_index(schemas_path)
     components = {}
     for table in sorted(tables):
         for comp in tables[table]:
             components[comp["component"]] = component_entry(
-                conn, resolver, inputs, table, comp, ranks[table], units_index
+                conn, schemas_path, inputs, table, comp, ranks[table], units_index
             )
     for entry in components.values():
         sql = entry["row_sql"]
         conn.execute("EXPLAIN " + sql, [None] * sql.count("?"))
     associations = [
-        association_entry(conn, resolver, section, rel_file)
+        association_entry(conn, schemas_path, section, rel_file)
         for section, rel_file in config["association_sections"]
     ]
     return {
-        "manifest_version": MANIFEST_VERSION,
         "schema_user_version": conn.execute("PRAGMA user_version").fetchone()[0],
-        "vocabulary": vocabulary(resolver, inputs, components, schemas_path),
+        "vocabulary": vocabulary(inputs, components, schemas_path),
         "components": components,
-        "unsupported_components": config["unsupported_components"],
         "attribute_sql": (
             "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) "
             "VALUES (?, ?, ?, ?, ?, ?)"
@@ -293,21 +272,6 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
         },
         "associations": associations,
         "unsupported_sections": config["unsupported_sections"],
-    }
-
-
-def gap_report(manifest):
-    return {
-        "description": (
-            "GENERATED by scripts/generate_insert_manifest.py -- do not edit. SDK properties "
-            "with no DB column, attribute channel, or skip entry; the inserter reports "
-            "values in these fields as skipped instead of writing them."
-        ),
-        "gaps": {
-            name: entry["gaps"]
-            for name, entry in sorted(manifest["components"].items())
-            if entry["gaps"]
-        },
     }
 
 

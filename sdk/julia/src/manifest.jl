@@ -1,5 +1,3 @@
-const SUPPORTED_MANIFEST_VERSION = 2
-
 struct Binding
     segments::Vector{String}
     encoding::Encoding
@@ -30,7 +28,6 @@ struct ComponentPlan
     bindings::Vector{Binding}
     entity_bindings::Vector{Binding}
     attributes::Vector{AttributePlan}
-    gaps::Vector{String}
     known_fields::Set{String}
 end
 
@@ -44,7 +41,6 @@ struct Manifest
     schema_user_version::Int
     vocabulary::Dict{String, Any}
     components::Dict{String, ComponentPlan}
-    unsupported_components::Dict{String, String}
     attribute_sql::String
     plant_types::Set{String}
     plant_sql::String
@@ -81,7 +77,7 @@ function parse_component(type_name::String, raw::AbstractDict)
     for a in attributes
         push!(known, a.field)
     end
-    union!(known, String.(raw["skip"]), String.(raw["gaps"]))
+    union!(known, String.(raw["skip"]))
     return ComponentPlan(
         type_name,
         raw["rank"],
@@ -90,19 +86,11 @@ function parse_component(type_name::String, raw::AbstractDict)
         bindings,
         bindings[1:1],
         attributes,
-        String.(raw["gaps"]),
         known,
     )
 end
 
 function parse_manifest(raw::AbstractDict)
-    if raw["manifest_version"] != SUPPORTED_MANIFEST_VERSION
-        throw(
-            ManifestMismatchError(
-                "manifest_version $(raw["manifest_version"]) is not $SUPPORTED_MANIFEST_VERSION",
-            ),
-        )
-    end
     components = Dict{String, ComponentPlan}(
         String(n) => parse_component(String(n), e) for (n, e) in raw["components"]
     )
@@ -115,7 +103,6 @@ function parse_manifest(raw::AbstractDict)
         raw["schema_user_version"],
         raw["vocabulary"],
         components,
-        Dict{String, String}(raw["unsupported_components"]),
         raw["attribute_sql"],
         Set{String}(supplemental["plant_types"]),
         supplemental["plant_sql"],

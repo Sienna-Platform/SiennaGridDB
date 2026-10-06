@@ -5,9 +5,8 @@ import Database from "better-sqlite3";
 import { describe, expect, test } from "vitest";
 import {
   createDatabase,
-  DatabaseExistsError,
+  GridDBToolsError,
   InsertReport,
-  ManifestMismatchError,
   openDatabase,
   seedVocabulary,
 } from "../src/index.js";
@@ -61,10 +60,10 @@ test("createDatabase seeds vocabulary and refuses existing paths", () => {
   seedVocabulary(db);
   expect(count()).toBe(n);
   db.close();
-  expect(() => createDatabase(path)).toThrow(DatabaseExistsError);
+  expect(() => createDatabase(path)).toThrow(GridDBToolsError);
   const existing = join(tmp(), "b.sqlite");
   writeFileSync(existing, "");
-  expect(() => createDatabase(existing)).toThrow(DatabaseExistsError);
+  expect(() => createDatabase(existing)).toThrow(GridDBToolsError);
 });
 
 test("openDatabase checks user_version and enables foreign keys", () => {
@@ -76,5 +75,5 @@ test("openDatabase checks user_version and enables foreign keys", () => {
   const raw = new Database(path);
   raw.pragma("user_version = 99");
   raw.close();
-  expect(() => openDatabase(path)).toThrow(ManifestMismatchError);
+  expect(() => openDatabase(path)).toThrow(/user_version 99/);
 });

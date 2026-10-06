@@ -89,7 +89,7 @@ def test_bus_then_generator(conn):
 
 def test_strict_gap_raises_and_rolls_back(conn):
     bus = dict(lone_bus(golden()), angel=0.1)
-    with pytest.raises(griddb.GapValueError, match="angel"):
+    with pytest.raises(griddb.InsertError, match="angel"):
         griddb.insert_component(conn, "ACBus", bus, strict=True)
     assert count(conn, "entities") == 0
 
@@ -97,7 +97,7 @@ def test_strict_gap_raises_and_rolls_back(conn):
 def test_unsupported_type(conn):
     report = griddb.insert_components(conn, "HybridSystem", [{"id": 1}])
     assert report.unsupported == {"HybridSystem": 1}
-    with pytest.raises(griddb.UnsupportedComponentError):
+    with pytest.raises(griddb.InsertError):
         griddb.insert_components(conn, "HybridSystem", [{"id": 1}], strict=True)
 
 
@@ -203,7 +203,7 @@ def test_misspelled_field(conn):
 
     report = griddb.insert_component(conn, "Area", area(900, "a", numbr=3))
     assert report.skipped_fields == {"Area": {"numbr": 1}}
-    with pytest.raises(griddb.GapValueError, match="numbr"):
+    with pytest.raises(griddb.InsertError, match="numbr"):
         griddb.insert_component(conn, "Area", area(901, "b", numbr=3), strict=True)
     report = griddb.insert_component(conn, "Area", area(902, "c", numbr=None))
     assert report.skipped_fields == {}

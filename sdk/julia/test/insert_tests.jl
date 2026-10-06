@@ -35,7 +35,7 @@ if HAS_GOLDEN
             fresh(dir) do db
                 bus = lone_bus(golden())
                 bus["angel"] = 0.1
-                @test_throws GapValueError insert_component!(db, "ACBus", bus; strict=true)
+                @test_throws InsertError insert_component!(db, "ACBus", bus; strict=true)
                 @test count_rows(db, "entities") == 0
             end
         end
@@ -48,7 +48,7 @@ end
             hybrid = [Dict{String, Any}("id" => 1)]
             report = insert_components!(db, "HybridSystem", hybrid)
             @test report.unsupported == Dict("HybridSystem" => 1)
-            @test_throws UnsupportedComponentError insert_components!(
+            @test_throws InsertError insert_components!(
                 db,
                 "HybridSystem",
                 hybrid;
