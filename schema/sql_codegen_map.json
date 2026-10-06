@@ -121,6 +121,7 @@
         "time_at_status": {}
       },
       "attribute_channel": ["efficiency", "turbine_type", "active_power_limits_pump", "active_power_pump", "transition_time", "minimum_time"],
+      "attribute_units": {"efficiency": {"unit": "1", "quantity_kind": "Dimensionless"}},
       "skip": ["dynamic_injector"]
     },
     "storage_units": {

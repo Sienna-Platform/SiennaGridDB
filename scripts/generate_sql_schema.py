@@ -29,7 +29,8 @@ Closed world: generation fails, listing every problem at once, when
   - a unit arm's quantity kind is neither its x-quantity nor the one kind
     units.json allows for the unit
   - a pu convention has no base column to resolve against
-  - an attributes name has more than one quantity kind or unit per arm
+  - an attributes name has more than one quantity kind or unit per arm, or is
+    registered by one component and unitless on another
   - a hand-written convention duplicates a derived one, or names a column a
     generated table no longer has
 
@@ -53,7 +54,9 @@ Column overrides (all optional):
   hand_units  true: hand-written conventions own this column's units
 
 Table keys besides the dispositions: comment (lines above CREATE TABLE),
-constraints (table-level), indexes (full CREATE INDEX statements).
+constraints (table-level), indexes (full CREATE INDEX statements), and
+attribute_units ({prop: {"unit", "quantity_kind"}} for an attribute-channel
+property the schemas leave unannotated).
 
 Derived rules:
   type        integer -> INTEGER, number -> REAL, string/enum -> TEXT,
@@ -307,6 +310,9 @@ def disposition_problems(table, merged, cfg):
             problems.append(
                 f"{table}.{prop} is in {kind} but no mapped component defines it"
             )
+    for prop in cfg.get("attribute_units", {}):
+        if prop not in assigned["attribute_channel"]:
+            problems.append(f"{table}.{prop} has attribute_units but is not in attribute_channel")
     for prop, targets in cfg.get("decomposed", {}).items():
         for target in targets:
             if "sql" not in columns.get(target, {}):
@@ -459,11 +465,13 @@ def column_conventions(table, prop, entry, override, renames, columns_present, u
     return out, problems
 
 
-def attribute_rows(prop, entry, resolver, units_index):
+def attribute_rows(prop, entry, resolver, units_index, unit_override=None):
     """Return (conventions, identifier owners, problems) for an attribute-channel property.
 
     The attributes table keys conventions by name alone, so every component
-    that routes a name there must agree on its quantity kind.
+    that routes a name there must agree on its quantity kind. unit_override is
+    the table's attribute_units entry: the unit of a property the schemas leave
+    unannotated.
     """
     node = entry["node"]
     if has_unit(node):
@@ -476,6 +484,9 @@ def attribute_rows(prop, entry, resolver, units_index):
             else:
                 convs.append(convention("attributes", prop, quantity, arm, node))
         return convs, [], problems
+    if unit_override is not None:
+        arm = {"unit": unit_override["unit"]}
+        return [convention("attributes", prop, unit_override["quantity_kind"], arm, node)], [], []
     kind = sql_type_for(node, resolver, entry["file"])[0]
     if kind in ("integer", "number"):
         return [convention("attributes", prop, "Dimensionless", {"unit": "1"}, node)], [], []
@@ -523,11 +534,22 @@ def emit_table(table, components, cfg, resolver, units_index):
             )
             conventions.extend(derived)
             problems.extend(conv_problems)
+    # Per component, not the merged node: two components may route one name with
+    # different shapes (HydroTurbine's efficiency is a number, HydroPumpTurbine's
+    # an object).
     attributes = []
+    unit_overrides = cfg.get("attribute_units", {})
     for prop in cfg.get("attribute_channel", []):
-        convs, owners, attr_problems = attribute_rows(prop, merged[prop], resolver, units_index)
-        attributes.append((prop, convs, owners))
-        problems.extend(attr_problems)
+        for comp in components:
+            node = resolver.doc(comp["file"])["properties"].get(prop)
+            if node is None:
+                continue
+            entry = {"node": node, "file": comp["file"], "owners": [comp["component"]]}
+            convs, owners, attr_problems = attribute_rows(
+                prop, entry, resolver, units_index, unit_overrides.get(prop)
+            )
+            attributes.append((prop, convs, owners))
+            problems.extend(attr_problems)
     body.extend((c, None) for c in cfg.get("constraints", []))
 
     for i, (decl, comment) in enumerate(body):
@@ -566,6 +588,14 @@ def merge_attribute_rows(attributes):
                     f"attributes.{prop}: {seen[0]} stores {seen[1]['unit']} and {table} stores "
                     f"{conv['unit']} for the same unit arm"
                 )
+    # The unit trigger checks a registered name before the identifier exemption,
+    # so an exempt row under a registered name would always be rejected.
+    for owner, prop in sorted(identifiers):
+        if prop in quantities:
+            problems.append(
+                f"attributes.{prop}: {owner} stores it with no unit, but another component "
+                "registers a unit for the name; set attribute_units for it"
+            )
     for prop, kinds in sorted(quantities.items()):
         if len(kinds) > 1:
             detail = "; ".join(f"{k} in {', '.join(sorted(set(t)))}" for k, t in sorted(kinds.items()))
