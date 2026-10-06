@@ -1113,7 +1113,7 @@ CREATE TABLE supply_technologies (
 ) STRICT;
 
 -- Components: StorageTechnology
--- capital_costs is stored as: capital_costs_charge, capital_costs_discharge, capital_costs_energy
+-- capital_costs is stored as: capital_costs_charge, capital_costs_discharge, capital_costs_energy, interconnection_cost
 DROP TABLE IF EXISTS storage_technologies;
 CREATE TABLE storage_technologies (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -1137,6 +1137,7 @@ CREATE TABLE storage_technologies (
     capital_costs_charge TEXT NULL,
     capital_costs_discharge TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
     capital_costs_energy TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
+    interconnection_cost REAL NOT NULL DEFAULT 0.0,
     operation_costs TEXT NOT NULL DEFAULT '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,"variable":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_costs)), -- Units: USD/MWh
     financial_data TEXT NOT NULL CHECK (json_valid(financial_data))
 ) STRICT;
