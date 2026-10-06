@@ -1,0 +1,111 @@
+name: Update from Schema Release
+
+# SiennaSchemas' release workflow dispatches schema-release with the new tag.
+# The cron is a backstop for a missed dispatch: a run whose tag is already in
+# .schema-version is a no-op.
+on:
+  repository_dispatch:
+    types: [schema-release]
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "SiennaSchemas release tag (default: the latest release)"
+        required: false
+
+permissions:
+  contents: read
+
+# A dispatch and a cron run for the same tag must not race on one PR branch.
+concurrency:
+  group: update-schema
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the schema release
+        id: schema
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed through env, never interpolated into the script: the payload
+          # is caller-supplied text.
+          REQUESTED: ${{ github.event.client_payload.tag || inputs.tag }}
+        run: |
+          LATEST="${REQUESTED:-$(gh release view --repo Sienna-Platform/SiennaSchemas --json tagName -q .tagName)}"
+          if ! [[ "$LATEST" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$LATEST' is not a SiennaSchemas release tag" >&2
+            exit 1
+          fi
+          CURRENT=$(cat .schema-version 2>/dev/null || echo "none")
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "changed=$( [ "$LATEST" != "$CURRENT" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout SiennaSchemas at the release
+        if: steps.schema.outputs.changed == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: Sienna-Platform/SiennaSchemas
+          ref: ${{ steps.schema.outputs.latest }}
+          path: SiennaSchemas
+
+      - uses: actions/setup-python@v5
+        if: steps.schema.outputs.changed == 'true'
+        with:
+          python-version: "3.12"
+
+      # A release that adds a component or a property fails here until
+      # schema_map.json / sql_codegen_map.json decide where it goes. The PR still
+      # opens, carrying the list, so the decisions land on that PR.
+      - name: Regenerate tables, unit conventions, and registry
+        id: generate
+        if: steps.schema.outputs.changed == 'true'
+        run: |
+          echo "${{ steps.schema.outputs.latest }}" > .schema-version
+          if python3 scripts/generate_sql_schema.py --schemas-path SiennaSchemas 2> generate.log; then
+            python3 scripts/generate_unit_registry.py --units-json SiennaSchemas/Core/units.json
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo 'log<<EOF'
+            cat generate.log
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+          rm generate.log
+
+      # The PR must not be opened with GITHUB_TOKEN: a PR it opens triggers no
+      # workflows, so the schema tests would never run on it.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        if: steps.schema.outputs.changed == 'true'
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Open Pull Request
+        if: steps.schema.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch: auto/schema-${{ steps.schema.outputs.latest }}
+          title: "Update to SiennaSchemas ${{ steps.schema.outputs.latest }}"
+          body: |
+            Regenerated from [SiennaSchemas ${{ steps.schema.outputs.latest }}](https://github.com/Sienna-Platform/SiennaSchemas/releases/tag/${{ steps.schema.outputs.latest }}).
+
+            Generation succeeded: **${{ steps.generate.outputs.ok }}**
+
+            ```
+            ${{ steps.generate.outputs.log }}
+            ```
+
+            **Review checklist:**
+            - [ ] Each schema file or property the generator listed has a decision in `schema/schema_map.json` or `schema/sql_codegen_map.json`, and the outputs are regenerated
+            - [ ] `PRAGMA user_version` in `schema/schema.sql` is bumped
+            - [ ] Tests pass
+          commit-message: "Update to SiennaSchemas ${{ steps.schema.outputs.latest }}"
