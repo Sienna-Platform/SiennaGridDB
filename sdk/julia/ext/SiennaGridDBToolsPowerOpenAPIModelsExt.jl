@@ -4,24 +4,27 @@ import PowerOpenAPIModels
 import SiennaGridDBTools
 import SQLite
 
-const OpenAPI = PowerOpenAPIModels.OpenAPI
+# PowerOpenAPIModels 0.2 is a re-export umbrella: the document container lives in
+# PowerCoreOpenAPIModels, and the model supertype and encoder in InfrastructureCoreOpenAPIModels.
+const PowerCore = PowerOpenAPIModels.PowerCoreOpenAPIModels
+const InfraCore = PowerOpenAPIModels.InfrastructureCoreOpenAPIModels
 
 function SiennaGridDBTools.insert_document!(
     db::SQLite.DB,
-    doc::PowerOpenAPIModels.SystemDocument;
+    doc::PowerCore.SystemDocument;
     strict::Bool=false,
 )
-    tree = PowerOpenAPIModels.document_tree(doc)
+    tree = PowerCore.document_tree(doc)
     return SiennaGridDBTools.insert_document!(db, tree; strict=strict)
 end
 
 function SiennaGridDBTools.insert_component!(
     db::SQLite.DB,
-    model::PowerOpenAPIModels.APIModel;
+    model::InfraCore.APIModel;
     strict::Bool=false,
 )
     type_name = String(nameof(typeof(model)))
-    obj = OpenAPI.Runtime._encode(model)
+    obj = InfraCore._encode(model)
     return SiennaGridDBTools.insert_component!(db, type_name, obj; strict=strict)
 end
 

@@ -17,6 +17,6 @@ SiennaGridDBToolsPowerOpenAPIModelsExt = "PowerOpenAPIModels"
 [compat]
 DBInterface = "2.5"
 JSON = "1"
-PowerOpenAPIModels = "0.1"
+PowerOpenAPIModels = "0.2"
 SQLite = "1.6"
 julia = "1.11"
