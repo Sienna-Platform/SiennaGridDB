@@ -372,6 +372,41 @@ ORDER BY cca.entity_id;
 Both were run against a database built from `schema/schema.sql` + `triggers.sql` +
 `unit_registry.sql` + `views.sql` on this branch.
 
+## Insert SDKs
+
+`sdk/` holds three small packages that insert Sienna OpenAPI SDK objects into a GridDB
+database: [`sdk/python`](sdk/python/README.md), [`sdk/julia`](sdk/julia/README.md), and
+[`sdk/typescript`](sdk/typescript/README.md). None of them contains mapping logic. Each
+one interprets `schema/insert_manifest.json`, which `scripts/generate_insert_manifest.py`
+builds from `schema_map.json`, `sql_codegen_map.json`, `schema/insert_config.json`, the
+SiennaSchemas components, and the DDL itself. Every INSERT a runtime can issue is written
+out in that file.
+
+- **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
+- **Every field has a home.** `sql_codegen_map.json` places every property of a supported
+  component, or manifest generation fails. A decomposed property maps each of its columns
+  to a JSON path in the same file. A field the schemas do not define is counted in the
+  report as skipped; `strict` mode raises instead.
+- **Attribute units.** An attribute row gets the unit the registry holds for its arm: a
+  `power_units` field is written in `pu` or `MW` by the row's own `power_units`. A
+  unitless reference or curve is written with no unit, under its `attribute_identifiers`
+  exemption.
+- **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
+  and the runtimes do not convert.
+- **Not supported yet.** `time_series_associations`, `voltage_control_associations`,
+  `ext`, and the component types `schema_map.json` excludes are reported, not written.
+- **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
+  outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
+  checked in. The Python runtime produces the expected outputs; CI builds a database
+  from the inputs with the Julia and TypeScript runtimes and requires identical
+  canonical dumps (`scripts/check_insert_parity.py`).
+- **Schema files.** The runtimes read `schema/` directly, so nothing is copied by hand.
+  The Python package links each file from `schema/`, and the Julia package reads the
+  repository's `schema/` directory. The TypeScript `build` script copies the files into
+  its gitignored `data/`.
+
+After changing any mapping input: `just generate-insert-manifest`.
+
 ## Code generation
 
 Two generators project SiennaSchemas into this repo.

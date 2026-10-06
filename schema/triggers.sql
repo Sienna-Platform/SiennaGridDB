@@ -1967,6 +1967,67 @@ WHERE
 END;
 
 -- =============================================================================
+-- Supplemental Attribute Association Domain Triggers
+-- attribute_id references entities, since plant-type attributes live in plants
+-- rather than supplemental_attributes; these keep it to one of the two.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_attribute_domain BEFORE
+INSERT
+    ON supplemental_attribute_associations
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.attribute_id
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            plants
+        WHERE
+            id = NEW.attribute_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.attribute_id must exist in supplemental_attributes or plants.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_attribute_domain_update BEFORE
+UPDATE
+    OF attribute_id ON supplemental_attribute_associations
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            supplemental_attributes
+        WHERE
+            id = NEW.attribute_id
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            plants
+        WHERE
+            id = NEW.attribute_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.attribute_id must exist in supplemental_attributes or plants.'
+    );
+
+END;
+
+-- =============================================================================
 -- Time Series Association Owner-Domain Triggers
 -- owner_id references entities (both categories share the entities id-space
 -- here, unlike infrastore's independent streams), but a 'SupplementalAttribute'

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sienna-griddb-tools"
+version = "0.1.0"
+description = "Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "BSD-3-Clause"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7.2.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sienna_griddb_tools = ["data/*.sql", "data/*.json"]
+
+[tool.ruff]
+extend = "../../pyproject.toml"

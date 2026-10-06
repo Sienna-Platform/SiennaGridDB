@@ -377,6 +377,72 @@ def test_supplemental_attribute_association_identity_unique(fresh_db):
         )
 
 
+def _attach(conn, attribute_id, attribute_type):
+    conn.execute(
+        "INSERT INTO supplemental_attribute_associations("
+        "component_id, component_type, attribute_id, attribute_type) "
+        "VALUES (1, 'ThermalStandard', ?, ?)",
+        (attribute_id, attribute_type),
+    )
+
+
+def _plant(conn, plant_id=3):
+    make_entity(conn, plant_id, entity_table="plants")
+    conn.execute(
+        "INSERT INTO plants(id, name, TYPE, value) VALUES (?, 'cc1', 'CombinedCycleBlock', '{}')",
+        (plant_id,),
+    )
+
+
+def test_supplemental_attribute_association_accepts_plant(fresh_db):
+    """Plant-type attributes live in plants, and the association catalog lists
+    them like any other supplemental attribute."""
+    make_entity(fresh_db, 1)
+    _plant(fresh_db)
+    _attach(fresh_db, 3, "CombinedCycleBlock")
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM supplemental_attribute_associations"
+    ).fetchone()
+    assert count == 1
+
+
+def test_supplemental_attribute_association_accepts_supplemental_attribute(fresh_db):
+    make_entity(fresh_db, 1)
+    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    fresh_db.execute(
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'Substation', '{}')"
+    )
+    _attach(fresh_db, 2, "Substation")
+
+
+def test_supplemental_attribute_association_rejects_non_attribute(fresh_db):
+    """attribute_id references entities, so the trigger is what keeps a
+    component id out of it."""
+    make_entity(fresh_db, 1)
+    make_entity(fresh_db, 2)
+    with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
+        _attach(fresh_db, 2, "Substation")
+
+
+def test_supplemental_attribute_association_update_rejects_non_attribute(fresh_db):
+    make_entity(fresh_db, 1)
+    _plant(fresh_db)
+    _attach(fresh_db, 3, "CombinedCycleBlock")
+    with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
+        fresh_db.execute("UPDATE supplemental_attribute_associations SET attribute_id = 1")
+
+
+def test_deleting_plant_removes_its_associations(fresh_db):
+    make_entity(fresh_db, 1)
+    _plant(fresh_db)
+    _attach(fresh_db, 3, "CombinedCycleBlock")
+    fresh_db.execute("DELETE FROM plants WHERE id = 3")
+    (count,) = fresh_db.execute(
+        "SELECT COUNT(*) FROM supplemental_attribute_associations"
+    ).fetchone()
+    assert count == 0
+
+
 # AC/DC bus domain
 # tmodel_hvdc_lines is a DC-network branch between DC buses, reached from the AC
 # side through interconnecting_converters. Point-to-point HVDC

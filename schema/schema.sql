@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 3; -- bump on every schema or registry change
+PRAGMA user_version = 4; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -159,11 +159,13 @@ CREATE TABLE supplemental_attributes (
 -- is the (component_id, attribute_id) pair; the type columns are denormalized
 -- labels for filtering. The FKs are GridDB-side integrity infrastore omits,
 -- since its endpoints live in the consumer's object graph, not a database.
+-- attribute_id references entities because plant-type attributes live in
+-- plants; a trigger keeps it to a supplemental_attributes or plants row.
 CREATE TABLE supplemental_attribute_associations (
     id INTEGER PRIMARY KEY,
     component_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     component_type TEXT NOT NULL,
-    attribute_id INTEGER NOT NULL REFERENCES supplemental_attributes (id) ON DELETE CASCADE,
+    attribute_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     attribute_type TEXT NOT NULL
 ) strict;
 

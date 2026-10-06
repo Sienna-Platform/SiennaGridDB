@@ -1,0 +1,1 @@
+../../../../../schema/triggers.sql
