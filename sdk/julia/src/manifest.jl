@@ -1,15 +1,25 @@
-const SUPPORTED_MANIFEST_VERSION = 1
+const SUPPORTED_MANIFEST_VERSION = 2
 
 struct Binding
     segments::Vector{String}
     encoding::Encoding
 end
 
-struct AttributePlan
-    field::String
-    registered::Bool
+struct UnitArm
     unit::String
     quantity_kind::String
+end
+
+"""
+How to write one attribute-channel field. `arms` maps the row's value of
+`unit_field` (or "" when `unit_field` is empty) to its registered unit; `exempt`
+marks a unitless structured value that attribute_identifiers lets through.
+"""
+struct AttributePlan
+    field::String
+    unit_field::String
+    arms::Dict{String, UnitArm}
+    exempt::Bool
 end
 
 struct ComponentPlan
@@ -46,13 +56,24 @@ end
 parse_bindings(raw) =
     Binding[Binding(String.(split(b["path"], '.')), ENCODINGS[b["encode"]]) for b in raw]
 
-parse_attribute(raw, ::Nothing) = AttributePlan(raw["field"], false, "", "")
-parse_attribute(raw, unit::AbstractString) =
-    AttributePlan(raw["field"], true, unit, raw["quantity_kind"])
+unit_field_name(::Nothing) = ""
+unit_field_name(name::AbstractString) = String(name)
+
+function parse_attribute(raw::AbstractDict)
+    arms = Dict{String, UnitArm}(
+        String(k) => UnitArm(v["unit"], v["quantity_kind"]) for (k, v) in raw["arms"]
+    )
+    return AttributePlan(
+        raw["field"],
+        unit_field_name(raw["unit_field"]),
+        arms,
+        raw["exempt"],
+    )
+end
 
 function parse_component(type_name::String, raw::AbstractDict)
     bindings = parse_bindings(raw["bindings"])
-    attributes = AttributePlan[parse_attribute(a, a["unit"]) for a in raw["attributes"]]
+    attributes = AttributePlan[parse_attribute(a) for a in raw["attributes"]]
     known = Set{String}()
     for b in bindings
         push!(known, first(b.segments))

@@ -93,14 +93,16 @@ function writeRow(
   for (const attr of plan.attributes) {
     const value = obj[attr.field];
     if (isNull(value)) continue;
-    if (attr.unit === null && typeof value !== "string" && typeof value !== "boolean") {
+    const key = attr.unit_field === null ? "" : String(obj[attr.unit_field] ?? "");
+    const arm = Object.hasOwn(attr.arms, key) ? attr.arms[key] : undefined;
+    if (arm === undefined && !attr.exempt && typeof value !== "string" && typeof value !== "boolean") {
       skip(report, strict, plan.typeName, attr.field, what);
       continue;
     }
     run(
       db,
       loadManifest().attribute_sql,
-      [BigInt(obj.id as number), plan.typeName, attr.field, canonicalJson(value), attr.unit, attr.quantity_kind],
+      [BigInt(obj.id as number), plan.typeName, attr.field, canonicalJson(value), arm?.unit ?? null, arm?.quantity_kind ?? null],
       what,
     );
   }

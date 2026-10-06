@@ -12,18 +12,18 @@ import os
 
 from _common import load_json, sql_literal
 from check_units_sync import build_db
-from generate_sql_schema import RefResolver, sql_type_for
+from generate_sql_schema import RefResolver, attribute_rows, load_units_index, sql_type_for
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 
-ENCODING_BY_SQL_TYPE = {
-    "INTEGER": "int",
-    "REAL": "real",
-    "BOOLEAN": "bool",
-    "TEXT": "text",
-    "JSON": "json",
+ENCODING_BY_KIND = {
+    "integer": "int",
+    "number": "real",
+    "boolean": "bool",
+    "string": "text",
+    "json": "json",
 }
 
 
@@ -46,28 +46,35 @@ def load_inputs(schema_dir=SCHEMA_DIR):
     return {
         "schema_map": load_json(os.path.join(schema_dir, "schema_map.json"))["tables"],
         "codegen": load_json(os.path.join(schema_dir, "sql_codegen_map.json"))["tables"],
-        "conventions": load_json(os.path.join(schema_dir, "column_conventions.json"))[
-            "conventions"
-        ],
         "config": load_json(os.path.join(schema_dir, "insert_config.json")),
     }
 
 
 def component_tables(inputs):
-    """{table: [{"component", "file"}]} from schema_map.json plus extra_components."""
-    tables = {t: list(c) for t, c in inputs["schema_map"].items()}
-    for table, comps in inputs["config"]["extra_components"].items():
-        tables.setdefault(table, []).extend(comps)
-    return tables
+    """{table: [{"component", "file"}]} from schema_map.json."""
+    return {t: list(c) for t, c in inputs["schema_map"].items()}
 
 
-def attribute_units(conventions):
-    """{attribute name: (unit, quantity_kind)} from the attributes.* conventions."""
-    units = {}
-    for entry in conventions:
-        if entry["table"] == "attributes":
-            units[entry["column"]] = (entry["unit"], entry["quantity_kind"])
-    return units
+def attribute_plan(name, comp, prop_name, prop, resolver, units_index):
+    """How the runtimes write one attribute-channel field.
+
+    Mirrors the conventions generate_sql_schema.py registers for the field:
+    `arms` maps the value of `unit_field` (or "" for a fixed unit) to its unit
+    and quantity kind, and `exempt` marks a unitless structured value that
+    attribute_identifiers lets through with no unit.
+    """
+    entry = {"node": prop, "file": comp["file"], "owners": [name]}
+    convs, owners, problems = attribute_rows(prop_name, entry, resolver, units_index)
+    if problems:
+        raise ManifestError("; ".join(problems))
+    if any("discriminator_column_2" in c for c in convs):
+        raise ManifestError(f"{name}.{prop_name}: a second unit discriminator is not supported")
+    unit_field = convs[0].get("discriminator_column") if convs else None
+    arms = {
+        c.get("discriminator_value", ""): {"unit": c["unit"], "quantity_kind": c["quantity_kind"]}
+        for c in convs
+    }
+    return {"field": prop_name, "unit_field": unit_field, "arms": arms, "exempt": bool(owners)}
 
 
 def compute_ranks(conn, tables):
@@ -102,10 +109,10 @@ def default_literal(prop, column):
     return column["default"]
 
 
-def component_entry(conn, resolver, inputs, table, comp, rank, units):
+def component_entry(conn, resolver, inputs, table, comp, rank, units_index):
     cfg = inputs["codegen"].get(table, {})
     config = inputs["config"]
-    renames = cfg.get("renames", {})
+    renames = {p: o["column"] for p, o in cfg.get("columns", {}).items() if "column" in o}
     attribute_channel = set(cfg.get("attribute_channel", []))
     skip = set(cfg.get("skip", []))
     name = comp["component"]
@@ -116,6 +123,14 @@ def component_entry(conn, resolver, inputs, table, comp, rank, units):
     props = resolver.doc(comp["file"]).get("properties", {})
     if "id" not in props:
         raise ManifestError(f"{name} has no id property")
+    # A decomposed property is stored only through the derived columns, so every
+    # target column needs a JSON path, or the inserter would drop part of it.
+    for prop_name, targets in cfg.get("decomposed", {}).items():
+        missing = [t for t in targets if t not in derived]
+        if prop_name in props and missing:
+            raise ManifestError(
+                f"{name}: decomposed {prop_name} has no insert_config derived path for {missing}"
+            )
 
     bound = {}
     attributes = []
@@ -124,18 +139,17 @@ def component_entry(conn, resolver, inputs, table, comp, rank, units):
     for prop_name, prop in props.items():
         column = renames.get(prop_name, prop_name)
         if column in columns and not columns[column]["hidden"]:
-            sql_type = sql_type_for(prop, resolver, comp["file"])[0]
+            kind = sql_type_for(prop, resolver, comp["file"])[0]
             bound[column] = {
                 "path": prop_name,
-                "encode": ENCODING_BY_SQL_TYPE[sql_type],
+                "encode": ENCODING_BY_KIND[kind],
                 "default": default_literal(prop, columns[column]),
             }
         elif prop_name in derived_sources:
             continue
         elif prop_name in attribute_channel:
-            unit, quantity_kind = units.get(prop_name, (None, None))
             attributes.append(
-                {"field": prop_name, "unit": unit, "quantity_kind": quantity_kind}
+                attribute_plan(name, comp, prop_name, prop, resolver, units_index)
             )
         elif prop_name in skip:
             skipped.append(prop_name)
@@ -226,7 +240,7 @@ def association_entry(conn, resolver, section, rel_file):
     bindings = [
         {
             "path": p,
-            "encode": ENCODING_BY_SQL_TYPE[sql_type_for(props[p], resolver, rel_file)[0]],
+            "encode": ENCODING_BY_KIND[sql_type_for(props[p], resolver, rel_file)[0]],
         }
         for p in names
     ]
@@ -241,12 +255,12 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
     conn = build_db(schema_dir)
     tables = component_tables(inputs)
     ranks = compute_ranks(conn, tables)
-    units = attribute_units(inputs["conventions"])
+    units_index = load_units_index(schemas_path)
     components = {}
     for table in sorted(tables):
         for comp in tables[table]:
             components[comp["component"]] = component_entry(
-                conn, resolver, inputs, table, comp, ranks[table], units
+                conn, resolver, inputs, table, comp, ranks[table], units_index
             )
     for entry in components.values():
         sql = entry["row_sql"]

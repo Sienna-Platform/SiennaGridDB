@@ -27,6 +27,7 @@ const firstOf = (doc: JsonObject, t: string): JsonObject =>
 const loneBus = (doc: JsonObject): JsonObject => {
   const bus = firstOf(doc, "ACBus");
   delete bus.area;
+  delete bus.load_zone;
   return bus;
 };
 const fresh = (): Connection => createDatabase(join(mkdtempSync(join(tmpdir(), "g-")), "t.sqlite"));
@@ -46,16 +47,32 @@ test.skipIf(!hasGolden).each(CASES)("golden %s matches the expected report and r
 
 test.skipIf(!hasGolden)("strict gap rolls back", () => {
   const db = fresh();
-  expect(() => insertComponent(db, "ACBus", loneBus(golden()), { strict: true })).toThrow(GapValueError);
+  const bus = { ...loneBus(golden()), angel: 0.1 };
+  expect(() => insertComponent(db, "ACBus", bus, { strict: true })).toThrow(GapValueError);
   expect(count(db, "entities")).toBe(0);
 });
 
 test("unsupported type", () => {
   const db = fresh();
-  expect(insertComponents(db, "TransmissionInterface", [{ id: 1 }]).unsupported).toEqual({ TransmissionInterface: 1 });
-  expect(() => insertComponents(db, "TransmissionInterface", [{ id: 1 }], { strict: true })).toThrow(
+  expect(insertComponents(db, "HybridSystem", [{ id: 1 }]).unsupported).toEqual({ HybridSystem: 1 });
+  expect(() => insertComponents(db, "HybridSystem", [{ id: 1 }], { strict: true })).toThrow(
     UnsupportedComponentError,
   );
+});
+
+// A power_units field routed to attributes takes the unit of its own row's basis.
+test.skipIf(!hasGolden).each(CASES)("attribute unit follows the row's power_units (%s)", (c) => {
+  const db = fresh();
+  insertDocument(db, golden(c));
+  const rows = db
+    .prepare(
+      "SELECT l.power_units AS basis, a.unit AS unit, a.quantity_kind AS qk FROM attributes a " +
+        "JOIN loads l ON l.id = a.entity_id WHERE a.name = 'constant_active_power'",
+    )
+    .all() as { basis: string; unit: string; qk: string }[];
+  expect(rows.length).toBeGreaterThan(0);
+  const expected: Record<string, string> = { COMPONENT_BASE: "pu", NATURAL_UNITS: "MW" };
+  for (const r of rows) expect([r.unit, r.qk]).toEqual([expected[r.basis], "ActivePower"]);
 });
 
 // Review Focus 1
@@ -99,11 +116,14 @@ test.skipIf(!hasGolden)("reinserting a document fails and keeps the first copy",
 // Review Focus 5
 test("misspelled field", () => {
   const db = fresh();
-  expect(insertComponent(db, "Area", { id: 900, name: "a", numbr: 3 }).skipped_fields).toEqual({
+  const area = (id: number, name: string, extra: JsonObject): JsonObject => ({
+    id, name, base_power: 100.0, power_units: "NATURAL_UNITS", ...extra,
+  });
+  expect(insertComponent(db, "Area", area(900, "a", { numbr: 3 })).skipped_fields).toEqual({
     Area: { numbr: 1 },
   });
-  expect(() => insertComponent(db, "Area", { id: 901, name: "b", numbr: 3 }, { strict: true })).toThrow(
+  expect(() => insertComponent(db, "Area", area(901, "b", { numbr: 3 }), { strict: true })).toThrow(
     /numbr/,
   );
-  expect(insertComponent(db, "Area", { id: 902, name: "c", numbr: null }).skipped_fields).toEqual({});
+  expect(insertComponent(db, "Area", area(902, "c", { numbr: null })).skipped_fields).toEqual({});
 });

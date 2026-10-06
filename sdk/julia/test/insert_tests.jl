@@ -11,6 +11,7 @@ end
 function lone_bus(doc)
     bus = first_of(doc, "ACBus")
     delete!(bus, "area")
+    delete!(bus, "load_zone")
     return bus
 end
 
@@ -33,6 +34,7 @@ if HAS_GOLDEN
         mktempdir() do dir
             fresh(dir) do db
                 bus = lone_bus(golden())
+                bus["angel"] = 0.1
                 @test_throws GapValueError insert_component!(db, "ACBus", bus; strict=true)
                 @test count_rows(db, "entities") == 0
             end
@@ -43,15 +45,35 @@ end
 @testset "unsupported type" begin
     mktempdir() do dir
         fresh(dir) do db
-            iface = [Dict{String, Any}("id" => 1)]
-            report = insert_components!(db, "TransmissionInterface", iface)
-            @test report.unsupported == Dict("TransmissionInterface" => 1)
+            hybrid = [Dict{String, Any}("id" => 1)]
+            report = insert_components!(db, "HybridSystem", hybrid)
+            @test report.unsupported == Dict("HybridSystem" => 1)
             @test_throws UnsupportedComponentError insert_components!(
                 db,
-                "TransmissionInterface",
-                iface;
+                "HybridSystem",
+                hybrid;
                 strict=true,
             )
+        end
+    end
+end
+
+if HAS_GOLDEN
+    # A power_units field routed to attributes takes the unit of its own row's basis.
+    @testset "attribute unit follows the row's power_units ($case)" for case in CASES
+        mktempdir() do dir
+            fresh(dir) do db
+                insert_document!(db, golden(case))
+                sql =
+                    "SELECT l.power_units, a.unit, a.quantity_kind FROM attributes a " *
+                    "JOIN loads l ON l.id = a.entity_id WHERE a.name = 'constant_active_power'"
+                rows = [Tuple(r) for r in DBInterface.execute(db, sql)]
+                expected = Dict("COMPONENT_BASE" => "pu", "NATURAL_UNITS" => "MW")
+                @test !isempty(rows)
+                for (basis, unit, quantity_kind) in rows
+                    @test (unit, quantity_kind) == (expected[basis], "ActivePower")
+                end
+            end
         end
     end
 end
@@ -142,8 +164,13 @@ end
 @testset "misspelled field" begin
     mktempdir() do dir
         fresh(dir) do db
-            area(id, name, numbr) =
-                Dict{String, Any}("id" => id, "name" => name, "numbr" => numbr)
+            area(id, name, numbr) = Dict{String, Any}(
+                "id" => id,
+                "name" => name,
+                "base_power" => 100.0,
+                "power_units" => "NATURAL_UNITS",
+                "numbr" => numbr,
+            )
             report = insert_component!(db, "Area", area(900, "a", 3))
             @test report.skipped_fields == Dict("Area" => Dict("numbr" => 1))
             @test_throws r"numbr" insert_component!(

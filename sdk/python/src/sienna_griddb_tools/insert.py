@@ -58,6 +58,13 @@ def _unsupported(report, strict, key, n, reason):
     report.add_unsupported(key, n)
 
 
+def _attribute_arm(attribute, obj):
+    """The registered unit for this row: chosen by the row's own value of
+    unit_field (e.g. power_units), or the fixed arm "" when there is none."""
+    key = obj.get(attribute["unit_field"]) if attribute["unit_field"] else ""
+    return attribute["arms"].get(key)
+
+
 def _write_row(conn, plan, obj, report, strict):
     what = describe(plan.type_name, obj)
     _execute(conn, plan.row_sql, _params(plan.bindings, obj, what), what)
@@ -66,20 +73,15 @@ def _write_row(conn, plan, obj, report, strict):
         value = obj.get(attribute["field"])
         if value is None:
             continue
-        if attribute["unit"] is None and not isinstance(value, (str, bool)):
+        arm = _attribute_arm(attribute, obj)
+        if arm is None and not attribute["exempt"] and not isinstance(value, (str, bool)):
             _skip(report, strict, plan.type_name, attribute["field"], what)
             continue
+        unit, quantity_kind = (arm["unit"], arm["quantity_kind"]) if arm else (None, None)
         _execute(
             conn,
             attribute_sql,
-            [
-                obj["id"],
-                plan.type_name,
-                attribute["field"],
-                canonical_json(value),
-                attribute["unit"],
-                attribute["quantity_kind"],
-            ],
+            [obj["id"], plan.type_name, attribute["field"], canonical_json(value), unit, quantity_kind],
             what,
         )
     for gap in plan.gaps:

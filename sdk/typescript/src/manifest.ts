@@ -4,10 +4,18 @@ import { ManifestMismatchError } from "./errors.js";
 import type { Encoding } from "./encode.js";
 
 export const DATA_DIR = fileURLToPath(new URL("../data/", import.meta.url));
-const SUPPORTED_MANIFEST_VERSION = 1;
+const SUPPORTED_MANIFEST_VERSION = 2;
 
 export interface Binding { path: string; encode: Encoding }
-export interface AttributePlan { field: string; unit: string | null; quantity_kind: string | null }
+export interface UnitArm { unit: string; quantity_kind: string }
+// arms maps the row's value of unit_field ("" when unit_field is null) to its
+// registered unit; exempt marks a unitless structured value attribute_identifiers allows.
+export interface AttributePlan {
+  field: string;
+  unit_field: string | null;
+  arms: Record<string, UnitArm>;
+  exempt: boolean;
+}
 export interface ComponentPlan {
   typeName: string;
   rank: number;

@@ -46,12 +46,13 @@ def first(doc, type_name):
 
 
 def lone_bus(doc, bus_id=None):
-    """A golden bus with its area reference removed, so it inserts on its own."""
+    """A golden bus with its area and load-zone references removed, so it inserts on its own."""
     buses = doc["components"]["ACBus"]
     bus = copy.deepcopy(buses[0])
     if bus_id is not None:
         bus = copy.deepcopy(next(b for b in buses if b["id"] == bus_id))
     bus.pop("area", None)
+    bus.pop("load_zone", None)
     return bus
 
 
@@ -87,16 +88,32 @@ def test_bus_then_generator(conn):
 
 
 def test_strict_gap_raises_and_rolls_back(conn):
-    with pytest.raises(griddb.GapValueError, match="angle"):
-        griddb.insert_component(conn, "ACBus", lone_bus(golden()), strict=True)
+    bus = dict(lone_bus(golden()), angel=0.1)
+    with pytest.raises(griddb.GapValueError, match="angel"):
+        griddb.insert_component(conn, "ACBus", bus, strict=True)
     assert count(conn, "entities") == 0
 
 
 def test_unsupported_type(conn):
-    report = griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}])
-    assert report.unsupported == {"TransmissionInterface": 1}
+    report = griddb.insert_components(conn, "HybridSystem", [{"id": 1}])
+    assert report.unsupported == {"HybridSystem": 1}
     with pytest.raises(griddb.UnsupportedComponentError):
-        griddb.insert_components(conn, "TransmissionInterface", [{"id": 1}], strict=True)
+        griddb.insert_components(conn, "HybridSystem", [{"id": 1}], strict=True)
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_attribute_unit_follows_the_rows_power_units(conn, case):
+    """A power_units field routed to attributes is written in the unit of its
+    own row's basis: pu on COMPONENT_BASE rows, MW on NATURAL_UNITS rows."""
+    griddb.insert_document(conn, golden(case))
+    rows = conn.execute(
+        "SELECT l.power_units, a.unit, a.quantity_kind FROM attributes a "
+        "JOIN loads l ON l.id = a.entity_id WHERE a.name = 'constant_active_power'"
+    ).fetchall()
+    assert rows
+    expected = {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "MW"}
+    for basis, unit, quantity_kind in rows:
+        assert (unit, quantity_kind) == (expected[basis], "ActivePower")
 
 
 def test_component_base_cost_is_rejected(conn):
@@ -180,13 +197,15 @@ def test_reinserting_a_document_fails_and_keeps_the_first_copy(tmp_path):
 
 # Review Focus 5
 def test_misspelled_field(conn):
-    report = griddb.insert_component(conn, "Area", {"id": 900, "name": "a", "numbr": 3})
+    def area(area_id, name, **extra):
+        return {"id": area_id, "name": name, "base_power": 100.0,
+                "power_units": "NATURAL_UNITS", **extra}
+
+    report = griddb.insert_component(conn, "Area", area(900, "a", numbr=3))
     assert report.skipped_fields == {"Area": {"numbr": 1}}
     with pytest.raises(griddb.GapValueError, match="numbr"):
-        griddb.insert_component(
-            conn, "Area", {"id": 901, "name": "b", "numbr": 3}, strict=True
-        )
-    report = griddb.insert_component(conn, "Area", {"id": 902, "name": "c", "numbr": None})
+        griddb.insert_component(conn, "Area", area(901, "b", numbr=3), strict=True)
+    report = griddb.insert_component(conn, "Area", area(902, "c", numbr=None))
     assert report.skipped_fields == {}
 
 
@@ -199,7 +218,7 @@ def test_insert_model_with_sdk_objects(conn):
         conn, models.ACBus(id=1, name="b", number=1, available=True)
     )
     assert report.inserted == {"ACBus": 1}
-    assert report.skipped_fields == {"ACBus": {"available": 1, "number": 1}}
+    assert report.skipped_fields == {}
 
 
 def test_cli_build_prints_the_report(tmp_path):

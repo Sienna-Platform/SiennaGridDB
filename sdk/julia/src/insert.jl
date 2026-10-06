@@ -82,21 +82,19 @@ function mark_unsupported!(report::InsertReport, strict::Bool, key, n::Int, reas
     return nothing
 end
 
-function unit_columns(attr::AttributePlan)
-    if attr.registered
-        return Any[attr.unit, attr.quantity_kind]
+"""
+The arm key of a row: its own value of the unit field (e.g. power_units), or ""
+for a field with one fixed unit.
+"""
+function arm_key(attr::AttributePlan, obj::AbstractDict)
+    if isempty(attr.unit_field)
+        return ""
     end
-    return Any[missing, missing]
+    return get(obj, attr.unit_field, "")
 end
 
-function attribute_params(attr::AttributePlan, plan::ComponentPlan, obj, value)
-    return Any[
-        obj["id"],
-        plan.type_name,
-        attr.field,
-        canonical_json(value),
-        unit_columns(attr)...,
-    ]
+function attribute_params(attr::AttributePlan, plan::ComponentPlan, obj, value, unit_cols)
+    return Any[obj["id"], plan.type_name, attr.field, canonical_json(value), unit_cols...]
 end
 
 function write_attribute!(cache, report, strict, plan, attr::AttributePlan, obj, what)
@@ -104,11 +102,19 @@ function write_attribute!(cache, report, strict, plan, attr::AttributePlan, obj,
     if isnothing(value)
         return nothing
     end
-    if !attr.registered && !unit_free_value(value)
-        skip_field!(report, strict, plan.type_name, attr.field, what)
+    key = arm_key(attr, obj)
+    if haskey(attr.arms, key)
+        arm = attr.arms[key]
+        params = attribute_params(attr, plan, obj, value, Any[arm.unit, arm.quantity_kind])
+        run_sql(cache, manifest().attribute_sql, params, what)
         return nothing
     end
-    run_sql(cache, manifest().attribute_sql, attribute_params(attr, plan, obj, value), what)
+    if attr.exempt || unit_free_value(value)
+        params = attribute_params(attr, plan, obj, value, Any[missing, missing])
+        run_sql(cache, manifest().attribute_sql, params, what)
+        return nothing
+    end
+    skip_field!(report, strict, plan.type_name, attr.field, what)
     return nothing
 end
 

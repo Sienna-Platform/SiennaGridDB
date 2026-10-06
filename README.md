@@ -378,19 +378,24 @@ Both were run against a database built from `schema/schema.sql` + `triggers.sql`
 database: [`sdk/python`](sdk/python/README.md), [`sdk/julia`](sdk/julia/README.md), and
 [`sdk/typescript`](sdk/typescript/README.md). None of them contains mapping logic. Each
 one interprets `schema/insert_manifest.json`, which `scripts/generate_insert_manifest.py`
-builds from `schema_map.json`, `sql_codegen_map.json`, `column_conventions.json`,
-`schema/insert_config.json`, and the DDL itself. Every INSERT a runtime can issue is
-written out in that file.
+builds from `schema_map.json`, `sql_codegen_map.json`, `schema/insert_config.json`, the
+SiennaSchemas components, and the DDL itself. Every INSERT a runtime can issue is written
+out in that file.
 
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
-- **Unmapped fields.** A field with no column yet is listed in `schema/insert_gaps.json`.
-  At insert time it is counted in the returned report instead of being written;
-  `strict` mode raises instead. Regenerating the manifest after a schema update closes
-  these gaps with no runtime change.
+- **Every field has a home.** `sql_codegen_map.json` places every property of a supported
+  component, so `schema/insert_gaps.json` is empty. A decomposed property needs an
+  `insert_config.json` `derived` path for each of its columns, or manifest generation
+  fails. A field the schemas do not define is counted in the report as skipped;
+  `strict` mode raises instead.
+- **Attribute units.** An attribute row gets the unit the registry holds for its arm: a
+  `power_units` field is written in `pu` or `MW` by the row's own `power_units`. A
+  unitless reference or curve is written with no unit, under its `attribute_identifiers`
+  exemption.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
-- **Not supported yet.** `LoadZone`, services, `service_associations`,
-  `time_series_associations`, and `ext` have no table. They are reported, not written.
+- **Not supported yet.** `time_series_associations`, `voltage_control_associations`,
+  `ext`, and the component types `schema_map.json` excludes are reported, not written.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. CI builds a database from them with each runtime and requires identical

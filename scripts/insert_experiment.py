@@ -61,7 +61,9 @@ def classify_skips(report, manifest):
             unknown[type_name] = fields
             continue
         gaps = set(entry["gaps"])
-        unregistered = {a["field"] for a in entry["attributes"] if a["unit"] is None}
+        unregistered = {
+            a["field"] for a in entry["attributes"] if not a["arms"] and not a["exempt"]
+        }
         for field_name, n in fields.items():
             if field_name in gaps:
                 tracked.setdefault(type_name, {})[field_name] = n

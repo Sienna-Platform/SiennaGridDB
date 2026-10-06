@@ -125,14 +125,49 @@ def test_not_null_column_without_source_blocks_generation():
         component_entry(conn, resolver, inputs, "transmission_interchanges", comp, 0, {})
 
 
+def _attributes(manifest, component):
+    return {a["field"]: a for a in manifest["components"][component]["attributes"]}
+
+
 def test_attribute_units(manifest):
-    lcc = {
-        a["field"]: a for a in manifest["components"]["TwoTerminalLCCLine"]["attributes"]
+    """Each attribute carries the arms generate_sql_schema.py registers: a fixed
+    unit under "", or one arm per value of the row's own unit field."""
+    lcc = _attributes(manifest, "TwoTerminalLCCLine")
+    assert lcc["rectifier_rc"]["unit_field"] is None
+    assert lcc["rectifier_rc"]["arms"] == {"": {"unit": "ohm", "quantity_kind": "Resistance"}}
+    vsc = _attributes(manifest, "TwoTerminalVSCLine")
+    assert vsc["reactive_power_to"]["unit_field"] == "power_units"
+    assert vsc["reactive_power_to"]["arms"] == {
+        "COMPONENT_BASE": {"unit": "pu", "quantity_kind": "ReactivePower"},
+        "NATURAL_UNITS": {"unit": "MVAr", "quantity_kind": "ReactivePower"},
     }
-    assert lcc["rectifier_rc"]["unit"] is None
-    hydro = {a["field"]: a for a in manifest["components"]["HydroTurbine"]["attributes"]}
-    assert hydro["efficiency"]["unit"] == "1"
-    assert hydro["efficiency"]["quantity_kind"] == "Fraction"
+    reservoir = _attributes(manifest, "HydroReservoir")
+    assert reservoir["upstream_turbines"]["exempt"] is True
+    assert reservoir["upstream_turbines"]["arms"] == {}
+
+
+def test_attribute_arms_match_the_registry(manifest, db):
+    """The runtimes write exactly the (unit, quantity_kind) pairs the registry
+    holds for the name, so the attributes unit trigger never rejects them."""
+    registered = set(db.execute(
+        "SELECT column_name, unit, quantity_kind FROM unit_conventions "
+        "WHERE table_name = 'attributes'"
+    ).fetchall())
+    for name, entry in manifest["components"].items():
+        for attr in entry["attributes"]:
+            for arm in attr["arms"].values():
+                key = (attr["field"], arm["unit"], arm["quantity_kind"])
+                assert key in registered, f"{name}: {key}"
+
+
+def test_decomposed_property_needs_every_derived_path():
+    inputs = load_inputs()
+    del inputs["config"]["derived"]["FixedAdmittance"]["y_b"]
+    conn = build_db(SCHEMA_DIR)
+    resolver = RefResolver(str(SCHEMAS_PATH))
+    comp = {"component": "FixedAdmittance", "file": "Operations/StaticInjection/FixedAdmittance.json"}
+    with pytest.raises(ManifestError, match=r"decomposed Y .*y_b"):
+        component_entry(conn, resolver, inputs, "fixed_admittance", comp, 0, {})
 
 
 def test_vocabulary(manifest):
@@ -148,8 +183,8 @@ def test_unsupported_entries(manifest):
     assert manifest["unsupported_components"] == {}
     assert set(manifest["unsupported_sections"]) == {
         "ext",
-        "service_associations",
         "time_series_associations",
+        "voltage_control_associations",
     }
 
 
@@ -180,7 +215,8 @@ def test_checked_in_manifest_is_current():
     assert result.returncode == 0, result.stderr
 
 
-def test_gap_file_lists_known_gaps():
+def test_gap_file_is_empty():
+    """sql_codegen_map.json gives every property of every mapped component a
+    home, so the inserter drops no field of a supported component."""
     gaps = json.loads((SCHEMA_DIR / "insert_gaps.json").read_text(encoding="utf-8"))["gaps"]
-    assert "number" in gaps["ACBus"]
-    assert "available" in gaps["Line"]
+    assert gaps == {}
