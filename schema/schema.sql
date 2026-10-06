@@ -1067,7 +1067,8 @@ CREATE TABLE facts_control_devices (
 ) STRICT;
 
 -- Balancing topologies for the system: buses (ACBus, DCBus) or larger aggregated
--- regions (LoadZone). load_zone and area reference other rows.
+-- regions (LoadZone). load_zone and area reference other rows. load_zone is a
+-- same-table reference, so its FK is deferred: a bus row may precede its zone row.
 -- Components: ACBus, DCBus, LoadZone
 -- Attributes: peak_active_power, peak_reactive_power, base_power
 -- Not stored: power_units
@@ -1084,7 +1085,7 @@ CREATE TABLE balancing_topologies (
     angle REAL NULL, -- Units: rad
     magnitude REAL NULL, -- Units: pu
     voltage_limits TEXT NULL CHECK (json_valid(voltage_limits)), -- Units: pu
-    load_zone INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL
+    load_zone INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 
 -- Investment technology options for expansion problems
