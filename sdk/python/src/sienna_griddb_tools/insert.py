@@ -10,9 +10,11 @@ from .manifest import load_manifest
 from .report import InsertReport
 from .time_series import (
     derived_sources,
+    export_values,
     insert_associations,
     point_at_sources,
     require_owner_label,
+    values_missing,
 )
 
 SAVEPOINT = "sienna_griddb_tools_insert"
@@ -188,7 +190,9 @@ def _time_series_rows(doc, report, strict, unsupported_ids, owners):
     return stored
 
 
-def insert_document(conn, doc, *, strict=False):
+def insert_document(conn, doc, *, strict=False, time_series=None):
+    """Insert a whole SystemDocument in one savepoint. time_series is the HDF5
+    sidecar holding its arrays (time_series_storage_file); it is only read."""
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
@@ -220,6 +224,9 @@ def insert_document(conn, doc, *, strict=False):
         if attr.get("id") in attr_types:
             owners[attr["id"]] = (attr_types[attr["id"]], "SupplementalAttribute")
     series = _time_series_rows(doc, report, strict, unsupported_ids, owners)
+    missing = values_missing(time_series) if series else None
+    if missing is not None:
+        _unsupported(report, strict, "time_series_values", len(series), missing)
     supplemental = manifest["supplemental_attributes"]
     with _savepoint(conn):
         seed_vocabulary(conn)
@@ -270,4 +277,6 @@ def insert_document(conn, doc, *, strict=False):
                 )
                 report.add_inserted(name)
         insert_associations(conn, manifest["time_series"], series, report)
+        if series and missing is None:
+            export_values(conn, manifest["time_series"], series, time_series)
     return report

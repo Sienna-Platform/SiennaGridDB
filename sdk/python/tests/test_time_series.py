@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from test_insert import count, golden
 
@@ -166,3 +168,87 @@ def test_point_at_sources_copies_only_what_changes():
     assert out["a"] is untouched
     assert node["b"][0]["fuel_cost_time_series"] == 8
     assert point_at_sources(untouched, {8: 7}) is untouched
+
+
+def sidecar_document(tmp_path):
+    """The golden document with two series of its first thermal stored in a real
+    infrastore sidecar; a deleted series leaves a gap so ids are not 1..n."""
+    infrastore = pytest.importorskip("infrastore")
+    np = pytest.importorskip("numpy")
+    if not hasattr(infrastore.Store, "export_sqlite"):
+        pytest.skip("infrastore has no SQLite export")
+    from datetime import datetime, timedelta, timezone
+
+    doc = golden()
+    gen = thermal(doc)
+    path = str(tmp_path / "ts.h5")
+    store = infrastore.Store.create(path)
+    t0, hour = datetime(2030, 1, 1, tzinfo=timezone.utc), timedelta(hours=1)
+    component = infrastore.OwnerCategory.Component
+
+    def add(name, values, **kwargs):
+        series = infrastore.SingleTimeSeries(t0, hour, np.array(values, dtype=float), name)
+        return store.add_time_series(
+            gen["id"], "ThermalStandard", component, series, **kwargs
+        )
+
+    gone = add("scratch", [0.0])
+    add("max_active_power", [1.0, 2.0, 3.0], features={"year": 2030})
+    add("min_active_power", [0.5, 0.5, 0.5])
+    store.remove_by_ids([gone])
+    doc["time_series_associations"] = json.loads(
+        store.export_time_series_associations_openapi()
+    )
+    store.close()
+    doc.pop("ext")
+    return doc, path
+
+
+def test_values_are_infrastore_export_keyed_by_association_id(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    values = conn.execute(
+        "SELECT association_id, name, timestamp, value FROM time_series_values "
+        "ORDER BY association_id, timestamp"
+    ).fetchall()
+    ids = {r["name"]: r["association_id"] for r in doc["time_series_associations"]}
+    assert sorted(ids.values()) == [2, 3]
+    assert values == [
+        (ids["max_active_power"], "max_active_power", "2030-01-01T00:00:00.000Z", 1.0),
+        (ids["max_active_power"], "max_active_power", "2030-01-01T01:00:00.000Z", 2.0),
+        (ids["max_active_power"], "max_active_power", "2030-01-01T02:00:00.000Z", 3.0),
+        (ids["min_active_power"], "min_active_power", "2030-01-01T00:00:00.000Z", 0.5),
+        (ids["min_active_power"], "min_active_power", "2030-01-01T01:00:00.000Z", 0.5),
+        (ids["min_active_power"], "min_active_power", "2030-01-01T02:00:00.000Z", 0.5),
+    ]
+    assert conn.execute("SELECT * FROM orphaned_time_series").fetchall() == []
+
+
+def test_values_without_a_sidecar_are_reported_and_strict_raises(conn, tmp_path):
+    doc, _ = sidecar_document(tmp_path)
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["time_series_values"] == 2
+    assert count(conn, "time_series_associations") == 2
+    with pytest.raises(griddb.InsertError, match="no time series sidecar"):
+        griddb.insert_document(conn, doc, strict=True)
+
+
+def test_deleting_an_owner_leaves_its_values_orphaned(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    conn.execute("DELETE FROM entities WHERE id = ?", (thermal(doc)["id"],))
+    assert len(conn.execute("SELECT * FROM orphaned_time_series").fetchall()) == 2
+
+
+def test_a_second_export_into_one_database_raises(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    # A second document's series (new ids and names) land in the same export tables.
+    rows = [
+        {**r, "association_id": r["association_id"] + 100, "name": r["name"] + "_2"}
+        for r in doc["time_series_associations"]
+    ]
+    second = {"components": {}, "time_series_associations": rows}
+    with pytest.raises(griddb.InsertError, match="already exists"):
+        griddb.insert_document(conn, second, time_series=sidecar)
+    assert count(conn, "time_series_associations") == 2
