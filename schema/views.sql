@@ -180,3 +180,85 @@ WHERE
             sa.service_id = o.service_id
             AND sa.entity_id = o.device_id
     );
+
+-- Every time series reference in a stored payload (association_id,
+-- *_association_id, fuel_cost_time_series) no association resolves; empty after
+-- a complete insert. test_dangling_view_covers_every_reference_column checks it.
+CREATE VIEW IF NOT EXISTS dangling_time_series_references AS
+WITH
+    payloads (entity_id, source_table, source_column, payload) AS (
+        SELECT entity_id, 'attributes', name, value FROM attributes
+        UNION ALL
+        SELECT id, 'hydro_generators', 'operation_cost', operation_cost FROM hydro_generators
+        UNION ALL
+        SELECT id, 'hydro_reservoirs', 'head_to_volume_factor', head_to_volume_factor
+        FROM hydro_reservoirs
+        UNION ALL
+        SELECT id, 'hydro_reservoirs', 'operation_cost', operation_cost FROM hydro_reservoirs
+        UNION ALL
+        SELECT id, 'plants', 'value', value FROM plants
+        UNION ALL
+        SELECT id, 'point_to_point_bids', 'spread_bid', spread_bid FROM point_to_point_bids
+        UNION ALL
+        SELECT id, 'renewable_generators', 'operation_cost', operation_cost
+        FROM renewable_generators
+        UNION ALL
+        SELECT id, 'reserves', 'variable', variable FROM reserves
+        UNION ALL
+        SELECT id, 'sources', 'operation_cost', operation_cost FROM sources
+        UNION ALL
+        SELECT id, 'storage_technologies', 'operation_costs', operation_costs
+        FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'capital_costs_charge', capital_costs_charge FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'capital_costs_discharge', capital_costs_discharge FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'capital_costs_energy', capital_costs_energy FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'interconnection_cost', interconnection_cost FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_units', 'operation_cost', operation_cost FROM storage_units
+        UNION ALL
+        SELECT id, 'supplemental_attributes', 'value', value FROM supplemental_attributes
+        UNION ALL
+        SELECT id, 'supply_technologies', 'capital_costs', capital_costs FROM supply_technologies
+        UNION ALL
+        SELECT id, 'supply_technologies', 'operation_costs', operation_costs
+        FROM supply_technologies
+        UNION ALL
+        SELECT id, 'thermal_generators', 'operation_cost', operation_cost FROM thermal_generators
+        UNION ALL
+        SELECT id, 'transport_technologies', 'capital_costs', capital_costs
+        FROM transport_technologies
+        UNION ALL
+        SELECT id, 'transport_technologies', 'line_loss', line_loss FROM transport_technologies
+        UNION ALL
+        SELECT id, 'virtual_participants', 'operation_cost', operation_cost
+        FROM virtual_participants
+    )
+SELECT
+    p.entity_id,
+    p.source_table,
+    p.source_column,
+    t.fullkey AS path,
+    t.value AS association_id
+FROM
+    payloads p,
+    json_tree(p.payload) t
+WHERE
+    json_valid(p.payload)
+    AND t.type = 'integer'
+    -- A bare integer payload has no key: its column (or attribute) names it.
+    AND (
+        coalesce(t.key, p.source_column) IN ('association_id', 'fuel_cost_time_series')
+        OR coalesce(t.key, p.source_column) GLOB '*_association_id'
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations a
+        WHERE
+            a.id = t.value
+    );

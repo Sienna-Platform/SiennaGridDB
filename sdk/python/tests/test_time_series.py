@@ -151,6 +151,7 @@ def test_a_reference_to_a_derived_series_points_at_its_source(conn):
         "SELECT operation_cost FROM thermal_generators WHERE id = ?", (gen["id"],)
     ).fetchone()[0]
     assert '"fuel_cost_time_series":7' in stored.replace(" ", "")
+    assert conn.execute("SELECT * FROM dangling_time_series_references").fetchall() == []
     # The caller's document is left as it was.
     assert gen["operation_cost"]["variable_operation_cost"]["fuel_cost_time_series"] == 8
 

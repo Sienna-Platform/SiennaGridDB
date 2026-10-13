@@ -433,3 +433,18 @@ def test_offer_without_membership_is_a_violation(system):
     assert rows(system, "SELECT * FROM service_offer_violations") == [(11, 2)]
     join(system, 2, 11)
     assert rows(system, "SELECT * FROM service_offer_violations") == []
+
+
+def test_a_reserve_demand_curve_reference_must_resolve(fresh_db):
+    add_reserve(fresh_db, 1, "OnlineReserve")
+    view = "SELECT * FROM dangling_time_series_references"
+    path = '$."value_curve"."function_data"."association_id"'
+    assert rows(fresh_db, view) == [(1, "reserves", "variable", path, 7)]
+    fresh_db.execute(
+        "INSERT INTO time_series_associations (id, owner_id, owner_type, owner_category, "
+        "time_series_type, name, uri, features_hash) "
+        "VALUES (7, 1, 'OnlineReserve', 'Component', 'SingleTimeSeries', 'variable_cost', "
+        "'u', ?)",
+        ("0" * 64,),
+    )
+    assert rows(fresh_db, view) == []
