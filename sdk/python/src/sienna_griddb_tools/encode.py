@@ -90,6 +90,7 @@ ENCODERS = {
     "text": _text,
     "bool": _bool,
     "json": canonical_json,
+    "features_hash": features_hash,
 }
 
 

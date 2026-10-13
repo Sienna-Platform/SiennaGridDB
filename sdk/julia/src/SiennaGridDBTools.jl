@@ -31,5 +31,6 @@ include("encode.jl")
 include("manifest.jl")
 include("db.jl")
 include("insert.jl")
+include("time_series.jl")
 
 end

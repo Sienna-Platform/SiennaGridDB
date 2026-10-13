@@ -178,11 +178,18 @@ def test_vocabulary(manifest):
 
 
 def test_unsupported_sections(manifest):
-    assert set(manifest["unsupported_sections"]) == {
-        "ext",
-        "time_series_associations",
-        "voltage_control_associations",
-    }
+    assert set(manifest["unsupported_sections"]) == {"ext", "voltage_control_associations"}
+
+
+def test_time_series_entry(manifest):
+    """The association id binds to id, the feature map to its hash, owner_id is the reference."""
+    ts = manifest["time_series"]
+    columns = ts["row_sql"].split("(")[1].split(")")[0].split(", ")
+    paths = {b["path"]: (c, b["encode"]) for b, c in zip(ts["bindings"], columns)}
+    assert paths["association_id"] == ("id", "int")
+    assert paths["features"] == ("features_hash", "features_hash")
+    assert ts["references"] == ["owner_id"]
+    assert set(ts["unsupported_types"]) == {"NonSequentialTimeSeries"}
 
 
 def test_association_references_are_the_foreign_key_columns(manifest):

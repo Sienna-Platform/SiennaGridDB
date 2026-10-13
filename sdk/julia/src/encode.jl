@@ -4,6 +4,7 @@ struct RealEncoding <: Encoding end
 struct TextEncoding <: Encoding end
 struct BoolEncoding <: Encoding end
 struct JSONEncoding <: Encoding end
+struct FeaturesHashEncoding <: Encoding end
 
 const ENCODINGS = Dict{String, Encoding}(
     "int" => IntEncoding(),
@@ -11,6 +12,7 @@ const ENCODINGS = Dict{String, Encoding}(
     "text" => TextEncoding(),
     "bool" => BoolEncoding(),
     "json" => JSONEncoding(),
+    "features_hash" => FeaturesHashEncoding(),
 )
 
 canonical_json(value) = JSON.json(value)
@@ -103,3 +105,5 @@ end
 function write_feature(::IO, v)
     throw(EncodeError("expected an int, float, bool or string feature, got $(repr(v))"))
 end
+
+encode(::FeaturesHashEncoding, v) = features_hash(v)
