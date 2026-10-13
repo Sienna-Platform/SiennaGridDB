@@ -92,4 +92,34 @@ if HAS_GOLDEN
             end
         end
     end
+
+    @testset "a plant owns series as a supplemental attribute" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                gen = first_of(doc, "ThermalStandard")["id"]
+                push!(
+                    doc["supplemental_attributes"],
+                    Dict{String, Any}("id" => 9100, "name" => "plant1"),
+                )
+                push!(
+                    doc["supplemental_attribute_associations"],
+                    Dict{String, Any}(
+                        "component_id" => gen,
+                        "component_type" => "ThermalStandard",
+                        "attribute_id" => 9100,
+                        "attribute_type" => "ThermalPowerPlant",
+                    ),
+                )
+                doc["time_series_associations"] = Any[series(
+                    9100,
+                    7;
+                    owner_type="ThermalPowerPlant",
+                    owner_category="SupplementalAttribute",
+                )]
+                insert_document!(db, doc)
+                @test count_rows(db, "time_series_associations") == 1
+            end
+        end
+    end
 end

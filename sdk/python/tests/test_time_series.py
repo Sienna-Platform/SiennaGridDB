@@ -90,3 +90,22 @@ def test_unsupported_series_type_is_reported_and_strict_raises(conn):
     assert count(conn, "time_series_associations") == 0
     with pytest.raises(griddb.InsertError, match="timestamps_uri"):
         griddb.insert_document(conn, doc, strict=True)
+
+
+def test_a_plant_owns_series_as_a_supplemental_attribute(conn):
+    doc = golden()
+    gen = thermal(doc)
+    plant = {"id": 9100, "name": "plant1"}
+    doc["supplemental_attributes"].append(plant)
+    doc["supplemental_attribute_associations"].append(
+        {
+            "component_id": gen["id"],
+            "component_type": "ThermalStandard",
+            "attribute_id": plant["id"],
+            "attribute_type": "ThermalPowerPlant",
+        }
+    )
+    owner = {"owner_type": "ThermalPowerPlant", "owner_category": "SupplementalAttribute"}
+    doc["time_series_associations"] = [series(plant, 7, **owner)]
+    griddb.insert_document(conn, doc)
+    assert count(conn, "time_series_associations") == 1
