@@ -315,7 +315,7 @@ def system(fresh_db):
     for pair in [(1, 10), (1, 11), (2, 12), (4, 20), (4, 21), (4, 22), (5, 22)]:
         join(conn, *pair)
     add_series(conn, 10, "online_up", "SingleTimeSeries")
-    add_series(conn, 10, "online_up", "DeterministicSingleTimeSeries")
+    add_series(conn, 10, "online_up", "Deterministic")
     add_series(conn, 10, "max_active_power", "SingleTimeSeries")
     return conn
 
@@ -424,7 +424,7 @@ def test_service_bids_are_the_device_series_named_after_the_reserve(system):
     assert rows(
         system, "SELECT device_id, service_id, time_series_type FROM service_bids"
     ) == [
-        (10, 1, "DeterministicSingleTimeSeries"),
+        (10, 1, "Deterministic"),
         (10, 1, "SingleTimeSeries"),
     ]
 

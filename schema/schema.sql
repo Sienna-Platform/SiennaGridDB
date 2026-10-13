@@ -248,9 +248,11 @@ CREATE TABLE time_series_associations (
     owner_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     owner_type TEXT NOT NULL,
     owner_category TEXT NOT NULL CHECK (owner_category IN ('Component', 'SupplementalAttribute')),
+    -- No DeterministicSingleTimeSeries: it is a view over its SingleTimeSeries' array,
+    -- which a consumer derives again (transform_single_time_series!).
     time_series_type TEXT NOT NULL CHECK (time_series_type IN (
         'SingleTimeSeries', 'NonSequentialTimeSeries', 'Deterministic',
-        'DeterministicSingleTimeSeries', 'Probabilistic', 'Scenarios'
+        'Probabilistic', 'Scenarios'
     )),
     name TEXT NOT NULL,
     initial_timestamp TEXT,

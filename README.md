@@ -397,6 +397,8 @@ out in that file.
   `features_hash` is infrastore's hash of the feature map (`crates/infrastore-core/src/hash.rs`), checked against `test/features_hash_vectors.json`.
   A row that names its owner with another type or category raises.
   A `NonSequentialTimeSeries` is reported, not written: GridDB has no column for its `timestamps_uri`.
+  A `DeterministicSingleTimeSeries` is reported, not written: it is a view over its `SingleTimeSeries`' array, which a consumer derives again with `transform_single_time_series!`.
+  A reference to one (an `association_id`, a `*_association_id` or a `fuel_cost_time_series`) is written as its source's id: the series with the same owner, name, features and `uri`.
   The TypeScript runtime reports every time series row.
 - **Not supported yet.** `voltage_control_associations`, `ext`, and the component types `schema_map.json` excludes are reported, not written.
   So is an association or time series row that names a component of such a type.

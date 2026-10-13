@@ -247,10 +247,12 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
     report = InsertReport()
     components = something(get(doc, "components", nothing), Dict{String, Any}())
     plans = Tuple{ComponentPlan, Vector{Any}}[]
+    # References to a derived series name its source, which GridDB stores instead.
+    sources = derived_sources(section_rows(doc, m.time_series.section))
     unsupported_ids = Set{Int}()
     owners = Dict{Int, Tuple{String, String}}()
     for type_name in sort!(collect(keys(components)))
-        objs = components[type_name]
+        objs = Any[point_at_sources(o, sources) for o in components[type_name]]
         # Ids follow the int encoder's rule, so any other value is never skipped:
         # it reaches the encoder and fails there.
         ids = Set{Int}(
@@ -259,7 +261,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
         )
         foreach(id -> owners[id] = (type_name, "Component"), ids)
         if haskey(m.components, type_name)
-            push!(plans, (m.components[type_name], collect(Any, objs)))
+            push!(plans, (m.components[type_name], objs))
         else
             note_unsupported!(report, strict, type_name, length(objs))
             union!(unsupported_ids, ids)
@@ -273,7 +275,8 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
         end
     end
     attr_types = attribute_types(doc)
-    for attr in section_rows(doc, "supplemental_attributes")
+    attrs = point_at_sources(section_rows(doc, "supplemental_attributes"), sources)
+    for attr in attrs
         id = get(attr, "id", nothing)
         if is_int_value(id) && haskey(attr_types, Int(id))
             owners[Int(id)] = (attr_types[Int(id)], "SupplementalAttribute")
@@ -288,7 +291,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             end
         end
         routed = Tuple{String, String, Any, String}[]
-        for attr in section_rows(doc, "supplemental_attributes")
+        for attr in attrs
             id = Int(attr["id"])
             if !haskey(attr_types, id)
                 throw(

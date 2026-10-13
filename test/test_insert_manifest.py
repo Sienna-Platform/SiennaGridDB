@@ -189,7 +189,10 @@ def test_time_series_entry(manifest):
     assert paths["association_id"] == ("id", "int")
     assert paths["features"] == ("features_hash", "features_hash")
     assert ts["references"] == ["owner_id"]
-    assert set(ts["unsupported_types"]) == {"NonSequentialTimeSeries"}
+    assert set(ts["unsupported_types"]) == {
+        "DeterministicSingleTimeSeries",
+        "NonSequentialTimeSeries",
+    }
 
 
 def test_association_references_are_the_foreign_key_columns(manifest):

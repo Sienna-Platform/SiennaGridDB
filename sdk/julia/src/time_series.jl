@@ -83,3 +83,72 @@ function insert_associations!(
     end
     return nothing
 end
+
+const DERIVED = "DeterministicSingleTimeSeries"
+
+series_key(row::AbstractDict) = (
+    get(row, "owner_id", nothing),
+    get(row, "owner_category", nothing),
+    get(row, "name", nothing),
+    feature_key(get(row, "features", nothing)),
+    get(row, "uri", nothing),
+)
+
+# Tells 1, 1.0 and true apart, as features_hash does.
+feature_key(d::AbstractDict) = sort!([(String(k), typeof(v), v) for (k, v) in d]; by=first)
+feature_key(_) = nothing
+
+"""
+`DeterministicSingleTimeSeries` id => its `SingleTimeSeries` id. A derived series is a
+view over its source's array: same owner, name, features and uri.
+"""
+function derived_sources(rows)
+    sources = Dict(
+        series_key(r) => r["association_id"] for
+        r in rows if get(r, "time_series_type", nothing) == "SingleTimeSeries"
+    )
+    derived = Dict{Int, Int}()
+    for r in rows
+        get(r, "time_series_type", nothing) == DERIVED || continue
+        source = get(sources, series_key(r), nothing)
+        id = get(r, "association_id", nothing)
+        if is_int_value(source) && is_int_value(id)
+            derived[Int(id)] = Int(source)
+        end
+    end
+    return derived
+end
+
+is_reference(key::AbstractString) =
+    key in ("association_id", "fuel_cost_time_series") || endswith(key, "_association_id")
+
+"""
+`node` with its time series references to a derived series naming the source instead
+(the keys `dangling_time_series_references` reads). A dict or vector is copied only
+when something inside it changes; the caller's stays as it was.
+"""
+function point_at_sources(
+    node::Union{AbstractDict, AbstractVector},
+    sources::Dict{Int, Int},
+)
+    isempty(sources) && return node
+    out = nothing
+    for (k, v) in pairs(node)
+        new =
+            if k isa AbstractString &&
+               is_reference(k) &&
+               is_int_value(v) &&
+               haskey(sources, Int(v))
+                sources[Int(v)]
+            else
+                point_at_sources(v, sources)
+            end
+        new === v && continue
+        if isnothing(out)
+            out = node isa AbstractDict ? Dict{String, Any}(node) : Vector{Any}(node)
+        end
+        out[k] = new
+    end
+    return isnothing(out) ? node : out
+end
+point_at_sources(node, ::Dict{Int, Int}) = node

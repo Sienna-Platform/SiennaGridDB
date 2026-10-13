@@ -109,3 +109,59 @@ def test_a_plant_owns_series_as_a_supplemental_attribute(conn):
     doc["time_series_associations"] = [series(plant, 7, **owner)]
     griddb.insert_document(conn, doc)
     assert count(conn, "time_series_associations") == 1
+
+
+def fuel_cost_series(doc):
+    """A golden thermal whose fuel cost is the series 7, with a DeterministicSingleTimeSeries
+    8 derived from it: same array, owner, name and features, plus forecast windows."""
+    gen = thermal(doc)
+    cost = gen["operation_cost"]["variable_operation_cost"]
+    cost.update(
+        {"variable_cost_type": "FUEL", "fuel_cost": None, "fuel_cost_time_series": 8}
+    )
+    derived = series(
+        gen,
+        8,
+        time_series_type="DeterministicSingleTimeSeries",
+        horizon="PT24H",
+        interval="PT24H",
+        count=1,
+    )
+    doc["time_series_associations"] = [series(gen, 7, name="fuel_cost"), derived]
+    derived["name"] = "fuel_cost"
+    doc.pop("ext")
+    return gen
+
+
+def test_deterministic_single_time_series_is_reported_and_strict_raises(conn):
+    doc = golden()
+    fuel_cost_series(doc)
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["DeterministicSingleTimeSeries"] == 1
+    assert conn.execute("SELECT id FROM time_series_associations").fetchall() == [(7,)]
+    with pytest.raises(griddb.InsertError, match="transform_single_time_series"):
+        griddb.insert_document(conn, doc, strict=True)
+
+
+def test_a_reference_to_a_derived_series_points_at_its_source(conn):
+    doc = golden()
+    gen = fuel_cost_series(doc)
+    griddb.insert_document(conn, doc)
+    stored = conn.execute(
+        "SELECT operation_cost FROM thermal_generators WHERE id = ?", (gen["id"],)
+    ).fetchone()[0]
+    assert '"fuel_cost_time_series":7' in stored.replace(" ", "")
+    # The caller's document is left as it was.
+    assert gen["operation_cost"]["variable_operation_cost"]["fuel_cost_time_series"] == 8
+
+
+def test_point_at_sources_copies_only_what_changes():
+    from sienna_griddb_tools.time_series import point_at_sources
+
+    untouched = {"curve": [1, 2], "association_id": 3}
+    node = {"a": untouched, "b": [{"fuel_cost_time_series": 8}], "c": 8}
+    out = point_at_sources(node, {8: 7})
+    assert out == {"a": untouched, "b": [{"fuel_cost_time_series": 7}], "c": 8}
+    assert out["a"] is untouched
+    assert node["b"][0]["fuel_cost_time_series"] == 8
+    assert point_at_sources(untouched, {8: 7}) is untouched

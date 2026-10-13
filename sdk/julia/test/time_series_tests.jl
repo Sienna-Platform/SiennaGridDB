@@ -122,4 +122,74 @@ if HAS_GOLDEN
             end
         end
     end
+
+    # A thermal whose fuel cost is the series 7, with a DeterministicSingleTimeSeries 8
+    # derived from it: same array, owner, name and features, plus forecast windows.
+    function fuel_cost_series!(doc)
+        gen = doc["components"]["ThermalStandard"][1]
+        cost = gen["operation_cost"]["variable_operation_cost"]
+        cost["variable_cost_type"] = "FUEL"
+        cost["fuel_cost"] = nothing
+        cost["fuel_cost_time_series"] = 8
+        derived = series(
+            gen["id"],
+            8;
+            name="fuel_cost",
+            time_series_type="DeterministicSingleTimeSeries",
+            horizon="PT24H",
+            interval="PT24H",
+            count=1,
+        )
+        doc["time_series_associations"] =
+            Any[series(gen["id"], 7; name="fuel_cost"), derived]
+        delete!(doc, "ext")
+        return gen
+    end
+
+    @testset "a derived series is reported, and strict raises" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                fuel_cost_series!(doc)
+                report = insert_document!(db, doc)
+                @test report.unsupported["DeterministicSingleTimeSeries"] == 1
+                @test query_rows(db, "SELECT id FROM time_series_associations") == [(7,)]
+                @test_throws r"transform_single_time_series" insert_document!(
+                    db,
+                    doc;
+                    strict=true,
+                )
+            end
+        end
+    end
+
+    @testset "a reference to a derived series points at its source" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                gen = fuel_cost_series!(doc)
+                insert_document!(db, doc)
+                sql = "SELECT operation_cost FROM thermal_generators WHERE id = $(gen["id"])"
+                stored = JSON.parse(only(query_rows(db, sql))[1])
+                @test stored["variable_operation_cost"]["fuel_cost_time_series"] == 7
+                @test gen["operation_cost"]["variable_operation_cost"]["fuel_cost_time_series"] ==
+                      8
+            end
+        end
+    end
+
+    @testset "point_at_sources copies only what changes" begin
+        untouched = Dict{String, Any}("curve" => Any[1, 2], "association_id" => 3)
+        node = Dict{String, Any}(
+            "a" => untouched,
+            "b" => Any[Dict{String, Any}("fuel_cost_time_series" => 8)],
+            "c" => 8,
+        )
+        out = G.point_at_sources(node, Dict(8 => 7))
+        @test out["b"][1]["fuel_cost_time_series"] == 7
+        @test out["c"] == 8
+        @test out["a"] === untouched
+        @test node["b"][1]["fuel_cost_time_series"] == 8
+        @test G.point_at_sources(untouched, Dict(8 => 7)) === untouched
+    end
 end
