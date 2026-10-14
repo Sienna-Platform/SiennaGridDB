@@ -114,12 +114,17 @@ them:
 | `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
-**Columns vs. `attributes`.** A table sourced from several upstream components keeps the fields common to all of them as columns.
-A field only some variants carry goes through `sql_codegen_map.json`'s `attribute_channel` into the generic `attributes` table instead.
-Each attribute row states its own `unit`/`quantity_kind`, following the same per-row basis rule as typed columns: the name registers one `attributes.<name>` convention per arm (for example `active_power` as `ActivePower`/`MW` for `NATURAL_UNITS` and `ActivePower`/`pu` for `COMPONENT_BASE`), and each row uses the arm matching its own component's `power_units` (or `parameter_units`, a control mode, and so on).
-References and self-describing payloads listed in `attribute_identifiers` (bus `number`, `load_zone`, `dynamic_injector`, the loads' `operation_cost`, loss curves) and string, boolean or enum values carry no unit.
+**Columns vs. `attributes`.** `schema/sql_codegen_map.json` places every property of every
+mapped component: a column, an `attributes` row, a split into DB-only columns, or not
+stored. A field only some variants of a merged table carry (the LCC and VSC detail of
+`two_terminal_hvdc_lines`, the ZIP breakdown of `loads`) goes to the generic `attributes`
+table. Its unit convention is derived from the schema's annotation and registered as
+`attributes.<name>`, one row per unit arm (`MW` and `pu` for a `power_units` field); the
+insert trigger accepts any registered arm. A unitless structured attribute (a reference
+list, a loss curve) gets an `attribute_identifiers` row instead. An `attributes` name means
+one quantity kind everywhere; generation fails otherwise.
 
-Current registry: **41 quantity kinds, 66 allowed units, 414 conventions.**
+Current registry: **42 quantity kinds, 67 allowed units, 534 conventions.**
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
@@ -211,24 +216,28 @@ a **gap** (an unmapped column or unannotated property) is only a warning. `schem
 records the DB-table → SiennaSchemas-component mapping the check walks, and marks which
 components also correspond to a PowerSystems.jl struct for the optional PSY-descriptor layer.
 
-### Generated DDL (SQL codegen from the JSON Schemas)
+### Generated tables (SQL codegen from the JSON Schemas)
 
 Just as the OpenAPI specs generate the Python and Julia model packages, the JSON Schemas
-generate SQLite DDL here. `scripts/generate_sql_schema.py` projects the components mapped
-in `schema/schema_map.json` into `schema/generated_schema.sql`, applying the DB-specific
-config in `schema/sql_codegen_map.json` (column renames, foreign keys, and the
-attribute-channel property lists — e.g. the `two_terminal_hvdc_lines` converter
-fields live in the `attributes` table, not as columns). The generated file is a **reference projection**: the production
-DDL remains the hand-written `schema/schema.sql`, and the two are compared mechanically:
+generate the component tables here. `scripts/generate_sql_schema.py` writes every table
+mapped in `schema/schema_map.json` into the marked region at the end of `schema/schema.sql`,
+and writes the unit conventions of the generated columns into
+`schema/column_conventions.json` (entries marked `"source": "schemas"`). Everything else in
+those two files is hand-written.
+
+Generation is closed-world. It fails, listing every problem, when a schema file is neither
+mapped nor `excluded` in `schema_map.json`, when a component property has no disposition in
+`sql_codegen_map.json`, or when a disposition names a property the schemas dropped. A schema
+release that adds a component or a field therefore cannot land without a decision.
 
 ```console
-python3 scripts/generate_sql_schema.py           # regenerate
-python3 scripts/generate_sql_schema.py --check   # staleness gate (CI)
-python3 scripts/generate_sql_schema.py --diff    # drift report vs schema.sql
+just generate-schema                              # regenerate (default ../SiennaSchemas)
+python3 scripts/generate_sql_schema.py --check    # staleness + closed-world gate (CI)
 ```
 
-`--diff` fails only on type contradictions for same-named columns; coverage gaps
-(schema properties without DB columns, and vice versa) are reported as drift lines.
+`.schema-version` pins the SiennaSchemas release. On each release,
+[`update-schema.yml`](.github/workflows/update-schema.yml) regenerates and opens a PR; when
+generation fails, the PR body lists the missing decisions.
 
 ## Association tables
 
@@ -365,33 +374,31 @@ Both were run against a database built from `schema/schema.sql` + `triggers.sql`
 
 ## Code generation
 
-Two independent generators project SiennaSchemas into this repo. Neither is authoritative
-over the hand-written DDL — both are checked against it instead.
+Two generators project SiennaSchemas into this repo.
 
-| Generated from | Generator | Output | Authoritative? |
-|---|---|---|---|
-| SiennaSchemas JSON Schemas, via `schema/schema_map.json` × `schema/sql_codegen_map.json` | `scripts/generate_sql_schema.py` | `schema/generated_schema.sql` | No — a reference projection, diffed against `schema/schema.sql` |
-| SiennaSchemas `Core/units.json` × `schema/column_conventions.json` | `scripts/generate_unit_registry.py` | `schema/unit_registry.sql` (sha256-sealed) | Yes — loaded verbatim; see [The unit registry](#the-unit-registry) |
+| Generated from | Generator | Output |
+|---|---|---|
+| SiennaSchemas JSON Schemas, via `schema/schema_map.json` × `schema/sql_codegen_map.json` | `scripts/generate_sql_schema.py` | the component tables in `schema/schema.sql`, and the `"source": "schemas"` entries of `schema/column_conventions.json` |
+| SiennaSchemas `Core/units.json` × `schema/column_conventions.json` | `scripts/generate_unit_registry.py` | `schema/unit_registry.sql` (sha256-sealed) |
 
-Hand-written, not generated: `schema/schema.sql` (production DDL) and `schema/triggers.sql`
-(validation triggers). `schema.sql` does not consume `generated_schema.sql` at build time —
-`--diff` is a drift *report*, not a build dependency.
+Hand-written: the rest of `schema/schema.sql` (entities, attributes, associations, time
+series, the registry tables), `schema/triggers.sql`, and `schema/views.sql`.
 
 ### Mapping and config files
 
-- **`schema/schema_map.json`** — DB table → SiennaSchemas component(s). Consumed by
-  `generate_sql_schema.py` and `check_units_sync.py` to resolve a column back to its schema
-  property (and, via `is_psy`, to a PowerSystems.jl struct).
-- **`schema/sql_codegen_map.json`** — DB-specific codegen config: column renames,
-  foreign-key clauses, which properties live in the generic `attributes` table instead of a
-  dedicated column, which are intentionally not persisted, and which hand-written columns
-  have no schema property at all (so the drift gate doesn't flag them as missing).
-- **`schema/column_conventions.json`** — DB-owned column → `(quantity_kind, unit)` map; the
-  input `generate_unit_registry.py` seeds `unit_conventions` from, alongside `Core/units.json`.
-- **`schema/coverage_decisions.json`** — a proposal (awaiting sign-off) recording, for every
-  schema property with no column in `schema.sql`, what should happen to it (new column,
-  `attributes` entry, rename, decomposed, or skip); intended to be enforced by
-  `scripts/check_coverage.py`, which does not exist in this checkout yet.
+- **`schema/schema_map.json`** — DB table → SiennaSchemas component(s), plus `excluded`:
+  each schema file with no generated table and the reason. Consumed by
+  `generate_sql_schema.py` and `check_units_sync.py` (via `is_psy`, also the
+  PowerSystems.jl struct).
+- **`schema/sql_codegen_map.json`** — per table, the disposition of every component
+  property (`columns` with overrides, `attribute_channel`, `decomposed`, `skip`), DB-only
+  columns, table constraints, indexes, and comments. The file's `description` lists the
+  override keys.
+- **`schema/column_conventions.json`** — column → `(quantity_kind, unit)` map; the input
+  `generate_unit_registry.py` seeds `unit_conventions` from, alongside `Core/units.json`.
+  Entries for generated columns are derived; JSON-path and DB-only entries are hand-written.
+- **`schema/coverage_decisions.json`** — the rules for choosing a disposition (column vs.
+  attribute vs. skip). `sql_codegen_map.json` holds the enforced result.
 
 ### Sync gates, and when to run them
 
@@ -400,7 +407,7 @@ above — and always before opening a PR that touches any of them:
 
 ```console
 python3 scripts/verify_unit_registry.py $DB_NAME                                        # registry content matches its own seal
-python3 scripts/generate_sql_schema.py --schemas-path ../SiennaSchemas --check --diff    # DDL staleness + drift vs schema.sql
+python3 scripts/generate_sql_schema.py --schemas-path ../SiennaSchemas --check         # generated tables + closed-world gate
 python3 scripts/check_units_sync.py --schemas-path ../SiennaSchemas --db $DB_NAME        # 3-layer unit consistency: schemas <-> registry <-> DB (add --psy-path for the PSY layer)
 ```
 
@@ -412,7 +419,8 @@ on every push and pull request.
 
 ### Never hand-edit generated output
 
-`schema/generated_schema.sql` opens `-- GENERATED FILE -- DO NOT EDIT.`; `schema/unit_registry.sql`
+The region between `-- BEGIN GENERATED COMPONENT TABLES` and `-- END GENERATED COMPONENT TABLES`
+in `schema/schema.sql` and the `"source": "schemas"` convention entries are generated; `schema/unit_registry.sql`
 opens `-- Unit Registry Seed Data (GENERATED -- do not edit by hand)`. Change the source
 instead — a schema in SiennaSchemas, `Core/units.json`, or one of the mapping files above —
 then regenerate.

@@ -40,8 +40,8 @@ def make_arc(conn, arc_id, from_id, to_id):
 def make_circuit(conn, circuit_id, arc_id):
     make_entity(conn, circuit_id, "transformer_circuits", "TransformerCircuit")
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, power_units, base_power) "
-        "VALUES (?, ?, 'COMPONENT_BASE', 100.0)",
+        "INSERT INTO transformer_circuits(id, arc_id, rating, power_units, base_power) "
+        "VALUES (?, ?, 100.0, 'COMPONENT_BASE', 100.0)",
         (circuit_id, arc_id),
     )
     return circuit_id
@@ -79,8 +79,8 @@ def _insert_discrete_branch(conn, entity_id):
 def _insert_circuit(conn, entity_id):
     arc_id = _arc_between_new_buses(conn)
     conn.execute(
-        "INSERT INTO transformer_circuits(id, arc_id, power_units, base_power) "
-        "VALUES (?, ?, 'COMPONENT_BASE', 100.0)",
+        "INSERT INTO transformer_circuits(id, arc_id, rating, power_units, base_power) "
+        "VALUES (?, ?, 100.0, 'COMPONENT_BASE', 100.0)",
         (entity_id, arc_id),
     )
 
@@ -88,8 +88,10 @@ def _insert_circuit(conn, entity_id):
 def _insert_two_terminal_hvdc(conn, entity_id):
     arc_id = _arc_between_new_buses(conn)
     conn.execute(
-        "INSERT INTO two_terminal_hvdc_lines(id, name, arc_id, converter_type, power_units, base_power) "
-        "VALUES (?, 'row', ?, 'VSC', 'COMPONENT_BASE', 100.0)",
+        "INSERT INTO two_terminal_hvdc_lines(id, name, arc_id, converter_type, rating, "
+        "reactive_power_limits_from, reactive_power_limits_to, power_units, base_power) "
+        "VALUES (?, 'row', ?, 'VSC', 100.0, json('{\"min\": -1.0, \"max\": 1.0}'), "
+        "json('{\"min\": -1.0, \"max\": 1.0}'), 'COMPONENT_BASE', 100.0)",
         (entity_id, arc_id),
     )
 
@@ -253,13 +255,13 @@ def test_transformer_circuit_control_fields_roundtrip(fresh_db):
     make_entity(fresh_db, 4, "transformer_circuits", "TransformerCircuit")
     fresh_db.execute(
         "INSERT INTO transformer_circuits"
-        "(id, arc_id, tap, alpha, r, x, control_objective, control_limits, rating, power_units, base_power) "
+        "(id, arc_id, tap, alpha, r, x, control_objective, phase_angle_limits, rating, power_units, base_power) "
         "VALUES (4, ?, 1.05, 0.1, 0.001, 0.05, 'ASYMMETRIC_ACTIVE_POWER_FLOW', "
         "json('{\"min\": -0.5, \"max\": 0.5}'), 250.0, 'COMPONENT_BASE', 100.0)",
         (arc_id,),
     )
     row = fresh_db.execute(
-        "SELECT tap, control_objective, json_extract(control_limits, '$.max') "
+        "SELECT tap, control_objective, json_extract(phase_angle_limits, '$.max') "
         "FROM transformer_circuits WHERE id = 4"
     ).fetchone()
     assert row == (1.05, "ASYMMETRIC_ACTIVE_POWER_FLOW", 0.5)
@@ -267,8 +269,8 @@ def test_transformer_circuit_control_fields_roundtrip(fresh_db):
     make_entity(fresh_db, 5, "transformer_circuits", "TransformerCircuit")
     with pytest.raises(sqlite3.IntegrityError, match="control_objective"):
         fresh_db.execute(
-            "INSERT INTO transformer_circuits(id, arc_id, control_objective, power_units, base_power) "
-            "VALUES (5, ?, 'ASSYMETRIC_ACTIVE_POWER_FLOW', 'COMPONENT_BASE', 100.0)",
+            "INSERT INTO transformer_circuits(id, arc_id, control_objective, rating, power_units, base_power) "
+            "VALUES (5, ?, 'ASSYMETRIC_ACTIVE_POWER_FLOW', 100.0, 'COMPONENT_BASE', 100.0)",
             (arc_id,),
         )
 
@@ -400,8 +402,8 @@ def test_tmodel_hvdc_line_requires_dc_buses(fresh_db):
 def test_tmodel_hvdc_line_accepts_dc_buses(fresh_db):
     make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
     fresh_db.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_current) "
-        "VALUES (99, 'dc', ?, 0.1, 100.0)",
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, l, c, base_current) "
+        "VALUES (99, 'dc', ?, 0.1, 0.0, 0.0, 100.0)",
         (_dc_arc(fresh_db),),
     )
 
@@ -430,8 +432,8 @@ def test_arc_domain_trigger_fires_on_update(fresh_db):
     """Re-pointing an existing row's arc is checked too, not just the insert."""
     make_entity(fresh_db, 99, "tmodel_hvdc_lines", "TModelHVDCLine")
     fresh_db.execute(
-        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, base_current) "
-        "VALUES (99, 'dc', ?, 0.1, 100.0)",
+        "INSERT INTO tmodel_hvdc_lines(id, name, arc_id, r, l, c, base_current) "
+        "VALUES (99, 'dc', ?, 0.1, 0.0, 0.0, 100.0)",
         (_dc_arc(fresh_db),),
     )
     with pytest.raises(sqlite3.IntegrityError, match="must connect DC buses"):
@@ -444,8 +446,10 @@ def test_interconnecting_converter_bridges_ac_and_dc(fresh_db):
     ac, dc = make_bus(fresh_db, 1, "ac"), make_dc_bus(fresh_db, 2, "dc")
     make_entity(fresh_db, 99, "interconnecting_converters", "InterconnectingConverter")
     fresh_db.execute(
-        "INSERT INTO interconnecting_converters(id, name, bus, dc_bus, power_units, base_power) "
-        "VALUES (99, 'c', ?, ?, 'COMPONENT_BASE', 100.0)",
+        "INSERT INTO interconnecting_converters(id, name, bus, dc_bus, active_power, rating, "
+        "active_power_limits, power_units, base_power) "
+        "VALUES (99, 'c', ?, ?, 0.0, 100.0, json('{\"min\": 0.0, \"max\": 1.0}'), "
+        "'COMPONENT_BASE', 100.0)",
         (ac, dc),
     )
 
@@ -469,16 +473,14 @@ def test_interconnecting_converter_rejects_wrong_domains(fresh_db, bus_kinds):
 
 
 # Identifier attributes
-# The unit triggers treat any numeric JSON value as physical. Bus numbers and node
-# references are not, so attribute_identifiers exempts them instead of forcing a
-# made-up unit onto a key. The exemption is scoped by (TYPE, name): see
-# schema.sql's attribute_identifiers seed for which TYPE owns each name.
+# The unit triggers treat any numeric or structured JSON value as physical.
+# References and curves are not, so attribute_identifiers exempts them instead of
+# forcing a made-up unit onto them. generate_sql_schema.py writes one row per
+# (component, property) for every unitless structured attribute-channel property.
 IDENTIFIER_CASES = [
-    ("number", "ACBus"),
-    ("number", "DCBus"),
-    ("load_zone", "ACBus"),
-    ("start_node", "NodalACTransportTechnology"),
-    ("end_node", "NodalHVDCTransportTechnology"),
+    ("upstream_turbines", "HydroReservoir"),
+    ("loss_function", "InterconnectingConverter"),
+    ("loss", "TwoTerminalLCCLine"),
 ]
 
 
@@ -508,23 +510,24 @@ def test_non_identifier_numeric_attribute_still_needs_a_unit(fresh_db):
 
 
 def test_identifier_exemption_is_scoped_by_type(fresh_db):
-    """'number' is exempt on ACBus but not on a TYPE that was never seeded for it."""
+    """'upstream_turbines' is exempt on HydroReservoir but not on a TYPE that never routes it."""
     owner = _attr_owner(fresh_db, "ThermalStandard")
     with pytest.raises(sqlite3.IntegrityError, match="needs a vocabulary-valid unit"):
         fresh_db.execute(
             "INSERT INTO attributes(entity_id, TYPE, name, value) "
-            "VALUES (?, 'ThermalStandard', 'number', '8901')",
+            "VALUES (?, 'ThermalStandard', 'upstream_turbines', '8901')",
             (owner,),
         )
 
 
 def test_identifier_exemption_survives_update(fresh_db):
-    owner = _attr_owner(fresh_db, "ACBus")
+    owner = _attr_owner(fresh_db, "HydroReservoir")
     fresh_db.execute(
-        "INSERT INTO attributes(entity_id, TYPE, name, value) VALUES (?, 'ACBus', 'number', '1')",
+        "INSERT INTO attributes(entity_id, TYPE, name, value) "
+        "VALUES (?, 'HydroReservoir', 'upstream_turbines', '[1]')",
         (owner,),
     )
-    fresh_db.execute("UPDATE attributes SET value = '2' WHERE name = 'number'")
+    fresh_db.execute("UPDATE attributes SET value = '[2]' WHERE name = 'upstream_turbines'")
 
 
 def test_dc_flag_requires_topology_type(fresh_db):

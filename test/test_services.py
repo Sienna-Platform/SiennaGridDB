@@ -262,8 +262,8 @@ def insert_line(conn, line_id, name, arc_id):
     make_entity(conn, line_id, "transmission_lines", "Line")
     conn.execute(
         "INSERT INTO transmission_lines "
-        "(id, name, arc_id, continuous_rating, r, x, base_power, power_units) "
-        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, 100.0, 'NATURAL_UNITS')",
+        "(id, name, arc_id, continuous_rating, r, x, base_power, power_units, angle_limits) "
+        "VALUES (?, ?, ?, 100.0, 0.01, 0.1, 100.0, 'NATURAL_UNITS', '{\"min\": -1.0, \"max\": 1.0}')",
         (line_id, name, arc_id),
     )
 

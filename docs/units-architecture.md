@@ -298,14 +298,13 @@ that any given row's base is populated — see the second Accepted limitation ab
 column carries a `parameter_units` discriminator, though — the `magnetizing_shunt` halves on both
 transformer tables are pu-only, with no `NATURAL_UNITS` sibling row.
 
-`attributes` rows are exempt from base references: an attribute's owner is polymorphic (`entity_id`
-→ `entities`), so no single static path applies regardless of which table is on the other end. They
-keep their inline `unit`/`quantity_kind` instead; the exemption is recorded in
-`coverage_decisions.json`.
+`attributes` rows carry no base references: an attribute's owner is polymorphic (`entity_id`
+→ `entities`), so no single static path applies regardless of which table is on the other end. A pu
+attribute resolves against its owning entity's row, and keeps its inline `unit`/`quantity_kind`.
 
 ### Open items
 
-- `transformer_circuits.controlled_quantity_limits` resolves its pu arms against
+- `transformer_circuits.controlled_voltage_limits` resolves its pu values against
   `base_voltage_primary`, but the PSS/E VMA/VMI controlled bus may be the *secondary* side for some
   transformers. Flagged for human review, not resolved here.
 - No cross-repo check catches a pu column typed with the wrong quantity dimension (e.g. a

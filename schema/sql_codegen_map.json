@@ -1,312 +1,773 @@
 {
-  "description": "DB-specific SQL codegen config consumed by scripts/generate_sql_schema.py. Per table: 'renames' maps a schema property name to its DB column name; 'foreign_keys' appends an FK clause to a (renamed) column; 'attribute_channel' lists schema properties stored in the generic attributes table under registered attribute-name conventions instead of dedicated columns (see schema/column_conventions.json table_name='attributes' rows); 'skip' lists properties intentionally not persisted; 'db_only' lists hand-written schema.sql columns that have no schema property (e.g. per-row columns with no schema property, like discrete_controlled_ac_branches.base_power) so the drift gate does not flag them as missing-from-schema.",
+  "description": "SiennaGridDB SQL codegen config, consumed by scripts/generate_sql_schema.py. One entry per schema_map.json table. Every property of every mapped component must appear in exactly one of: 'columns' (a column; the value holds overrides), 'attribute_channel' (a row in the generic attributes table), 'decomposed' (split into DB-only columns; maps each column to its JSON path in the property), or 'skip' (not stored). A 'columns' entry with 'sql' is a DB-only column with no schema property; its value is the raw declaration after the column name. Column overrides: 'column' (DB name), 'references' (FK target), 'not_null', 'default' (null removes the schema default), 'checks' (extra CHECK expressions), 'comment', and 'unit_base' (base_power_ref / base_voltage_ref for derived pu unit conventions). Table keys: 'comment' (lines above the CREATE TABLE) and 'constraints' (table-level constraints). Columns are emitted in 'columns' order. Rules for choosing a disposition: schema/coverage_decisions.json.",
   "tables": {
-    "thermal_generators": {
-      "renames": {
-        "bus": "balancing_topology"
+    "planning_regions": {
+      "columns": {
+        "id": {},
+        "name": {},
+        "description": {"sql": "TEXT NULL"},
+        "peak_active_power": {},
+        "peak_reactive_power": {},
+        "load_response": {},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {}
       },
-      "foreign_keys": {
-        "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
-        "prime_mover_type": "REFERENCES prime_mover_types (name)",
-        "fuel": "REFERENCES fuels (name)"
-      },
-      "attribute_channel": [
-        "power_trajectory",
-        "start_time_limits",
-        "start_types"
-      ],
-      "db_only": [
-        "production_cost"
+      "comment": [
+        "Control or planning areas (PSY Area)."
       ]
+    },
+    "arcs": {
+      "comment": [
+        "Generic from/to link between entities, reused by transmission lines,",
+        "interchanges, HVDC lines, and other arc-based devices."
+      ],
+      "columns": {
+        "id": {},
+        "from_id": {"references": "entities (id) ON DELETE CASCADE"},
+        "to_id": {"references": "entities (id) ON DELETE CASCADE"}
+      },
+      "constraints": ["CHECK (from_id <> to_id)"],
+      "indexes": ["CREATE INDEX idx_arcs_from ON arcs (from_id)", "CREATE INDEX idx_arcs_to ON arcs (to_id)"]
+    },
+    "thermal_generators": {
+      "comment": [
+        "Existing thermal generation units (ThermalStandard, ThermalMultiStart).",
+        "operation_cost stores the schemas' cost object verbatim. production_cost is a",
+        "GENERATED column that reads variable_operation_cost out of it, with no stored",
+        "copy. The curve states its own kind: COST is money, FUEL is a heat rate priced",
+        "via fuel_cost. Market-bid costs carry offer curves instead, so the",
+        "production-curve CHECKs skip them. A FuelCurve needs exactly one price source."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "prime_mover_type": {"references": "prime_mover_types(name)"},
+        "fuel": {"references": "fuels(name)"},
+        "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "rating": {"checks": ["rating >= 0"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "active_power_limits": {},
+        "reactive_power_limits": {},
+        "ramp_limits": {},
+        "time_limits": {},
+        "available": {"default": 1},
+        "status": {},
+        "commitment_mode": {},
+        "active_power": {"default": 0.0},
+        "reactive_power": {"default": 0.0},
+        "operation_cost": {"checks": ["json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')", "json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')", "json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)"], "default": {"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable_operation_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
+        "production_cost": {"sql": "TEXT GENERATED ALWAYS AS (json_extract(operation_cost, '$.variable_operation_cost')) VIRTUAL"},
+        "time_at_status": {},
+        "switching_times": {}
+      },
+      "attribute_channel": ["power_trajectory", "start_time_limits", "start_types"],
+      "skip": ["dynamic_injector"]
     },
     "renewable_generators": {
-      "renames": {
-        "bus": "balancing_topology"
+      "comment": [
+        "Existing renewable generation units (RenewableDispatch, RenewableNonDispatch).",
+        "operation_cost is NULL for RenewableNonDispatch, which has no cost. Its curve is",
+        "always a CostCurve: FUEL would admit rows with no registered unit."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "prime_mover_type": {"references": "prime_mover_types(name)"},
+        "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "rating": {"checks": ["rating >= 0"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "power_factor": {"checks": ["power_factor > 0 AND power_factor <= 1.0"], "default": 1.0},
+        "reactive_power_limits": {},
+        "available": {"default": 1},
+        "active_power": {"default": 0.0},
+        "reactive_power": {"default": 0.0},
+        "operation_cost": {"checks": ["operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') = 'COST'", "operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')"], "default": {"cost_type": "RENEWABLE", "fixed": 0, "curtailment_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}, "variable_operation_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
+        "production_cost": {"sql": "TEXT GENERATED ALWAYS AS (json_extract(operation_cost, '$.variable_operation_cost')) VIRTUAL"}
       },
-      "foreign_keys": {
-        "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
-        "prime_mover_type": "REFERENCES prime_mover_types (name)"
-      },
-      "db_only": [
-        "production_cost"
-      ]
+      "skip": ["dynamic_injector"]
     },
     "hydro_generators": {
-      "renames": {
-        "bus": "balancing_topology"
-      },
-      "foreign_keys": {
-        "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
-        "prime_mover_type": "REFERENCES prime_mover_types (name)"
-      },
-      "attribute_channel": [
-        "efficiency",
-        "active_power_limits_pump",
-        "turbine_type"
+      "comment": [
+        "Existing hydro generation units (HydroDispatch, HydroTurbine, HydroPumpTurbine).",
+        "HydroTurbine and HydroPumpTurbine fields are NULL for HydroDispatch.",
+        "operation_cost follows thermal_generators; its curve may be COST or FUEL."
       ],
-      "db_only": [
-        "production_cost"
-      ]
+      "columns": {
+        "id": {},
+        "name": {},
+        "prime_mover_type": {"default": "HY", "references": "prime_mover_types(name)"},
+        "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "rating": {"checks": ["rating >= 0"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "active_power_limits": {},
+        "reactive_power_limits": {},
+        "ramp_limits": {},
+        "time_limits": {},
+        "available": {"default": 1},
+        "status": {},
+        "commitment_mode": {"not_null": true},
+        "operating_mode": {},
+        "active_power": {"default": 0.0},
+        "reactive_power": {"default": 0.0},
+        "powerhouse_elevation": {"checks": ["powerhouse_elevation >= 0"]},
+        "outflow_limits": {},
+        "conversion_factor": {"checks": ["conversion_factor > 0"]},
+        "travel_time": {"checks": ["travel_time >= 0"]},
+        "operation_cost": {"checks": ["json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')", "json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')", "json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)"], "default": {"cost_type": "HYDRO_GEN", "fixed": 0.0, "variable_operation_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
+        "production_cost": {"sql": "TEXT GENERATED ALWAYS AS (json_extract(operation_cost, '$.variable_operation_cost')) VIRTUAL"},
+        "time_at_status": {}
+      },
+      "attribute_channel": ["efficiency", "turbine_type", "active_power_limits_pump", "active_power_pump", "transition_time", "minimum_time"],
+      "attribute_units": {"efficiency": {"unit": "1", "quantity_kind": "Dimensionless"}},
+      "skip": ["dynamic_injector"]
     },
     "storage_units": {
-      "renames": {
-        "bus": "balancing_topology"
+      "comment": [
+        "Existing energy storage units, including PHES and other kinds.",
+        "energy_units MWMIN makes duration = energy / power come out in minutes.",
+        "operation_cost is the whole StorageCost object: two curves, so neither becomes",
+        "a production_cost column."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "prime_mover_type": {"references": "prime_mover_types(name)"},
+        "storage_technology_type": {"references": "storage_technology_types(name)"},
+        "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "rating": {"checks": ["rating >= 0"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "storage_capacity": {"checks": ["storage_capacity >= 0"]},
+        "energy_units": {},
+        "storage_level_limits": {},
+        "initial_storage_capacity_level": {"checks": ["initial_storage_capacity_level >= 0"]},
+        "input_active_power_limits": {},
+        "output_active_power_limits": {},
+        "efficiency": {},
+        "reactive_power_limits": {},
+        "active_power": {"default": 0.0},
+        "reactive_power": {"default": 0.0},
+        "available": {"default": 1},
+        "conversion_factor": {"checks": ["conversion_factor > 0"]},
+        "storage_target": {},
+        "cycle_limits": {"checks": ["cycle_limits > 0"]},
+        "ramp_limits": {},
+        "self_discharge": {"checks": ["self_discharge >= 0"]},
+        "standing_loss": {"checks": ["standing_loss >= 0"]},
+        "operation_cost": {"default": {"cost_type": "STORAGE", "charge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}, "discharge_variable_cost": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}}
       },
-      "foreign_keys": {
-        "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE",
-        "prime_mover_type": "REFERENCES prime_mover_types (name)",
-        "storage_technology_type": "REFERENCES storage_technology_types (name)"
-      }
+      "skip": ["dynamic_injector"]
     },
-    "hydro_reservoirs": {},
-    "loads": {
-      "renames": {
-        "bus": "balancing_topology"
+    "hydro_reservoirs": {
+      "comment": [
+        "Topological hydro reservoirs. operation_cost is always USD/MWh: level-native",
+        "values convert to energy via head_to_volume_factor before costing."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "available": {"default": 1},
+        "storage_level_limits": {},
+        "initial_level": {},
+        "spillage_limits": {},
+        "inflow": {"default": 0.0},
+        "outflow": {"default": 0.0},
+        "level_targets": {},
+        "intake_elevation": {"default": 0.0},
+        "head_to_volume_factor": {},
+        "operation_cost": {"default": {"cost_type": "HYDRO_RES", "level_shortage_cost": 0.0, "level_surplus_cost": 0.0, "spillage_cost": 0.0}},
+        "level_data_type": {},
+        "evaporative_loss": {"checks": ["evaporative_loss >= 0"]}
       },
-      "foreign_keys": {
-        "balancing_topology": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
-      }
+      "attribute_channel": ["upstream_turbines", "downstream_turbines", "upstream_reservoirs"]
+    },
+    "loads": {
+      "columns": {
+        "id": {},
+        "name": {},
+        "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "base_power": {},
+        "power_units": {},
+        "available": {"default": 1},
+        "active_power": {},
+        "reactive_power": {},
+        "max_active_power": {},
+        "max_reactive_power": {},
+        "conformity": {}
+      },
+      "attribute_channel": ["constant_active_power", "constant_reactive_power", "impedance_active_power", "impedance_reactive_power", "current_active_power", "current_reactive_power", "max_constant_active_power", "max_constant_reactive_power", "max_impedance_active_power", "max_impedance_reactive_power", "max_current_active_power", "max_current_reactive_power", "operation_cost", "rating", "reactive_power_limits", "motor_technology", "alpha", "beta", "active_power_limits", "load_balance_time_horizon"],
+      "skip": ["dynamic_injector"],
+      "comment": [
+        "Loads of every PSY type. The ZIP-model breakdown is present on only two of",
+        "the seven load types, so it lives in the attributes table."
+      ]
     },
     "transmission_lines": {
-      "renames": {
-        "arc": "arc_id",
-        "rating": "continuous_rating"
-      },
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      },
-      "db_only": [
-        "line_length",
-        "lte_rating",
-        "ste_rating"
-      ]
-    },
-    "transmission_interchanges": {
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      },
-      "db_only": [
-        "arc_id",
-        "max_flow_from",
-        "max_flow_to"
-      ]
-    },
-    "discrete_controlled_ac_branches": {
-      "renames": {
-        "arc": "arc_id"
-      },
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      },
-      "skip": [
-        "available",
-        "active_power_flow",
-        "reactive_power_flow"
+      "comment": [
+        "r/x/b/g follow parameter_units: COMPONENT_BASE is per-unit on base_power;",
+        "NATURAL_UNITS is ohm (r/x) or siemens (b/g). All four share one row's basis",
+        "(PSY writes COMPONENT_BASE; a matpower import is NATURAL_UNITS). b/g are",
+        "JSON {\"from\": ..., \"to\": ...}; base_power is expected equal across every",
+        "COMPONENT_BASE row, though that is not trigger-enforced.",
+        "power_units is independent of parameter_units: it governs only the power-family",
+        "columns (ratings, limits, ramp rates). parameter_units's DEFAULT is a DB",
+        "convenience; the wire schema requires the field with no default."
       ],
-      "db_only": [
-        "base_power"
-      ]
-    },
-    "transformer_circuits": {
-      "renames": {
-        "arc": "arc_id"
-      },
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "rating": {"column": "continuous_rating", "checks": ["continuous_rating >= 0"]},
+        "ste_rating": {"sql": "REAL NULL CHECK (ste_rating >= 0)"},
+        "lte_rating": {"sql": "REAL NULL CHECK (lte_rating >= 0)"},
+        "line_length": {"sql": "REAL NULL CHECK (line_length >= 0)"},
+        "r": {"checks": ["r >= 0"], "unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "x": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "b": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "g": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "parameter_units": {},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "available": {"default": 1},
+        "active_power_flow": {"default": 0.0},
+        "reactive_power_flow": {"default": 0.0},
+        "rating_b": {},
+        "rating_c": {},
+        "operational_flow_limit": {},
+        "angle_limits": {}
       }
     },
-    "two_terminal_hvdc_lines": {
-      "renames": {
-        "arc": "arc_id"
-      },
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
-      },
-      "attribute_channel": [
-        "loss",
-        "r",
-        "transfer_setpoint",
-        "scheduled_dc_voltage",
-        "rectifier_bridges",
-        "rectifier_delay_angle",
-        "rectifier_delay_angle_limits",
-        "rectifier_rc",
-        "rectifier_xc",
-        "rectifier_base_voltage",
-        "rectifier_transformer_ratio",
-        "rectifier_tap_setting",
-        "rectifier_tap_limits",
-        "rectifier_tap_step",
-        "rectifier_capacitor_reactance",
-        "inverter_bridges",
-        "inverter_extinction_angle",
-        "inverter_extinction_angle_limits",
-        "inverter_rc",
-        "inverter_xc",
-        "inverter_base_voltage",
-        "inverter_transformer_ratio",
-        "inverter_tap_setting",
-        "inverter_tap_limits",
-        "inverter_tap_step",
-        "inverter_capacitor_reactance",
-        "power_mode",
-        "switch_mode_voltage",
-        "compounding_resistance",
-        "min_compounding_voltage",
-        "rating",
-        "rating_from",
-        "rating_to",
-        "g",
-        "dc_current",
-        "rated_dc_voltage",
-        "reactive_power_from",
-        "reactive_power_to",
-        "dc_control_from",
-        "dc_control_to",
-        "ac_control_from",
-        "ac_control_to",
-        "dc_setpoint_from",
-        "dc_setpoint_to",
-        "ac_setpoint_from",
-        "ac_setpoint_to",
-        "converter_loss_from",
-        "converter_loss_to",
-        "max_dc_current_from",
-        "max_dc_current_to",
-        "power_factor_weighting_fraction_from",
-        "power_factor_weighting_fraction_to",
-        "voltage_limits_from",
-        "voltage_limits_to",
-        "dc_voltage_droop_from",
-        "dc_voltage_droop_to",
-        "remote_bus_control_from",
-        "remote_bus_control_to",
-        "rated_ac_voltage_from",
-        "rated_ac_voltage_to",
-        "rmpct_from",
-        "rmpct_to"
+    "transmission_interchanges": {
+      "comment": [
+        "Physical flow limits between areas or balancing topologies, distinct from",
+        "transmission_lines: these enforce market-level interchange limits."
       ],
-      "skip": [
-        "parameter_units",
-        "dc_voltage_units",
-        "admittance_units",
-        "voltage_units",
-        "setpoint_voltage_units"
-      ],
-      "db_only": [
-        "converter_type"
-      ]
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc_id": {"sql": "INTEGER REFERENCES arcs (id) ON DELETE CASCADE"},
+        "max_flow_from": {"sql": "REAL NOT NULL"},
+        "max_flow_to": {"sql": "REAL NOT NULL"},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "available": {"default": 1},
+        "active_power_flow": {"default": 0.0},
+        "from_area": {"references": "planning_regions (id) ON DELETE CASCADE"},
+        "to_area": {"references": "planning_regions (id) ON DELETE CASCADE"}
+      },
+      "decomposed": {"flow_limits": {"max_flow_from": "flow_limits.from_to", "max_flow_to": "flow_limits.to_from"}}
     },
-    "tmodel_hvdc_lines": {
-      "renames": {
-        "arc": "arc_id"
+    "reserves": {
+      "comment": [
+        "Reserve products (PSY OnlineReserve, OfflineReserve, GroupReserve), one table",
+        "discriminated by entities.entity_type. enforce_reserves_type_shape_* keep each",
+        "row to its type's fields, so fields absent from a type have no DB default.",
+        "requirement has none either: a GroupReserve without one is rejected.",
+        "Contributors are service_associations rows."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "available": {"default": 1},
+        "time_frame": {},
+        "requirement": {"default": null},
+        "sustained_time": {"default": null},
+        "max_output_fraction": {"default": null, "checks": ["max_output_fraction BETWEEN 0 AND 1"]},
+        "max_participation_factor": {"default": null, "checks": ["max_participation_factor BETWEEN 0 AND 1"]},
+        "deployed_fraction": {"default": null, "checks": ["deployed_fraction BETWEEN 0 AND 1"]},
+        "reserve_direction": {},
+        "variable": {}
+      }
+    },
+    "transmission_interfaces": {
+      "comment": [
+        "Flow limit on a set of branches (PSY TransmissionInterface). direction_mapping",
+        "is the schemas' branch name -> 1 or -1 object, verbatim; the member branches",
+        "are service_associations rows."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "available": {"default": 1},
+        "active_power_flow_limits": {},
+        "violation_penalty": {},
+        "direction_mapping": {"checks": ["json_type(direction_mapping) = 'object'"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {}
+      }
+    },
+    "discrete_controlled_ac_branches": {
+      "comment": [
+        "Switches and breakers connecting AC buses (PSY DiscreteControlledACBranch).",
+        "r/x are always per-unit on base_power -- this component has no",
+        "natural-units option in PSY, unlike transmission_lines. rating follows",
+        "power_units, like transmission_lines.continuous_rating."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "r": {"checks": ["r >= 0"], "unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "x": {"checks": ["x >= 0"], "unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "rating": {"checks": ["rating >= 0"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "discrete_branch_type": {},
+        "branch_status": {},
+        "normal_branch_status": {},
+        "operational_flow_limit": {}
       },
-      "foreign_keys": {
-        "arc_id": "REFERENCES arcs (id) ON DELETE CASCADE"
+      "skip": ["available", "active_power_flow", "reactive_power_flow"]
+    },
+    "transformer_circuits": {
+      "comment": [
+        "One modeled arc of a transformer (PSY TransformerCircuit); unnamed",
+        "subcomponents, so no name column. r/x follow parameter_units (COMPONENT_BASE ->",
+        "pu on base_power/base_voltage_primary; NATURAL_UNITS -> ohm). r/x have no sign",
+        "CHECK: a three-winding star-leg reactance may be negative. Each control band",
+        "has one fixed unit."
+      ],
+      "columns": {
+        "id": {},
+        "available": {"default": 1},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "tap": {"checks": ["tap >= 0 AND tap <= 2"]},
+        "alpha": {},
+        "r": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "base_voltage_primary"}},
+        "x": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "base_voltage_primary"}},
+        "parameter_units": {},
+        "control_objective": {},
+        "regulated_bus_number": {},
+        "number_of_tap_positions": {},
+        "rating": {"checks": ["rating >= 0"]},
+        "rating_b": {"checks": ["rating_b >= 0"]},
+        "rating_c": {"checks": ["rating_c >= 0"]},
+        "active_power_flow": {},
+        "reactive_power_flow": {},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "base_voltage_primary": {"checks": ["base_voltage_primary > 0"]},
+        "base_voltage_secondary": {"checks": ["base_voltage_secondary > 0"]},
+        "tap_ratio_limits": {},
+        "phase_angle_limits": {},
+        "controlled_voltage_limits": {"unit_base": {"base_voltage_ref": "base_voltage_primary"}},
+        "controlled_reactive_power_flow_limits": {},
+        "controlled_active_power_flow_limits": {},
+        "operational_flow_limit": {}
       }
     },
     "two_winding_transformers": {
-      "foreign_keys": {
-        "circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE"
+      "comment": [
+        "Two-winding transformer (PSY TwoWindingTransformer); series data lives on",
+        "the referenced circuit. magnetizing_shunt is a complex admittance as JSON",
+        "{\"real\": ..., \"imag\": ...} (real = conductance, imag = susceptance).",
+        "A circuit is owned by exactly one transformer slot, so the circuit indexes are UNIQUE.",
+        "Sharing one circuit between a two- and a three-winding transformer is not trigger-enforced."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "circuit": {"references": "transformer_circuits (id) ON DELETE CASCADE"},
+        "magnetizing_shunt": {"hand_units": true},
+        "shunt_location": {}
       },
-      "skip": [
-        "admittance_units"
-      ]
+      "skip": ["admittance_units"],
+      "indexes": ["CREATE UNIQUE INDEX idx_two_winding_transformers_circuit ON two_winding_transformers (circuit)"]
     },
     "three_winding_transformers": {
-      "foreign_keys": {
-        "primary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
-        "secondary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
-        "tertiary_circuit": "REFERENCES transformer_circuits (id) ON DELETE CASCADE",
-        "star_bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
+      "comment": [
+        "Three-winding transformer (PSY ThreeWindingTransformer), star model: each",
+        "circuit connects a terminal bus to the star bus. The pairwise measured-impedance",
+        "fields are all-or-none (table CHECK); star-leg impedances derived from them",
+        "live on the circuits and are not synced back."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "primary_circuit": {"references": "transformer_circuits (id) ON DELETE CASCADE"},
+        "secondary_circuit": {"references": "transformer_circuits (id) ON DELETE CASCADE"},
+        "tertiary_circuit": {"references": "transformer_circuits (id) ON DELETE CASCADE"},
+        "star_bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "r_12": {"unit_base": {"base_power_ref": "base_power_12", "base_voltage_ref": "primary_circuit->transformer_circuits.base_voltage_primary"}},
+        "x_12": {"unit_base": {"base_power_ref": "base_power_12", "base_voltage_ref": "primary_circuit->transformer_circuits.base_voltage_primary"}},
+        "r_23": {"unit_base": {"base_power_ref": "base_power_23", "base_voltage_ref": "primary_circuit->transformer_circuits.base_voltage_primary"}},
+        "x_23": {"unit_base": {"base_power_ref": "base_power_23", "base_voltage_ref": "primary_circuit->transformer_circuits.base_voltage_primary"}},
+        "r_31": {"unit_base": {"base_power_ref": "base_power_31", "base_voltage_ref": "primary_circuit->transformer_circuits.base_voltage_primary"}},
+        "x_31": {"unit_base": {"base_power_ref": "base_power_31", "base_voltage_ref": "primary_circuit->transformer_circuits.base_voltage_primary"}},
+        "parameter_units": {},
+        "base_power_12": {"checks": ["base_power_12 > 0"]},
+        "base_power_23": {"checks": ["base_power_23 > 0"]},
+        "base_power_31": {"checks": ["base_power_31 > 0"]},
+        "magnetizing_shunt": {"hand_units": true},
+        "shunt_location": {}
       },
-      "skip": [
-        "admittance_units"
-      ]
+      "skip": ["admittance_units"],
+      "constraints": ["CHECK (primary_circuit <> secondary_circuit AND primary_circuit <> tertiary_circuit AND secondary_circuit <> tertiary_circuit)", "CHECK ((r_12 IS NULL) + (x_12 IS NULL) + (r_23 IS NULL) + (x_23 IS NULL) + (r_31 IS NULL) + (x_31 IS NULL) + (base_power_12 IS NULL) + (base_power_23 IS NULL) + (base_power_31 IS NULL) IN (0, 9))"],
+      "indexes": ["CREATE UNIQUE INDEX idx_three_winding_transformers_primary_circuit ON three_winding_transformers (primary_circuit)", "CREATE UNIQUE INDEX idx_three_winding_transformers_secondary_circuit ON three_winding_transformers (secondary_circuit)", "CREATE UNIQUE INDEX idx_three_winding_transformers_tertiary_circuit ON three_winding_transformers (tertiary_circuit)", "CREATE INDEX idx_three_winding_transformers_star_bus ON three_winding_transformers (star_bus)"]
     },
-    "balancing_topologies": {
-      "db_only": [
-        "description"
-      ]
+    "two_terminal_hvdc_lines": {
+      "comment": [
+        "Point-to-point (two-terminal) HVDC line, one table for all three PSY variants",
+        "(Generic/LCC/VSC), discriminated by converter_type. Only fields common to",
+        "all three are columns; variant-specific fields (LCC rectifier/inverter",
+        "detail, VSC controls, loss curves) live in the generic attributes table.",
+        "Both terminals are AC buses, DC side internal -- unlike tmodel_hvdc_lines,",
+        "which runs between DC buses for multi-terminal networks."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "converter_type": {"sql": "TEXT NOT NULL DEFAULT 'GENERIC' CHECK (converter_type IN ('GENERIC', 'LCC', 'VSC'))"},
+        "available": {"default": 1},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "active_power_flow": {"default": 0.0},
+        "rating": {"checks": ["rating >= 0"]},
+        "rating_from": {"checks": ["rating_from >= 0"]},
+        "rating_to": {"checks": ["rating_to >= 0"]},
+        "reactive_power_limits_from": {},
+        "reactive_power_limits_to": {},
+        "operational_flow_limit": {}
+      },
+      "attribute_channel": ["loss", "r", "power_transfer_setpoint", "current_transfer_setpoint", "scheduled_dc_voltage", "rectifier_bridges", "rectifier_delay_angle_limits", "rectifier_rc", "rectifier_xc", "rectifier_base_voltage", "inverter_bridges", "inverter_extinction_angle_limits", "inverter_rc", "inverter_xc", "inverter_base_voltage", "control_mode", "switch_mode_voltage", "compounding_resistance", "min_compounding_voltage", "rectifier_transformer_ratio", "rectifier_tap_setting", "rectifier_tap_limits", "rectifier_tap_step", "rectifier_delay_angle", "rectifier_capacitor_reactance", "inverter_transformer_ratio", "inverter_tap_setting", "inverter_tap_limits", "inverter_tap_step", "inverter_extinction_angle", "inverter_capacitor_reactance", "g", "dc_current", "reactive_power_from", "dc_control_from", "ac_control_from", "dc_power_setpoint_from", "dc_voltage_setpoint_from", "power_factor_setpoint_from", "ac_voltage_setpoint_from", "rated_ac_voltage_from", "converter_loss_from", "max_dc_current_from", "power_factor_weighting_fraction_from", "voltage_limits_from", "dc_voltage_droop_from", "reactive_power_to", "dc_control_to", "ac_control_to", "dc_power_setpoint_to", "dc_voltage_setpoint_to", "power_factor_setpoint_to", "ac_voltage_setpoint_to", "rated_ac_voltage_to", "converter_loss_to", "max_dc_current_to", "power_factor_weighting_fraction_to", "voltage_limits_to", "dc_voltage_droop_to", "rated_dc_voltage", "remote_bus_control_from", "remote_bus_control_to"]
     },
-    "supply_technologies": {
-      "foreign_keys": {
-        "prime_mover_type": "REFERENCES prime_mover_types (name)"
+    "tmodel_hvdc_lines": {
+      "comment": [
+        "T-model HVDC line (PSY TModelHVDCLine): a DC-network element whose arc",
+        "endpoints must both be DC buses (entity_types.is_dc = 1), enforced by",
+        "enforce_tmodel_hvdc_lines_arc_domain. It is the multi-terminal building",
+        "block, paired with interconnecting_converters at each AC/DC boundary --",
+        "use two_terminal_hvdc_lines for point-to-point HVDC. r, l and c are natural",
+        "units only. base_current, not base_power, is the row's base: the DC line",
+        "current is the value that is actually known."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "r": {},
+        "base_current": {"checks": ["base_current > 0"]},
+        "available": {"default": 1},
+        "active_power_flow": {"default": 0.0},
+        "l": {},
+        "c": {},
+        "operational_flow_limit": {}
       }
     },
-    "storage_technologies": {},
     "synchronous_condensers": {
-      "foreign_keys": {
-        "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
+      "comment": [
+        "Synchronous machine for inertia or reactive support (PSY SynchronousCondenser).",
+        "It injects no active power, so there is no active_power column;",
+        "active_power_losses is the loss incurred by being online. Power-family",
+        "columns follow power_units (COMPONENT_BASE -> pu; NATURAL_UNITS -> physical unit)."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "available": {"default": 1},
+        "reactive_power": {"default": 0.0},
+        "rating": {"checks": ["rating > 0"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "reactive_power_limits": {},
+        "active_power_losses": {"checks": ["active_power_losses >= 0"]}
       },
-      "skip": [
-        "dynamic_injector"
-      ]
-    },
-    "sources": {
-      "renames": {
-        "R_th": "r_th",
-        "X_th": "x_th"
-      },
-      "foreign_keys": {
-        "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
-      },
-      "skip": [
-        "dynamic_injector"
-      ]
+      "skip": ["dynamic_injector"]
     },
     "fixed_admittance": {
-      "foreign_keys": {
-        "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
-      },
-      "skip": [
-        "dynamic_injector"
+      "comment": [
+        "Fixed shunt admittance (PSY FixedAdmittance): Y as conductance (y_g) and",
+        "susceptance (y_b). admittance_units is NATURAL_UNITS (siemens) or",
+        "COMPONENT_MVAR (MW/MVAr at unity voltage, PSS/E native) -- no per-unit arm,",
+        "since a shunt has no MVA rating; base_power is just the recorded base."
       ],
-      "db_only": [
-        "y_g",
-        "y_b"
-      ]
+      "columns": {
+        "id": {},
+        "name": {},
+        "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "available": {"default": 1},
+        "y_g": {"sql": "REAL NOT NULL DEFAULT 0.0"},
+        "y_b": {"sql": "REAL NOT NULL DEFAULT 0.0"},
+        "admittance_units": {},
+        "base_power": {"checks": ["base_power > 0"]}
+      },
+      "skip": ["dynamic_injector"],
+      "decomposed": {"Y": {"y_g": "Y.real", "y_b": "Y.imag"}}
     },
     "switched_admittance": {
-      "foreign_keys": {
-        "bus": "REFERENCES balancing_topologies (id) ON DELETE CASCADE"
+      "comment": [
+        "Switched shunt admittance (PSY SwitchedAdmittance). Effective admittance is",
+        "number_engaged * Y_increase, or solved_admittance when present.",
+        "admittance_units is NATURAL_UNITS (siemens) or COMPONENT_MVAR (MW/MVAr at",
+        "unity voltage, PSS/E native). No base_power: neither basis needs one."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "available": {"default": 1},
+        "admittance_units": {},
+        "Y_increase": {},
+        "number_engaged": {},
+        "number_of_steps": {},
+        "solved_admittance": {},
+        "control_mode": {},
+        "regulated_bus_number": {},
+        "voltage_limits": {"unit_base": {"base_voltage_ref": "bus->balancing_topologies.base_voltage"}},
+        "reactive_power_range_limits": {}
       },
-      "skip": [
-        "dynamic_injector"
-      ]
+      "skip": ["dynamic_injector"]
+    },
+    "sources": {
+      "comment": [
+        "Thevenin equivalent source (PSY Source). r_th/x_th follow parameter_units: pu on",
+        "base_power, or natural-units ohm; COMPONENT_BASE is the default since PSY",
+        "has no native external representation for this component. Column names are",
+        "lowercase (the schemas spell R_th/X_th) -- a naming difference only, see",
+        "sql_codegen_map.json. Power-family columns follow power_units instead,",
+        "independent of parameter_units."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "available": {"default": 1},
+        "base_voltage": {"checks": ["base_voltage > 0"]},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "active_power": {},
+        "reactive_power": {},
+        "active_power_limits": {},
+        "reactive_power_limits": {},
+        "internal_voltage": {"checks": ["internal_voltage >= 0"]},
+        "internal_angle": {},
+        "R_th": {"column": "r_th"},
+        "X_th": {"column": "x_th"},
+        "parameter_units": {},
+        "operation_cost": {"default": {"import_offer_curves": null, "export_offer_curves": null, "energy_import_weekly_limit": 1000000.0, "energy_export_weekly_limit": 1000000.0, "ancillary_service_offers": []}}
+      },
+      "skip": ["dynamic_injector"]
     },
     "interconnecting_converters": {
-      "renames": {
-        "voltage_setpoint_units": "parameter_units"
-      }
+      "comment": [
+        "Interconnecting power converter (PSY InterconnectingConverter), an AC<->DC",
+        "bus converter. bus is the AC side, dc_bus the DC side; the domain of each is",
+        "enforced by enforce_interconnecting_converters_bus_domain, since a plain FK",
+        "cannot see the entity_types.is_dc flag. Each setpoint has one fixed unit."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "dc_bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "dc_control": {"not_null": true, "default": "DC_VOLTAGE"},
+        "ac_control": {"not_null": true, "default": "AC_REACTIVE_POWER"},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "remote_bus_control": {"checks": ["remote_bus_control >= 1"]},
+        "power_factor_weighting_fraction": {"checks": ["power_factor_weighting_fraction >= 0"]},
+        "voltage_limits": {},
+        "available": {"default": 1},
+        "active_power": {},
+        "rating": {},
+        "active_power_limits": {},
+        "reactive_power_limits": {},
+        "dc_power_setpoint": {},
+        "dc_voltage_setpoint": {},
+        "power_factor_setpoint": {},
+        "ac_voltage_setpoint": {}
+      },
+      "attribute_channel": ["dc_current", "max_dc_current", "loss_function", "dc_voltage_droop"],
+      "skip": ["dynamic_injector"],
+      "constraints": ["CHECK (bus <> dc_bus)"]
     },
     "facts_control_devices": {
-      "renames": {
-        "voltage_setpoint_units": "parameter_units"
+      "comment": [
+        "FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly",
+        "per parameter_units (COMPONENT_BASE: pu on bus base_voltage, the native external form;",
+        "NATURAL_UNITS: kV). power_units is a second, independent discriminator governing",
+        "max_reactive_power (COMPONENT_BASE: pu; NATURAL_UNITS: MVAr)."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "voltage_setpoint": {"unit_base": {"base_voltage_ref": "bus->balancing_topologies.base_voltage"}},
+        "voltage_setpoint_units": {"column": "parameter_units"},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "max_reactive_power": {"checks": ["max_reactive_power >= 0"]},
+        "shunt_control_type": {},
+        "regulated_bus_number": {},
+        "available": {"default": 1},
+        "control_mode": {},
+        "max_shunt_current": {},
+        "reactive_power_required": {}
+      },
+      "skip": ["dynamic_injector"]
+    },
+    "balancing_topologies": {
+      "comment": [
+        "Balancing topologies for the system: buses (ACBus, DCBus) or larger aggregated",
+        "regions (LoadZone). load_zone and area reference other rows. load_zone is a",
+        "same-table reference, so its FK is deferred: a bus row may precede its zone row."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "area": {"references": "planning_regions (id) ON DELETE SET NULL"},
+        "description": {"sql": "TEXT NULL"},
+        "base_voltage": {"checks": ["base_voltage > 0"]},
+        "number": {},
+        "available": {"default": 1},
+        "bustype": {},
+        "angle": {},
+        "magnitude": {},
+        "voltage_limits": {},
+        "load_zone": {"references": "balancing_topologies (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"}
+      },
+      "attribute_channel": ["peak_active_power", "peak_reactive_power", "base_power"],
+      "skip": ["power_units"]
+    },
+    "supply_technologies": {
+      "comment": [
+        "Investment technology options for expansion problems"
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "prime_mover_type": {"references": "prime_mover_types(name)"},
+        "region": {"not_null": true},
+        "power_systems_type": {},
+        "lifetime": {},
+        "unit_size": {},
+        "capacity_limits": {},
+        "fuel": {"not_null": true, "default": ["OTHER"]},
+        "start_fuel_mmbtu_per_mw": {},
+        "cofire_level_limits": {},
+        "cofire_start_limits": {},
+        "co2": {"sql": "TEXT NULL"},
+        "available": {"not_null": true, "default": 1},
+        "ramp_limits": {},
+        "time_limits": {},
+        "outage_factor": {},
+        "min_generation_fraction": {},
+        "capital_costs": {"not_null": true, "default": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}},
+        "operation_costs": {"not_null": true, "default": {"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
+        "financial_data": {}
       }
     },
-    "transport_technologies": {},
-    "demand_technologies": {
-      "attribute_channel": [
-        "peak_demand_mw",
-        "value_of_lost_load",
-        "unserved_demand_curve"
-      ],
-      "db_only": [
-        "power_systems_type"
-      ]
+    "storage_technologies": {
+      "columns": {
+        "id": {},
+        "name": {},
+        "prime_mover_type": {"references": "prime_mover_types(name)"},
+        "storage_tech": {},
+        "region": {"not_null": true},
+        "power_systems_type": {},
+        "lifetime": {},
+        "unit_size_charge": {},
+        "unit_size_discharge": {},
+        "unit_size_energy": {},
+        "capacity_limits_charge": {},
+        "capacity_limits_discharge": {},
+        "capacity_limits_energy": {},
+        "available": {"default": 1},
+        "duration_limits": {},
+        "efficiency": {},
+        "min_discharge_fraction": {},
+        "losses": {},
+        "capital_costs_charge": {"sql": "TEXT NULL"},
+        "capital_costs_discharge": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'"},
+        "capital_costs_energy": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'"},
+        "interconnection_cost": {"sql": "REAL NOT NULL DEFAULT 0.0"},
+        "operation_costs": {"not_null": true, "default": {"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
+        "financial_data": {}
+      },
+      "decomposed": {"capital_costs": {"capital_costs_charge": "capital_costs.charge_capital_cost", "capital_costs_discharge": "capital_costs.discharge_capital_cost", "capital_costs_energy": "capital_costs.energy_capital_cost", "interconnection_cost": "capital_costs.interconnection_cost"}}
     },
-    "trading_hubs": {},
+    "transport_technologies": {
+      "columns": {
+        "id": {},
+        "name": {},
+        "power_systems_type": {},
+        "available": {"default": 1},
+        "capital_costs": {"not_null": true, "default": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}},
+        "financial_data": {},
+        "unit_size": {},
+        "start_node": {"references": "entities (id) ON DELETE CASCADE"},
+        "end_node": {"references": "entities (id) ON DELETE CASCADE"},
+        "capacity_limits": {},
+        "line_loss": {},
+        "start_region": {"references": "entities (id) ON DELETE CASCADE"},
+        "end_region": {"references": "entities (id) ON DELETE CASCADE"}
+      },
+      "attribute_channel": ["resistance", "voltage", "reactance"]
+    },
+    "demand_technologies": {
+      "columns": {
+        "id": {},
+        "name": {},
+        "available": {"default": 1},
+        "region": {"not_null": true},
+        "power_systems_type": {}
+      },
+      "attribute_channel": ["conformity", "growth_rate", "new_demand_mw", "new_construction_year", "value_of_lost_load", "unserved_demand_curve"]
+    },
+    "trading_hubs": {
+      "comment": [
+        "Named market trading hub (PSY TradingHub): a set of member buses at which",
+        "hub-settled bids are priced. Membership is trading_hub_associations rows,",
+        "not a list column, matching plant_associations/combined_cycle_associations."
+      ],
+      "columns": {
+        "id": {},
+        "name": {}
+      }
+    },
     "virtual_participants": {
-      "foreign_keys": {
-        "settlement_point_id": "REFERENCES entities (id) ON DELETE SET NULL"
+      "comment": [
+        "A virtual (convergence) market participant (PSY VirtualParticipant). Settles",
+        "at settlement_point_id or via trading_hub_associations rows -- mutually",
+        "exclusive upstream, not enforced here. operation_cost is the schemas'",
+        "discriminated MarketBidCost / MarketBidTimeSeriesCost payload verbatim,",
+        "guarded by validate_virtual_participants_cost_units_* like sources'",
+        "ImportExportCost."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "available": {"default": 1},
+        "settlement_point_id": {"references": "entities (id) ON DELETE SET NULL"},
+        "max_supply": {"checks": ["max_supply >= 0"]},
+        "max_demand": {"checks": ["max_demand >= 0"]},
+        "operation_cost": {"checks": ["ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')"]}
       }
     },
     "point_to_point_bids": {
-      "foreign_keys": {
-        "from_id": "REFERENCES entities (id) ON DELETE CASCADE",
-        "to_id": "REFERENCES entities (id) ON DELETE CASCADE"
-      }
+      "comment": [
+        "A priced point-to-point spread bid (PSY PointToPointBid): a",
+        "willingness-to-pay curve on the price spread between a source (from_id)",
+        "and sink (to_id), each resolved through the entities supertype. spread_bid",
+        "mirrors virtual_participants.operation_cost and is guarded the same way."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "available": {"default": 1},
+        "from_id": {"references": "entities (id) ON DELETE CASCADE"},
+        "to_id": {"references": "entities (id) ON DELETE CASCADE"},
+        "max_active_power": {"checks": ["max_active_power >= 0"]},
+        "spread_bid": {"checks": ["ifnull(json_extract(spread_bid, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')"]},
+        "price_limits": {},
+        "linked_crr": {}
+      },
+      "constraints": ["CHECK (from_id <> to_id)"]
     }
   }
 }
