@@ -14,15 +14,15 @@ Python tooling that generates and verifies them. Nothing here is importable; the
 `pyproject.toml` exists to set up the dev environment and host the linter config.
 
 A release is a tarball attached to a `v*` GitHub Release, containing `schema/`,
-`scripts/`, `README.md`, `LICENSE` and `.justfile` under a single top-level directory:
+`scripts/`, `README.md`, `CHANGELOG.md`, `LICENSE` and `.justfile` under a single top-level directory:
 
 ```console
-tar -xzf sienna-griddb-v0.1.0.tar.gz
-cd sienna-griddb-v0.1.0
+tar -xzf sienna-griddb-vX.Y.Z.tar.gz
+cd sienna-griddb-vX.Y.Z
 just new-db                     # or the four sqlite3 calls below
 ```
 
-### Scope of 0.1
+### Scope
 
 Read this before building on it:
 
