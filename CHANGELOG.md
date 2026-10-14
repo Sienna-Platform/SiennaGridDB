@@ -6,6 +6,59 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-13
+
+Built from SiennaSchemas v0.2.0 (`.schema-version`). `PRAGMA user_version = 3`.
+
+### Breaking
+
+- The component tables follow SiennaSchemas 0.2. There is no migration from a 0.1
+  database; rebuild it. These columns are gone:
+  `interconnecting_converters.{ac_setpoint, dc_setpoint, parameter_units, rmpct}`,
+  `switched_admittance.admittance_limits`, `tmodel_hvdc_lines.parameter_units`,
+  `transformer_circuits.{control_limits, controlled_quantity_limits}`,
+  `two_terminal_hvdc_lines.{active_power_limits_from, active_power_limits_to}`.
+- `schema/generated_schema.sql` is removed. The generated tables are now in `schema/schema.sql`.
+
+### Schema
+
+- `scripts/generate_sql_schema.py` writes the component tables into a marked region of
+  `schema/schema.sql`. Generation is closed-world: it fails when a schema file has no table
+  and no exclusion in `schema_map.json`, or a property has no disposition in
+  `sql_codegen_map.json`. Dynamics components stay excluded.
+- New tables: `reserves` (`OnlineReserve`, `OfflineReserve`, `GroupReserve`),
+  `transmission_interfaces`, and `service_associations` for service membership.
+- New views: `service_contributors`, `interface_branch_directions`,
+  `interface_direction_violations`, `service_bid_offers`, `service_bids`,
+  `service_offer_violations`.
+- The storage `capital_costs` decomposition stores `interconnection_cost`. Before, an insert lost it.
+- The `load_zone` foreign key is `DEFERRABLE INITIALLY DEFERRED`, so a bus row can come
+  before its `LoadZone` row.
+- A trigger rejects changes to `entities.entity_table` and `entities.entity_type` after insert.
+- The production-cost CHECKs accept `MarketBidCost`, `MarketBidTimeSeriesCost` and
+  `ImportExportTimeSeriesCost`.
+
+### Unit registry
+
+- The generator derives the conventions of generated columns and attribute-channel
+  properties from the schemas' unit annotations. 42 quantity kinds, 67 allowed units,
+  534 column conventions, 9 basis rules.
+- Attribute units are checked per component. A `HydroPumpTurbine` efficiency row now inserts.
+
+### Release tooling
+
+- `update-schema.yml` opens a regeneration PR on each SiennaSchemas release.
+
+### Known limitations
+
+- Create-only. `schema.sql` drops every table before it creates them.
+- 50 SiennaSchemas components have a table. `schema/schema_map.json` lists the excluded
+  ones: dynamics, investment requirements, demand-side and colocated technologies, `AGC`,
+  `HybridSystem`, `BilateralTransaction`, `GenericArcImpedance` and `VoltageControlAssociation`.
+- No PowerSystems `System` converter in either direction.
+- Foreign keys are off unless the consumer sets `PRAGMA foreign_keys = ON` on each connection.
+- 4 of 55 tables are not `STRICT`: `entity_types`, `attributes`, `supplemental_attributes`, `plants`.
+
 ## [0.1.0] - 2026-09-11
 
 First release. `PRAGMA user_version = 1`.
@@ -48,5 +101,6 @@ consumer. Every later schema or registry change bumps it from here.
 - 14 of 52 tables are not `STRICT`, so declared numeric columns on those tables accept
   text.
 
-[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Sienna-Platform/SiennaGridDB/releases/tag/v0.1.0
