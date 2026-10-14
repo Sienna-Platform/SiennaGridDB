@@ -1,0 +1,386 @@
+import copy
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+import sienna_griddb_tools as griddb
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+FIXTURES = REPO_ROOT / "test" / "fixtures" / "insert"
+CASES = ("NATURAL_UNITS", "COMPONENT_BASE")
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "test"))
+from canonical_dump import dump  # noqa: E402
+import prepare_fixtures  # noqa: E402
+
+
+def sdk_repo():
+    """CI checks power-openapi-models out nested; locally it is a sibling."""
+    for candidate in (
+        REPO_ROOT / "power-openapi-models",
+        REPO_ROOT.parent / "power-openapi-models",
+    ):
+        if candidate.exists():
+            return candidate
+    return REPO_ROOT.parent / "power-openapi-models"
+
+
+def ensure_fixtures():
+    """Golden fixtures are generated on the fly and gitignored."""
+    try:
+        prepare_fixtures.ensure_generated()
+    except FileNotFoundError:
+        pytest.skip("power-openapi-models checkout not found")
+
+
+def golden(case="NATURAL_UNITS"):
+    ensure_fixtures()
+    return json.loads((FIXTURES / f"case14_{case}.json").read_text(encoding="utf-8"))
+
+
+def first(doc, type_name):
+    return copy.deepcopy(doc["components"][type_name][0])
+
+
+def lone_bus(doc, bus_id=None):
+    """A golden bus with its area and load-zone references removed, so it inserts on its own."""
+    buses = doc["components"]["ACBus"]
+    bus = copy.deepcopy(buses[0])
+    if bus_id is not None:
+        bus = copy.deepcopy(next(b for b in buses if b["id"] == bus_id))
+    bus.pop("area", None)
+    bus.pop("load_zone", None)
+    return bus
+
+
+def count(conn, table):
+    return conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+
+
+@pytest.fixture
+def conn(tmp_path):
+    c = griddb.create_database(str(tmp_path / "t.sqlite"))
+    yield c
+    c.close()
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_golden_document_matches_expected_outputs(tmp_path, case):
+    path = str(tmp_path / "g.sqlite")
+    c = griddb.create_database(path)
+    report = griddb.insert_document(c, golden(case))
+    c.close()
+    expected = json.loads((FIXTURES / f"case14_{case}.report.json").read_text("utf-8"))
+    assert report.to_dict() == expected
+    assert dump(path) == (FIXTURES / f"case14_{case}.dump.json").read_text("utf-8")
+
+
+def test_bus_then_generator(conn):
+    doc = golden()
+    thermal = first(doc, "ThermalStandard")
+    griddb.insert_component(conn, "ACBus", lone_bus(doc, thermal["bus"]))
+    report = griddb.insert_component(conn, "ThermalStandard", thermal)
+    assert report.inserted == {"ThermalStandard": 1}
+    assert count(conn, "thermal_generators") == 1
+
+
+def test_strict_gap_raises_and_rolls_back(conn):
+    bus = dict(lone_bus(golden()), angel=0.1)
+    with pytest.raises(griddb.InsertError, match="angel"):
+        griddb.insert_component(conn, "ACBus", bus, strict=True)
+    assert count(conn, "entities") == 0
+
+
+def test_unsupported_type(conn):
+    report = griddb.insert_components(conn, "HybridSystem", [{"id": 1}])
+    assert report.unsupported == {"HybridSystem": 1}
+    with pytest.raises(griddb.InsertError):
+        griddb.insert_components(conn, "HybridSystem", [{"id": 1}], strict=True)
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_attribute_unit_follows_the_rows_power_units(conn, case):
+    """A power_units field routed to attributes is written in the unit of its
+    own row's basis: pu on COMPONENT_BASE rows, MW on NATURAL_UNITS rows."""
+    griddb.insert_document(conn, golden(case))
+    rows = conn.execute(
+        "SELECT l.power_units, a.unit, a.quantity_kind FROM attributes a "
+        "JOIN loads l ON l.id = a.entity_id WHERE a.name = 'constant_active_power'"
+    ).fetchall()
+    assert rows
+    expected = {"COMPONENT_BASE": "pu", "NATURAL_UNITS": "MW"}
+    for basis, unit, quantity_kind in rows:
+        assert (unit, quantity_kind) == (expected[basis], "ActivePower")
+
+
+def test_rows_naming_an_unsupported_component_are_reported_not_written(conn):
+    """AGC has no table, so an association row naming one, on either side, is
+    counted under its section instead of failing the document."""
+    doc = golden()
+    thermal = first(doc, "ThermalStandard")["id"]
+    agc, plant = 9001, 9002
+    doc["components"]["AGC"] = [{"id": agc, "name": "agc"}]
+    doc["supplemental_attributes"].append(
+        {"id": plant, "name": "cc1", "configuration": "SeparateShaftCombustionSteam"}
+    )
+    doc["supplemental_attribute_associations"] += [
+        {"component_id": c, "component_type": t, "attribute_id": plant,
+         "attribute_type": "CombinedCycleBlock"}
+        for c, t in [(thermal, "ThermalStandard"), (agc, "AGC")]
+    ]
+    doc["combined_cycle_associations"] = [
+        {"plant_id": plant, "entity_id": e, "role": "CT", "hrsg_index": i}
+        for i, e in enumerate([thermal, agc], start=1)
+    ]
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["AGC"] == 1
+    assert report.unsupported["supplemental_attribute_associations"] == 1
+    assert report.unsupported["combined_cycle_associations"] == 1
+    assert count(conn, "combined_cycle_associations") == 1
+
+
+# The skip reads ids by the int encoder's rule, so the three SDKs agree on odd ids.
+@pytest.mark.parametrize(
+    "agc_id, ref, skipped",
+    [
+        (9001, 9001.0, True),
+        ("9001", "9001", False),
+        (1, True, False),
+        (1e20, 1e20, False),
+        (9001, [9001], False),
+        (9001, {"id": 9001}, False),
+    ],
+)
+def test_unsupported_reference_ids_follow_the_int_rule(conn, agc_id, ref, skipped):
+    doc = golden()
+    doc["components"]["AGC"] = [{"id": agc_id, "name": "agc"}]
+    rows = doc["supplemental_attribute_associations"]
+    rows.append(dict(rows[0], component_id=ref, component_type="AGC"))
+    if skipped:
+        report = griddb.insert_document(conn, doc)
+        assert report.unsupported["supplemental_attribute_associations"] == 1
+    else:
+        with pytest.raises(griddb.InsertError, match="expected an integer"):
+            griddb.insert_document(conn, doc)
+
+
+def test_non_object_entries_of_an_unsupported_type_are_counted(conn):
+    doc = golden()
+    doc["components"]["AGC"] = [None, 5, [1]]
+    assert griddb.insert_document(conn, doc).unsupported["AGC"] == 3
+
+
+ENTRY_LISTS = (
+    "ThermalStandard",
+    "supplemental_attributes",
+    "supplemental_attribute_associations",
+    "plant_associations",
+    "combined_cycle_associations",
+    "trading_hub_associations",
+    "service_associations",
+)
+
+
+@pytest.mark.parametrize("value", [None, 5, [1]])
+@pytest.mark.parametrize("where", ENTRY_LISTS)
+def test_non_object_entries_raise_insert_error(conn, where, value):
+    doc = golden()
+    rows = doc["components"][where] if where in doc["components"] else doc.setdefault(where, [])
+    rows.append(value)
+    with pytest.raises(griddb.InsertError, match="not an object"):
+        griddb.insert_document(conn, doc)
+    assert count(conn, "entities") == 0
+
+
+def test_component_base_cost_is_rejected(conn):
+    raw_path = sdk_repo() / "fixtures" / "case14_operations.NATURAL_UNITS.json"
+    if not raw_path.exists():
+        pytest.skip("power-openapi-models checkout not found")
+    raw = json.loads(raw_path.read_text("utf-8"))
+    thermal = first(raw, "ThermalStandard")
+    griddb.insert_component(conn, "ACBus", lone_bus(raw, thermal["bus"]))
+    with pytest.raises(griddb.InsertError, match="NATURAL_UNITS"):
+        griddb.insert_component(conn, "ThermalStandard", thermal)
+
+
+# Review Focus 1
+def test_duplicate_id_across_types_rolls_back_document(conn):
+    doc = golden()
+    bus = lone_bus(doc)
+    area = dict(first(doc, "Area"), id=bus["id"])
+    with pytest.raises(griddb.InsertError, match="ACBus id="):
+        griddb.insert_document(conn, {"components": {"ACBus": [bus], "Area": [area]}})
+    assert count(conn, "entities") == 0
+
+
+def test_plant_attribute_association_is_stored(conn):
+    """A plant is listed in supplemental_attribute_associations like any other
+    attribute, while its row lives in plants."""
+    doc = golden()
+    thermal_id = first(doc, "ThermalStandard")["id"]
+    plant_id = 1 + max(
+        [o["id"] for objs in doc["components"].values() for o in objs]
+        + [a["id"] for a in doc["supplemental_attributes"]]
+    )
+    doc["supplemental_attributes"].append(
+        {"id": plant_id, "name": "cc1", "configuration": "SeparateShaftCombustionSteam"}
+    )
+    doc["supplemental_attribute_associations"].append(
+        {"component_id": thermal_id, "component_type": "ThermalStandard",
+         "attribute_id": plant_id, "attribute_type": "CombinedCycleBlock"}
+    )
+    doc["combined_cycle_associations"] = [
+        {"plant_id": plant_id, "entity_id": thermal_id, "role": "CT", "hrsg_index": 1}
+    ]
+    report = griddb.insert_document(conn, doc)
+    assert report.inserted["plants"] == 1
+    assert report.inserted["combined_cycle_associations"] == 1
+    (linked,) = conn.execute(
+        "SELECT count(*) FROM supplemental_attribute_associations WHERE attribute_id = ?",
+        (plant_id,),
+    ).fetchone()
+    assert linked == 1
+
+
+SERVICE_TYPES = {"OnlineReserve", "OfflineReserve", "GroupReserve", "TransmissionInterface"}
+
+
+def with_services(doc):
+    """The golden document plus an online and an offline reserve on a generator,
+    a group over both, and an interface on a line, with their memberships."""
+    comps = doc["components"]
+    top = max(
+        [o["id"] for objs in comps.values() for o in objs]
+        + [a["id"] for a in doc["supplemental_attributes"]]
+    )
+    online, offline, group, iface = range(top + 1, top + 5)
+    thermal = comps["ThermalStandard"][0]["id"]
+    line = comps["Line"][0]
+    comps["OnlineReserve"] = [
+        {"id": online, "name": "online_up", "available": True, "time_frame": 5.0,
+         "requirement": 10.0, "reserve_direction": "UP"}
+    ]
+    comps["OfflineReserve"] = [
+        {"id": offline, "name": "offline_up", "available": True, "time_frame": 30.0}
+    ]
+    comps["GroupReserve"] = [
+        {"id": group, "name": "group_up", "available": True, "requirement": 0.0,
+         "reserve_direction": "UP"}
+    ]
+    comps["TransmissionInterface"] = [
+        {"id": iface, "name": "IFACE", "available": True,
+         "active_power_flow_limits": {"min": -100.0, "max": 100.0},
+         "violation_penalty": 1e5, "direction_mapping": {line["name"]: -1},
+         "base_power": 100.0, "power_units": "NATURAL_UNITS"}
+    ]
+    doc["service_associations"] = [
+        {"service_id": s, "entity_id": e}
+        for s, e in [(online, thermal), (offline, thermal), (group, online),
+                     (group, offline), (iface, line["id"])]
+    ]
+    return doc
+
+
+def test_services_and_memberships_are_stored(conn):
+    doc = with_services(golden())
+    report = griddb.insert_document(conn, doc)
+    assert {t: report.inserted[t] for t in SERVICE_TYPES} == dict.fromkeys(SERVICE_TYPES, 1)
+    assert report.inserted["service_associations"] == 5
+    assert set(report.unsupported) == {"ext"}
+    assert not SERVICE_TYPES & set(report.skipped_fields)
+    line = doc["components"]["Line"][0]["id"]
+    rows = conn.execute("SELECT branch_id, direction FROM interface_branch_directions")
+    assert rows.fetchall() == [(line, -1)]
+
+
+def test_membership_of_an_unsupported_service_is_reported_not_written(conn):
+    """AGC has no table, so its membership rows are counted, not inserted."""
+    doc = with_services(golden())
+    online = doc["components"]["OnlineReserve"][0]["id"]
+    doc["components"]["AGC"] = [{"id": online + 10, "name": "agc"}]
+    doc["service_associations"].append({"service_id": online + 10, "entity_id": online})
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["AGC"] == 1
+    assert report.unsupported["service_associations"] == 1
+    assert report.inserted["service_associations"] == 5
+    assert count(conn, "service_associations") == 5
+
+
+# Review Focus 2
+def test_dangling_bus_reference_rolls_back_document(conn):
+    thermal = dict(first(golden(), "ThermalStandard"), bus=999999)
+    with pytest.raises(griddb.InsertError, match=r"ThermalStandard id=.*FOREIGN KEY"):
+        griddb.insert_document(conn, {"components": {"ThermalStandard": [thermal]}})
+    assert count(conn, "entities") == 0
+
+
+# Review Focus 3
+def test_integral_float_ids_are_integers(conn):
+    bus = dict(lone_bus(golden()), id=5.0)
+    griddb.insert_component(conn, "ACBus", bus)
+    assert conn.execute("SELECT typeof(id), id FROM entities").fetchone() == ("integer", 5)
+    with pytest.raises(griddb.InsertError, match="expected an integer"):
+        griddb.insert_component(conn, "Arc", {"id": 6, "from_id": 1.5, "to_id": 5})
+
+
+# Review Focus 4
+def test_reinserting_a_document_fails_and_keeps_the_first_copy(tmp_path):
+    path = str(tmp_path / "r.sqlite")
+    c = griddb.create_database(path)
+    griddb.insert_document(c, golden())
+    before = dump(path)
+    with pytest.raises(griddb.InsertError):
+        griddb.insert_document(c, golden())
+    c.close()
+    assert dump(path) == before
+
+
+# Review Focus 5
+def test_misspelled_field(conn):
+    def area(area_id, name, **extra):
+        return {"id": area_id, "name": name, "base_power": 100.0,
+                "power_units": "NATURAL_UNITS", **extra}
+
+    report = griddb.insert_component(conn, "Area", area(900, "a", numbr=3))
+    assert report.skipped_fields == {"Area": {"numbr": 1}}
+    with pytest.raises(griddb.InsertError, match="numbr"):
+        griddb.insert_component(conn, "Area", area(901, "b", numbr=3), strict=True)
+    report = griddb.insert_component(conn, "Area", area(902, "c", numbr=None))
+    assert report.skipped_fields == {}
+
+
+def test_insert_model_with_sdk_objects(conn):
+    sdk_src = sdk_repo() / "python" / "src"
+    if sdk_src.exists():
+        sys.path.insert(0, str(sdk_src))
+    models = pytest.importorskip("power_openapi_models.core.models")
+    report = griddb.insert_model(
+        conn, models.ACBus(id=1, name="b", number=1, available=True)
+    )
+    assert report.inserted == {"ACBus": 1}
+    assert report.skipped_fields == {}
+
+
+def test_cli_build_prints_the_report(tmp_path):
+    ensure_fixtures()
+    out = tmp_path / "cli.sqlite"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "sienna_griddb_tools",
+            "build",
+            str(FIXTURES / "case14_NATURAL_UNITS.json"),
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    expected = json.loads(
+        (FIXTURES / "case14_NATURAL_UNITS.report.json").read_text("utf-8")
+    )
+    assert json.loads(result.stdout) == expected
