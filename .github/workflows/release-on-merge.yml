@@ -1,0 +1,47 @@
+name: Release on Merge
+
+# Merging a version bump is the release. When the version on main has no `v*`
+# tag yet, this pushes one, and release.yml publishes from it. Keyed on the
+# version, not on .schema-version, so a hand-bumped GridDB-only fix releases
+# the same way; a pyproject edit that leaves the version alone finds its tag
+# and does nothing.
+
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-on-merge
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      # Not GITHUB_TOKEN: a tag it pushes triggers no workflows, so nothing
+      # would publish.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Push the release tag
+        run: |
+          tag="v$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists; nothing to release."
+            exit 0
+          fi
+          git tag "$tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+          echo "Pushed $tag; release.yml publishes from it."

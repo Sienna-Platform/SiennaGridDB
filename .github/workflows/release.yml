@@ -15,12 +15,16 @@ jobs:
 
       - uses: extractions/setup-just@v3
 
-      - name: Assert the tag matches pyproject's version
+      - name: Assert the tag matches pyproject's version and the changelog
         run: |
           tag="${GITHUB_REF_NAME#v}"
           pyver=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           if [ "$tag" != "$pyver" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match pyproject version $pyver" >&2
+            exit 1
+          fi
+          if ! grep -q "^## \[$tag\] - " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no [$tag] section" >&2
             exit 1
           fi
 

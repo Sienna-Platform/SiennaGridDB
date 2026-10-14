@@ -2,7 +2,8 @@ name: Update from Schema Release
 
 # SiennaSchemas' release workflow dispatches schema-release with the new tag.
 # The cron is a backstop for a missed dispatch: a run whose tag is already in
-# .schema-version is a no-op.
+# .schema-version is a no-op. Merging the PR this opens is the release -- see
+# release-on-merge.yml.
 on:
   repository_dispatch:
     types: [schema-release]
@@ -43,6 +44,7 @@ jobs:
           fi
           CURRENT=$(cat .schema-version 2>/dev/null || echo "none")
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
           echo "changed=$( [ "$LATEST" != "$CURRENT" ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
 
       - name: Checkout SiennaSchemas at the release
@@ -79,6 +81,14 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           rm generate.log
 
+      - name: Bump the GridDB version
+        id: bump
+        if: steps.schema.outputs.changed == 'true'
+        run: |
+          version=$(python3 .github/scripts/bump_version.py \
+            "${{ steps.schema.outputs.current }}" "${{ steps.schema.outputs.latest }}")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       # The PR must not be opened with GITHUB_TOKEN: a PR it opens triggers no
       # workflows, so the schema tests would never run on it.
       - uses: actions/create-github-app-token@v1
@@ -94,9 +104,11 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           branch: auto/schema-${{ steps.schema.outputs.latest }}
-          title: "Update to SiennaSchemas ${{ steps.schema.outputs.latest }}"
+          title: "Update to SiennaSchemas ${{ steps.schema.outputs.latest }} (v${{ steps.bump.outputs.version }})"
           body: |
             Regenerated from [SiennaSchemas ${{ steps.schema.outputs.latest }}](https://github.com/Sienna-Platform/SiennaSchemas/releases/tag/${{ steps.schema.outputs.latest }}).
+
+            **Merging this PR releases v${{ steps.bump.outputs.version }}.**
 
             Generation succeeded: **${{ steps.generate.outputs.ok }}**
 
@@ -106,6 +118,6 @@ jobs:
 
             **Review checklist:**
             - [ ] Each schema file or property the generator listed has a decision in `schema/schema_map.json` or `schema/sql_codegen_map.json`, and the outputs are regenerated
-            - [ ] `PRAGMA user_version` in `schema/schema.sql` is bumped
+            - [ ] `CHANGELOG.md` lists the changes under `[${{ steps.bump.outputs.version }}]`
             - [ ] Tests pass
           commit-message: "Update to SiennaSchemas ${{ steps.schema.outputs.latest }}"
