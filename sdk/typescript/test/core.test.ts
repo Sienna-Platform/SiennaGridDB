@@ -23,6 +23,11 @@ describe("encodings", () => {
     expect(() => encode("int", 1.5)).toThrow(EncodeError);
     expect(() => encode("int", true)).toThrow(EncodeError);
   });
+  test("int stays in Int64", () => {
+    expect(encode("int", -(2 ** 63))).toBe(-(2n ** 63n));
+    expect(() => encode("int", 2 ** 63)).toThrow(EncodeError);
+    expect(() => encode("int", 1e20)).toThrow(EncodeError);
+  });
   test("others", () => {
     expect(encode("real", 2)).toBe(2);
     expect(() => encode("real", "1")).toThrow(EncodeError);
@@ -71,6 +76,7 @@ test("openDatabase checks user_version and enables foreign keys", () => {
   createDatabase(path).close();
   const db = openDatabase(path);
   expect(db.pragma("foreign_keys", { simple: true })).toBe(1);
+  expect(db.pragma("temp_store", { simple: true })).toBe(2);
   db.close();
   const raw = new Database(path);
   raw.pragma("user_version = 99");

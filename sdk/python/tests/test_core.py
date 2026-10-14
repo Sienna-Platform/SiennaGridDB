@@ -23,6 +23,14 @@ def test_int_encoding_accepts_integral_floats():
         encode("int", True)
 
 
+def test_int_encoding_stays_in_int64():
+    assert encode("int", 2**63 - 1) == 2**63 - 1
+    assert encode("int", -(2**63)) == -(2**63)
+    for value in (2**63, 1e20, float("inf")):
+        with pytest.raises(EncodeError):
+            encode("int", value)
+
+
 def test_other_encodings():
     assert encode("real", 2) == 2.0
     with pytest.raises(EncodeError):
@@ -65,6 +73,7 @@ def test_create_database_seeds_vocabulary(tmp_path):
     n = conn.execute("SELECT count(*) FROM entity_types").fetchone()[0]
     assert n == len(load_manifest()["vocabulary"]["entity_types"])
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    assert conn.execute("PRAGMA temp_store").fetchone()[0] == 2
     seed_vocabulary(conn)
     assert conn.execute("SELECT count(*) FROM entity_types").fetchone()[0] == n
 

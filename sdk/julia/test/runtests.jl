@@ -22,6 +22,10 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
         @test G.encode(G.IntEncoding(), 5.0) == 5
         @test_throws G.EncodeError G.encode(G.IntEncoding(), 1.5)
         @test_throws G.EncodeError G.encode(G.IntEncoding(), true)
+        @test G.encode(G.IntEncoding(), typemax(Int)) == typemax(Int)
+        @test G.encode(G.IntEncoding(), -2.0^63) == typemin(Int)
+        @test_throws G.EncodeError G.encode(G.IntEncoding(), big(2)^63)
+        @test_throws G.EncodeError G.encode(G.IntEncoding(), 1e20)
         @test G.encode(G.RealEncoding(), 2) == 2.0
         @test_throws G.EncodeError G.encode(G.RealEncoding(), "1")
         @test G.encode(G.BoolEncoding(), false) == 0
@@ -50,6 +54,7 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
             @test_throws GridDBToolsError create_database(path)
             db = open_database(path)
             @test first(DBInterface.execute(db, "PRAGMA foreign_keys"))[1] == 1
+            @test first(DBInterface.execute(db, "PRAGMA temp_store"))[1] == 2
             DBInterface.execute(db, "PRAGMA user_version = 99")
             close(db)
             @test_throws GridDBToolsError open_database(path)

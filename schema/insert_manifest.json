@@ -19,6 +19,10 @@
           "path": "attribute_type"
         }
       ],
+      "references": [
+        "component_id",
+        "attribute_id"
+      ],
       "row_sql": "INSERT INTO supplemental_attribute_associations (component_id, component_type, attribute_id, attribute_type) VALUES (?, ?, ?, ?)",
       "section": "supplemental_attribute_associations"
     },
@@ -37,6 +41,10 @@
           "path": "group_index"
         }
       ],
+      "references": [
+        "plant_id",
+        "entity_id"
+      ],
       "row_sql": "INSERT INTO plant_associations (plant_id, entity_id, group_index) VALUES (?, ?, ?)",
       "section": "plant_associations"
     },
@@ -50,6 +58,10 @@
           "encode": "int",
           "path": "entity_id"
         }
+      ],
+      "references": [
+        "service_id",
+        "entity_id"
       ],
       "row_sql": "INSERT INTO service_associations (service_id, entity_id) VALUES (?, ?)",
       "section": "service_associations"
@@ -73,6 +85,10 @@
           "path": "hrsg_index"
         }
       ],
+      "references": [
+        "plant_id",
+        "entity_id"
+      ],
       "row_sql": "INSERT INTO combined_cycle_associations (plant_id, entity_id, role, hrsg_index) VALUES (?, ?, ?, ?)",
       "section": "combined_cycle_associations"
     },
@@ -86,6 +102,10 @@
           "encode": "int",
           "path": "entity_id"
         }
+      ],
+      "references": [
+        "trading_hub_id",
+        "entity_id"
       ],
       "row_sql": "INSERT INTO trading_hub_associations (trading_hub_id, entity_id) VALUES (?, ?)",
       "section": "trading_hub_associations"

@@ -395,6 +395,7 @@ out in that file.
   and the runtimes do not convert.
 - **Not supported yet.** `time_series_associations`, `voltage_control_associations`,
   `ext`, and the component types `schema_map.json` excludes are reported, not written.
+  So is an association row that names a component of such a type.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. The Python runtime produces the expected outputs; CI builds a database

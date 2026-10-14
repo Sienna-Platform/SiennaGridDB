@@ -15,15 +15,18 @@ const ENCODINGS = Dict{String, Encoding}(
 
 canonical_json(value) = JSON.json(value)
 
-encode(::IntEncoding, v::Integer) = Int(v)
-encode(::IntEncoding, v::Bool) = throw(EncodeError("expected an integer, got $(repr(v))"))
-function encode(::IntEncoding, v::AbstractFloat)
-    if !isinteger(v)
+"""
+What the int encoder accepts: an integer or integral float, not a `Bool`, in Int64.
+"""
+is_int_value(v::Real) = !(v isa Bool) && isinteger(v) && typemin(Int) <= v <= typemax(Int)
+is_int_value(_) = false
+
+function encode(::IntEncoding, v)
+    if !is_int_value(v)
         throw(EncodeError("expected an integer, got $(repr(v))"))
     end
     return Int(v)
 end
-encode(::IntEncoding, v) = throw(EncodeError("expected an integer, got $(repr(v))"))
 encode(::RealEncoding, v::Real) = Float64(v)
 encode(::RealEncoding, v::Bool) = throw(EncodeError("expected a number, got $(repr(v))"))
 encode(::RealEncoding, v) = throw(EncodeError("expected a number, got $(repr(v))"))
