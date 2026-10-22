@@ -393,9 +393,15 @@ out in that file.
   exemption.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
-- **Not supported yet.** `time_series_associations`, `voltage_control_associations`,
-  `ext`, and the component types `schema_map.json` excludes are reported, not written.
-  So is an association row that names a component of such a type.
+- **Time series.** The Python and Julia runtimes write each `time_series_associations` row and its feature set.
+  `features_hash` is infrastore's hash of the feature map (`crates/infrastore-core/src/hash.rs`), checked against `test/features_hash_vectors.json`.
+  A row that names its owner with another type or category raises.
+  A `NonSequentialTimeSeries` is reported, not written: GridDB has no column for its `timestamps_uri`.
+  A `DeterministicSingleTimeSeries` is reported, not written: it is a view over its `SingleTimeSeries`' array, which a consumer derives again with `transform_single_time_series!`.
+  A reference to one (an `association_id`, a `*_association_id` or a `fuel_cost_time_series`) is written as its source's id: the series with the same owner, name, features and `uri`.
+  The TypeScript runtime reports every time series row.
+- **Not supported yet.** `voltage_control_associations`, `ext`, and the component types `schema_map.json` excludes are reported, not written.
+  So is an association or time series row that names a component of such a type.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. The Python runtime produces the expected outputs; CI builds a database

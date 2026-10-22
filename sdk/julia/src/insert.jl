@@ -208,15 +208,6 @@ end
 section_size(rows) = length(rows)
 section_size(::Nothing) = 0
 
-# Ids of components the insert does not write. Ids follow the int encoder's rule, so
-# any other value is never skipped: it reaches the encoder and fails there.
-function push_id!(ids::Set{Int}, id)
-    if is_int_value(id)
-        push!(ids, Int(id))
-    end
-    return ids
-end
-
 names_unsupported(row::AbstractDict, references::Vector{String}, ids::Set{Int}) =
     any(references) do r
         id = get(row, r, nothing)
@@ -256,16 +247,24 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
     report = InsertReport()
     components = something(get(doc, "components", nothing), Dict{String, Any}())
     plans = Tuple{ComponentPlan, Vector{Any}}[]
+    # References to a derived series name its source, which GridDB stores instead.
+    sources = derived_sources(section_rows(doc, m.time_series.section))
     unsupported_ids = Set{Int}()
+    owners = Dict{Int, Tuple{String, String}}()
     for type_name in sort!(collect(keys(components)))
-        objs = components[type_name]
+        objs = Any[point_at_sources(o, sources) for o in components[type_name]]
+        # Ids follow the int encoder's rule, so any other value is never skipped:
+        # it reaches the encoder and fails there.
+        ids = Set{Int}(
+            Int(o["id"]) for
+            o in objs if is_object(o) && is_int_value(get(o, "id", nothing))
+        )
+        foreach(id -> owners[id] = (type_name, "Component"), ids)
         if haskey(m.components, type_name)
-            push!(plans, (m.components[type_name], collect(Any, objs)))
+            push!(plans, (m.components[type_name], objs))
         else
             note_unsupported!(report, strict, type_name, length(objs))
-            for obj in objs
-                obj isa AbstractDict && push_id!(unsupported_ids, get(obj, "id", nothing))
-            end
+            union!(unsupported_ids, ids)
         end
     end
     sort!(plans; by=p -> (p[1].rank, p[1].type_name))
@@ -276,6 +275,14 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
         end
     end
     attr_types = attribute_types(doc)
+    attrs = point_at_sources(section_rows(doc, "supplemental_attributes"), sources)
+    for attr in attrs
+        id = get(attr, "id", nothing)
+        if is_int_value(id) && haskey(attr_types, Int(id))
+            owners[Int(id)] = (attr_types[Int(id)], "SupplementalAttribute")
+        end
+    end
+    series = storable_time_series(doc, report, strict, unsupported_ids, owners)
     with_statements(db) do cache
         seed_vocabulary!(db)
         for (plan, objs) in plans
@@ -284,7 +291,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             end
         end
         routed = Tuple{String, String, Any, String}[]
-        for attr in section_rows(doc, "supplemental_attributes")
+        for attr in attrs
             id = Int(attr["id"])
             if !haskey(attr_types, id)
                 throw(
@@ -330,6 +337,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
                 add_inserted!(report, section.section)
             end
         end
+        insert_associations!(cache, m.time_series, series, report)
     end
     return report
 end
