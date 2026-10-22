@@ -401,7 +401,7 @@ out in that file.
   A reference to one (an `association_id`, a `*_association_id` or a `fuel_cost_time_series`) is written as its source's id: the series with the same owner, name, features and `uri`.
   Their values come from the document's HDF5 sidecar (`time_series_storage_file`, or `time_series=` / `--time-series`): the SDK has infrastore export them as its SQLite tables under the `ts_` prefix, in the same transaction as the rest of the document.
   `time_series_values` joins them to the associations by id; `orphaned_time_series` lists exported series no association names.
-  Without a sidecar, or without an infrastore that has the SQLite export (after 0.14.1), the values are reported under `time_series_values`.
+  Without a sidecar, or without infrastore 0.15.0 or later, the values are reported under `time_series_values`.
   A database holds one export: a second document with series fails on the existing `ts_` tables.
   The TypeScript runtime reports every time series row.
 - **Not supported yet.** `voltage_control_associations`, `ext`, and the component types `schema_map.json` excludes are reported, not written.

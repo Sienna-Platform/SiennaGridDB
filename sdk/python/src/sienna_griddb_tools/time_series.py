@@ -134,7 +134,7 @@ def values_missing(sidecar):
     except ImportError:
         return "install sienna-griddb-tools[time-series] to read the sidecar"
     if not hasattr(infrastore.Store, "export_sqlite"):
-        return "the installed infrastore has no SQLite export (needs infrastore > 0.14.1)"
+        return "the installed infrastore has no SQLite export (needs infrastore >= 0.15.0)"
     return None
 
 
@@ -161,7 +161,11 @@ def _copy_export(conn, path):
 
 def export_values(conn, plan, rows, sidecar):
     """Store the rows' arrays as infrastore's SQLite export under plan's prefix. The
-    sidecar is only read: infrastore opens a private copy with an in-memory catalog."""
+    sidecar is only read: infrastore opens a private copy with an in-memory catalog.
+
+    infrastore exports through its own connection, so it cannot join conn's open
+    savepoint. It writes a temporary file that _copy_export brings in, which keeps the
+    document atomic (infrastore #106 item 1 would let it write here directly)."""
     import infrastore
 
     # infrastore rejects null for an optional field, which a model dump spells for

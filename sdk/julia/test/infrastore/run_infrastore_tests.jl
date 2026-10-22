@@ -1,20 +1,18 @@
 # julia sdk/julia/test/infrastore/run_infrastore_tests.jl
-# Needs an infrastore checkout with the SQLite export (after 0.14.1): INFRASTORE_PATH,
-# default a sibling of this repository, and INFRASTORE_LIB naming its built
-# libinfrastore_ffi. Builds a temporary environment that devs InfraStore.jl and
-# SiennaGridDBTools.
+# Tests the InfraStore extension against the registered InfraStore.jl. To test an
+# infrastore checkout instead, set INFRASTORE_PATH to it and INFRASTORE_LIB to its
+# built libinfrastore_ffi.
 using Pkg
 
 const HERE = @__DIR__
 const PKG_ROOT = normpath(joinpath(HERE, "..", ".."))
-const REPO_ROOT = normpath(joinpath(PKG_ROOT, "..", ".."))
-const INFRASTORE =
-    get(ENV, "INFRASTORE_PATH", normpath(joinpath(REPO_ROOT, "..", "infrastore")))
 
 Pkg.activate(; temp=true)
-Pkg.develop([
-    PackageSpec(; path=joinpath(INFRASTORE, "julia", "InfraStore.jl")),
-    PackageSpec(; path=PKG_ROOT),
-])
+Pkg.develop(; path=PKG_ROOT)
+if haskey(ENV, "INFRASTORE_PATH")
+    Pkg.develop(; path=joinpath(ENV["INFRASTORE_PATH"], "julia", "InfraStore.jl"))
+else
+    Pkg.add(; name="InfraStore", version="0.15")
+end
 Pkg.add(["Test", "DBInterface", "JSON", "SQLite", "Dates"])
 include(joinpath(HERE, "infrastore_tests.jl"))

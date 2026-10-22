@@ -19,8 +19,7 @@ SiennaGridDBToolsPowerOpenAPIModelsExt = "PowerOpenAPIModels"
 
 [compat]
 DBInterface = "2.5"
-# The SQLite export arrives after InfraStore 0.14.1; raise this once it is released.
-InfraStore = "0.14.1"
+InfraStore = "0.15"
 JSON = "1"
 PowerOpenAPIModels = "0.2"
 SHA = "0.7"

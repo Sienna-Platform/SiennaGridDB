@@ -181,6 +181,12 @@ Each distinct array is stored once, and `ts_all_series.id` is the store's associ
 `time_series_values` is that join, with UTC timestamps; `orphaned_time_series` lists exported series no association names any more, since the export's tables have no foreign key into GridDB.
 A `DeterministicSingleTimeSeries` is not stored: it is a view over its `SingleTimeSeries`' array, which a consumer derives again.
 
+The SDKs write the export through a private file.
+infrastore's `export_sqlite` opens its own connection to the database it writes, so it cannot join the savepoint the SDK holds open for the document, and its IMMEDIATE transaction would be blocked by that savepoint.
+So the SDK opens a copy of the sidecar with an in-memory catalog, has infrastore export to a temporary file, and copies that file's tables, rows, indexes and views into the GridDB file inside the document's savepoint.
+A failure anywhere then rolls back the whole document, values included, at the cost of the copy: about 1.3 s for an ERCOT DAM document with 345,671 series.
+Writing through the caller's transaction (infrastore #106, item 1) would remove the copy.
+
 ## 5. Basis: per-unit vs. natural units, and where the base number lives
 
 A pu value is meaningless without knowing what it's normalized against. GridDB expresses that with

@@ -208,6 +208,9 @@ function copy_export!(db::SQLite.DB, path::AbstractString)
     return nothing
 end
 
+# InfraStore exports through its own connection, so it cannot join the document's open
+# savepoint. It writes a temporary file that copy_export! brings in, which keeps the
+# document atomic (infrastore #106 item 1 would let it write into `db` directly).
 function store_values!(db::SQLite.DB, plan::TimeSeriesPlan, rows::Vector{Any}, sidecar)
     export_values(sidecar, rows, plan.table_prefix) do path
         try

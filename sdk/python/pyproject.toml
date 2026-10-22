@@ -13,8 +13,9 @@ dependencies = []
 
 [project.optional-dependencies]
 test = ["pytest>=7.2.1"]
-# The SQLite export arrives after infrastore 0.14.1; pin its release once tagged.
-time-series = ["infrastore>0.14.1"]
+# 0.15.0 has the SQLite export; the release after it carries infrastore #112, which
+# makes exporting a large sidecar about 18x faster.
+time-series = ["infrastore>=0.15.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
