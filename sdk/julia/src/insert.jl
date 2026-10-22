@@ -236,13 +236,19 @@ function write_supplemental!(cache, table::AbstractString, attr_type, attr, what
 end
 
 """
-    insert_document!(db, doc; strict=false) -> InsertReport
+    insert_document!(db, doc; strict=false, time_series=nothing) -> InsertReport
 
 Insert a whole `SystemDocument` (as parsed JSON) in one savepoint: vocabulary, every
-entity row, typed rows in foreign-key rank order, supplemental attributes, associations.
-Any failure rolls back the whole document.
+entity row, typed rows in foreign-key rank order, supplemental attributes, associations,
+time series. Any failure rolls back the whole document. `time_series` is the HDF5 sidecar
+holding the arrays (`time_series_storage_file`); it is only read, and needs InfraStore.jl.
 """
-function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
+function insert_document!(
+    db::SQLite.DB,
+    doc::AbstractDict;
+    strict::Bool=false,
+    time_series::Union{Nothing, AbstractString}=nothing,
+)
     m = manifest()
     report = InsertReport()
     components = something(get(doc, "components", nothing), Dict{String, Any}())
@@ -283,6 +289,16 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
         end
     end
     series = storable_time_series(doc, report, strict, unsupported_ids, owners)
+    missing_reason = isempty(series) ? nothing : values_missing(time_series)
+    if !isnothing(missing_reason)
+        mark_unsupported!(
+            report,
+            strict,
+            "time_series_values",
+            length(series),
+            missing_reason,
+        )
+    end
     with_statements(db) do cache
         seed_vocabulary!(db)
         for (plan, objs) in plans
@@ -338,6 +354,9 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             end
         end
         insert_associations!(cache, m.time_series, series, report)
+        if !isempty(series) && isnothing(missing_reason)
+            store_values!(db, m.time_series, series, time_series)
+        end
     end
     return report
 end

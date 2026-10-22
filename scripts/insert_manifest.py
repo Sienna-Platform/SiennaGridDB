@@ -279,6 +279,8 @@ def time_series_entry(conn, schemas_root, spec):
             "ON CONFLICT (features_hash, key) DO NOTHING"
         ),
         "unsupported_types": spec["unsupported_types"],
+        # infrastore's SQLite export of the values; views.sql reads its <prefix>all_* views.
+        "table_prefix": spec["table_prefix"],
     }
 
 

@@ -1,6 +1,10 @@
-"""Time series association rows and their feature sets."""
+"""Time series association rows, their feature sets, and their values."""
 
+import json
+import os
+import shutil
 import sqlite3
+import tempfile
 
 from .encode import ENCODERS, EncodeError, is_int
 from .errors import InsertError
@@ -119,3 +123,68 @@ def point_at_sources(node, sources):
     for k, v in changed.items():
         out[k] = v
     return out
+
+
+def values_missing(sidecar):
+    """Why the values cannot be stored here, or None when they can."""
+    if sidecar is None:
+        return "no time series sidecar given"
+    try:
+        import infrastore
+    except ImportError:
+        return "install sienna-griddb-tools[time-series] to read the sidecar"
+    if not hasattr(infrastore.Store, "export_sqlite"):
+        return "the installed infrastore has no SQLite export (needs infrastore >= 0.15.0)"
+    return None
+
+
+def _copy_export(conn, path):
+    """infrastore's export, written into conn inside the caller's transaction: its
+    tables with their rows, then their indexes and views."""
+    src = sqlite3.connect(path)
+    try:
+        objects = src.execute(
+            "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
+        ).fetchall()
+        for kind, name, sql in objects:
+            if kind == "table":
+                conn.execute(sql)
+                rows = src.execute(f'SELECT * FROM "{name}"')
+                marks = ", ".join("?" for _ in rows.description)
+                conn.executemany(f'INSERT INTO "{name}" VALUES ({marks})', rows)
+        for kind, _, sql in objects:
+            if kind != "table":
+                conn.execute(sql)
+    finally:
+        src.close()
+
+
+def export_values(conn, plan, rows, sidecar):
+    """Store the rows' arrays as infrastore's SQLite export under plan's prefix. The
+    sidecar is only read: infrastore opens a private copy with an in-memory catalog.
+
+    infrastore exports through its own connection, so it cannot join conn's open
+    savepoint. It writes a temporary file that _copy_export brings in, which keeps the
+    document atomic (infrastore #106 item 1 would let it write here directly)."""
+    import infrastore
+
+    # infrastore rejects null for an optional field, which a model dump spells for
+    # every unset one; GridDB's own rows treat null as absent
+    wire = [{k: v for k, v in row.items() if v is not None} for row in rows]
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = os.path.join(tmp, "time_series.h5")
+        out = os.path.join(tmp, "export.sqlite")
+        try:
+            shutil.copyfile(sidecar, copy)
+            store = infrastore.Store.open_without_catalog(copy, catalog="memory")
+            try:
+                store.import_time_series_associations_openapi(json.dumps(wire))
+                store.export_sqlite(out, table_prefix=plan["table_prefix"])
+            finally:
+                store.close()
+        except (infrastore.TimeSeriesError, OSError) as exc:
+            raise InsertError(f"time series sidecar {sidecar}: {exc}") from exc
+        try:
+            _copy_export(conn, out)
+        except sqlite3.Error as exc:
+            raise InsertError(f"time series values: {exc}") from exc

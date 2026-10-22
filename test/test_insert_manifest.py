@@ -189,6 +189,8 @@ def test_time_series_entry(manifest):
     assert paths["association_id"] == ("id", "int")
     assert paths["features"] == ("features_hash", "features_hash")
     assert ts["references"] == ["owner_id"]
+    views = (SCHEMA_DIR / "views.sql").read_text(encoding="utf-8")
+    assert f"{ts['table_prefix']}all_series" in views
     assert set(ts["unsupported_types"]) == {
         "DeterministicSingleTimeSeries",
         "NonSequentialTimeSeries",

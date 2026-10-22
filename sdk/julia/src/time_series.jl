@@ -152,3 +152,73 @@ function point_at_sources(
     return isnothing(out) ? node : out
 end
 point_at_sources(node, ::Dict{Int, Int}) = node
+
+"""
+    export_values(f, sidecar, rows, prefix)
+
+Write the rows' arrays from the HDF5 `sidecar`, which is only ever read, as infrastore's
+SQLite export under `prefix` to a temporary file, and call `f` with its path. Defined
+by the InfraStore extension.
+"""
+function export_values end
+
+"""
+Why the values cannot be stored in this session, or `nothing` when they can.
+"""
+function values_missing(sidecar)
+    isnothing(sidecar) && return "no time series sidecar given"
+    if isnothing(Base.get_extension(@__MODULE__, :SiennaGridDBToolsInfraStoreExt))
+        return "load InfraStore.jl to read the time series sidecar"
+    end
+    return nothing
+end
+
+"""
+infrastore's export, written into `db` inside the caller's transaction: its tables with
+their rows, then their indexes and views.
+"""
+function copy_export!(db::SQLite.DB, path::AbstractString)
+    src = SQLite.DB(path)
+    try
+        sql = "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
+        objects = [(r.type, r.name, r.sql) for r in DBInterface.execute(src, sql)]
+        for (kind, name, ddl) in objects
+            kind == "table" || continue
+            DBInterface.execute(db, ddl)
+            info =
+                DBInterface.execute(src, "SELECT name FROM pragma_table_info(?)", (name,))
+            columns = [Symbol(r.name) for r in info]
+            rows = DBInterface.execute(src, "SELECT * FROM \"$name\"")
+            marks = join(fill("?", length(columns)), ", ")
+            stmt = SQLite.Stmt(db, "INSERT INTO \"$name\" VALUES ($marks)")
+            try
+                for row in rows
+                    DBInterface.execute(stmt, Any[getproperty(row, c) for c in columns])
+                end
+            finally
+                DBInterface.close!(stmt)
+            end
+        end
+        for (kind, _, ddl) in objects
+            kind == "table" || DBInterface.execute(db, ddl)
+        end
+    finally
+        close(src)
+    end
+    return nothing
+end
+
+# InfraStore exports through its own connection, so it cannot join the document's open
+# savepoint. It writes a temporary file that copy_export! brings in, which keeps the
+# document atomic (infrastore #106 item 1 would let it write into `db` directly).
+function store_values!(db::SQLite.DB, plan::TimeSeriesPlan, rows::Vector{Any}, sidecar)
+    export_values(sidecar, rows, plan.table_prefix) do path
+        try
+            copy_export!(db, path)
+        catch e
+            e isa SQLite.SQLiteException || rethrow()
+            throw(InsertError("time series values: $(sprint(showerror, e))"))
+        end
+    end
+    return nothing
+end

@@ -30,6 +30,7 @@
     "columns": {"association_id": "id", "features": "features_hash", "percentiles": "percentiles_json"},
     "encodings": {"features": "features_hash"},
     "placeholders": {"unit_system": "lower(?)"},
+    "table_prefix": "ts_",
     "unsupported_types": {
       "DeterministicSingleTimeSeries": "derived from its SingleTimeSeries; regenerate it with transform_single_time_series!",
       "NonSequentialTimeSeries": "GridDB has no column for its timestamps_uri"

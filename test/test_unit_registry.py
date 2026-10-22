@@ -43,8 +43,6 @@ SEALED_TABLES = [
 COMPLETENESS_ALLOWLIST = {
     ("storage_technologies", "region"),
     ("supply_technologies", "region"),
-    # structural value columns; units live on time_series_associations for series data
-    ("static_time_series", "value"),
     # structural value column; units live in attribute conventions for supplemental attrs
     ("supplemental_attributes", "value"),
     # structural TYPE+value JSON store (like supplemental_attributes); no fixed unit
@@ -403,42 +401,6 @@ def _insert_association(
         f"VALUES ({placeholders})",
         values,
     )
-
-
-def test_static_time_series_without_association_rejected(fresh_db):
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match=r"static_time_series\.uri must exist in time_series_associations",
-    ):
-        fresh_db.execute(
-            "INSERT INTO static_time_series(uri, timestep, value) "
-            "VALUES ('static:load-1', 0, 1.0)"
-        )
-
-
-def test_static_time_series_with_association_accepted(fresh_db):
-    make_entity(fresh_db, 1)
-    _insert_association(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load-1', 0, 1.0)"
-    )
-    (count,) = fresh_db.execute(
-        "SELECT COUNT(*) FROM static_time_series WHERE uri = 'static:load-1'"
-    ).fetchone()
-    assert count == 1
-
-
-def test_static_time_series_update_uri_to_orphan_rejected(fresh_db):
-    make_entity(fresh_db, 1)
-    _insert_association(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load-1', 0, 1.0)"
-    )
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match=r"static_time_series\.uri must exist in time_series_associations",
-    ):
-        fresh_db.execute("UPDATE static_time_series SET uri = 'static:orphan'")
 
 
 def test_association_data_hash_optional(fresh_db):

@@ -139,6 +139,6 @@
     "Operations/Service/AGC.json": "No table yet.",
     "Operations/StaticInjection/HybridSystem.json": "No table yet.",
     "Operations/SupplementalAttributes/": "Stored as typed JSON in supplemental_attributes, or in plants for the plant types.",
-    "TimeSeries/": "Hand-written time_series_associations and static_time_series tables, which mirror the infrastore catalog."
+    "TimeSeries/": "Hand-written time_series_associations table, which mirrors the infrastore catalog; the values are infrastore's SQLite export (the ts_ tables)."
   }
 }
