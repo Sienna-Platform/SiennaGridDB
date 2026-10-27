@@ -38,6 +38,12 @@ Built from SiennaSchemas v0.3.0. `PRAGMA user_version = 5`.
   table lists.
 - Every AC arc-domain error now ends with "use tmodel_hvdc_lines for DC-network branches".
 
+### Unit registry
+
+- `scripts/check_units_sync.py --psy-path` checks one more rule: a schema property with a fixed
+  non-power unit (A, kA, ...) whose PowerSystems field converts by the power base. The check
+  fails when GridDB stores the field, and warns when it does not.
+
 ### Fixed
 
 - The schema update workflow no longer commits its SiennaSchemas checkout as a gitlink.
