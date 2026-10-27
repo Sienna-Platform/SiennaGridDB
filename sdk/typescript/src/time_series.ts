@@ -1,19 +1,7 @@
-import { isInt, type SqlValue } from "./encode.js";
+import { featureKind, isInt, isObject, type SqlValue } from "./encode.js";
 import { InsertError, type JsonObject } from "./errors.js";
 
 const DERIVED = "DeterministicSingleTimeSeries";
-
-function isObject(value: unknown): value is JsonObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-// The kind featuresHash hashes a value as: JSON.parse cannot tell 1.0 from 1.
-function featureKind(value: unknown): string {
-  if (typeof value === "boolean") return "bool";
-  if (typeof value === "number") return Number.isSafeInteger(value) ? "int" : "float";
-  if (typeof value === "string") return "str";
-  return typeof value;
-}
 
 export function featureRows(hash: string, features: JsonObject): SqlValue[][] {
   return Object.entries(features).map(([key, value]) => {

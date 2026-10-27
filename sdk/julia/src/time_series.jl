@@ -130,35 +130,26 @@ is_reference(key::AbstractString) =
 (the keys `dangling_time_series_references` reads). A dict or vector is copied only
 when something inside it changes; the caller's stays as it was.
 """
-function point_at_sources(node::AbstractDict, sources::Dict{Int, Int})
-    changed = changed_references(node, sources)
-    isempty(changed) && return node
-    out = Dict{String, Any}(node)
-    for (k, v) in changed
-        out[k] = v
-    end
-    return out
-end
-function point_at_sources(node::AbstractVector, sources::Dict{Int, Int})
-    changed = changed_references(node, sources)
-    isempty(changed) && return node
-    out = Vector{Any}(node)
-    for (i, v) in changed
-        out[i] = v
+function point_at_sources(
+    node::Union{AbstractDict, AbstractVector},
+    sources::Dict{Int, Int},
+)
+    out = node
+    isempty(sources) && return out
+    for (k, v) in pairs(node)
+        new = pointed_at_source(k, v, sources)
+        new === v && continue
+        if out === node
+            out = widened_copy(node)
+        end
+        out[k] = new
     end
     return out
 end
 point_at_sources(node, ::Dict{Int, Int}) = node
 
-function changed_references(node, sources::Dict{Int, Int})
-    changed = Pair{Any, Any}[]
-    isempty(sources) && return changed
-    for (k, v) in pairs(node)
-        new = pointed_at_source(k, v, sources)
-        new === v || push!(changed, k => new)
-    end
-    return changed
-end
+widened_copy(node::AbstractDict) = Dict{String, Any}(node)
+widened_copy(node::AbstractVector) = Vector{Any}(node)
 
 function pointed_at_source(key::AbstractString, v, sources::Dict{Int, Int})
     if is_reference(key) && is_int_value(v) && haskey(sources, Int(v))

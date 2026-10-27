@@ -248,7 +248,7 @@ FROM
     json_tree(p.payload) t
 WHERE
     json_valid(p.payload)
-    AND t.type = 'integer'
+    AND t.type IN ('integer', 'real')
     -- A bare integer payload has no key: its column (or attribute) names it.
     AND (
         coalesce(t.key, p.source_column) IN ('association_id', 'fuel_cost_time_series')

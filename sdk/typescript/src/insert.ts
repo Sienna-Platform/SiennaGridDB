@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import type { Connection } from "./db.js";
 import { seedVocabulary } from "./db.js";
-import { canonicalJson, encode, isInt, isNull, valueAt, type SqlValue } from "./encode.js";
+import { canonicalJson, encode, isInt, isNull, isObject, valueAt, type SqlValue } from "./encode.js";
 import {
   EncodeError,
   InsertError,
@@ -112,7 +112,7 @@ function writeRow(
 
 // Every document entry is a JSON object; anything else is schema-invalid input.
 function requireObject(entry: unknown, what: string): void {
-  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+  if (!isObject(entry)) {
     throw new InsertError(`${what} ${JSON.stringify(entry)}: not an object`);
   }
 }

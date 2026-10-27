@@ -24,6 +24,8 @@ from generate_sql_schema import (
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
+# infrastore's SQLite export writes its tables under this prefix; time_series_views.sql reads it.
+TIME_SERIES_TABLE_PREFIX = "ts_"
 
 ENCODING_BY_KIND = {
     "integer": "int",
@@ -81,6 +83,10 @@ def attribute_plan(name, comp, prop_name, prop, schemas_root, units_index, unit_
         for c in convs
     }
     return {"field": prop_name, "unit_field": unit_field, "arms": arms, "exempt": bool(owners)}
+
+
+def fk_columns(conn, table):
+    return {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{table}')")}
 
 
 def compute_ranks(conn, tables):
@@ -233,8 +239,8 @@ def association_entry(conn, schemas_root, section, rel_file):
         for p in names
     ]
     row_sql = f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join('?' for _ in names)})"
-    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
-    references = [p for p in names if p in fk_columns]
+    fk = fk_columns(conn, section)
+    references = [p for p in names if p in fk]
     return {"section": section, "row_sql": row_sql, "bindings": bindings, "references": references}
 
 
@@ -280,12 +286,12 @@ def time_series_entry(conn, schemas_root, spec, schema_dir):
     names = [c for c in columns if c in by_column]
     values = [spec["placeholders"].get(by_column[c]["path"], "?") for c in names]
     bindings = [by_column[c] for c in names]
-    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
+    fk = fk_columns(conn, section)
     return {
         "section": section,
         "row_sql": f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join(values)})",
         "bindings": bindings,
-        "references": [b["path"] for b, c in zip(bindings, names) if c in fk_columns],
+        "references": [b["path"] for b, c in zip(bindings, names) if c in fk],
         # DO NOTHING on the key only: OR IGNORE would also swallow the reserved-key CHECK.
         "feature_sql": (
             "INSERT INTO feature_sets (features_hash, key, value_kind, value_int, "
@@ -293,8 +299,7 @@ def time_series_entry(conn, schemas_root, spec, schema_dir):
             "ON CONFLICT (features_hash, key) DO NOTHING"
         ),
         "unsupported_types": spec["unsupported_types"],
-        # infrastore's SQLite export of the values; views_sql reads its <prefix>all_* views.
-        "table_prefix": spec["table_prefix"],
+        "table_prefix": TIME_SERIES_TABLE_PREFIX,
         "views_sql": time_series_views(schema_dir),
     }
 

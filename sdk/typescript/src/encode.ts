@@ -17,6 +17,11 @@ function sortDeep(value: unknown): unknown {
   return value;
 }
 
+/** A JSON object: not null, not an array. */
+export function isObject(value: unknown): value is JsonObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 /** What the int encoder accepts: an integral number in Int64. */
 export function isInt(v: unknown): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= -(2 ** 63) && v < 2 ** 63;
@@ -44,10 +49,8 @@ const ENCODERS: Record<Encoding, (v: unknown) => SqlValue> = {
   },
   json: (v) => canonicalJson(v),
   features_hash: (v) => {
-    if (v === null || typeof v !== "object" || Array.isArray(v)) {
-      throw new EncodeError(`expected a feature map, got ${JSON.stringify(v)}`);
-    }
-    return featuresHash(v as JsonObject);
+    if (!isObject(v)) throw new EncodeError(`expected a feature map, got ${JSON.stringify(v)}`);
+    return featuresHash(v);
   },
 };
 
@@ -78,18 +81,27 @@ function u64(n: number | bigint): Buffer {
   return b;
 }
 
+/** The kind a feature value hashes as. JSON.parse cannot tell 1.0 from 1, so a safe integer is "int". */
+export function featureKind(value: unknown): string {
+  if (typeof value === "boolean") return "bool";
+  if (typeof value === "number") return Number.isSafeInteger(value) ? "int" : "float";
+  if (typeof value === "string") return "str";
+  return typeof value;
+}
+
 function featureBytes(value: unknown): Buffer {
-  if (typeof value === "boolean") return Buffer.from([0x62, value ? 1 : 0]);
-  if (typeof value === "number" && Number.isSafeInteger(value)) {
+  const kind = featureKind(value);
+  if (kind === "bool") return Buffer.from([0x62, value ? 1 : 0]);
+  if (kind === "int") {
     const b = Buffer.alloc(9, 0x69);
-    b.writeBigInt64LE(BigInt(value), 1);
+    b.writeBigInt64LE(BigInt(value as number), 1);
     return b;
   }
-  if (typeof value === "number") {
+  if (kind === "float") {
     // Any NaN hashes as Rust's f64::NAN bit pattern.
     const b = Buffer.alloc(9, 0x66);
     if (Number.isNaN(value)) b.writeBigUInt64LE(0x7ff8000000000000n, 1);
-    else b.writeDoubleLE(value, 1);
+    else b.writeDoubleLE(value as number, 1);
     return b;
   }
   if (typeof value === "string") {
