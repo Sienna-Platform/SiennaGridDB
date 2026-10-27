@@ -499,9 +499,8 @@ def psy_field_is_documented_natural(name, field, component_props):
     return "power_units" not in component_props
 
 
-def layer3(report, schema_map, schemas_path, psy_structs, doc_cache, stored=None):
+def layer3(report, schema_map, schemas_path, psy_structs, doc_cache, stored):
     """schemas <-> PSY descriptor. `stored` maps a component to the fields GridDB writes."""
-    stored = stored or {}
     tables = schema_map["tables"]
     checked_a = 0
     checked_b = 0
