@@ -222,7 +222,10 @@ if HAS_GOLDEN
         mktempdir() do dir
             fresh(dir) do db
                 doc = golden()
-                owner = haskey(doc["components"], where) ? doc["components"] : doc
+                owner = doc
+                if haskey(doc["components"], where)
+                    owner = doc["components"]
+                end
                 push!(get!(owner, where, Any[]), value)
                 @test_throws InsertError insert_document!(db, doc)
                 @test_throws r"not an object" insert_document!(db, doc)
@@ -308,6 +311,73 @@ if HAS_GOLDEN
                 @test_throws InsertError insert_document!(db, input)
                 @test_throws r"ThermalStandard id=.*FOREIGN KEY" insert_document!(db, input)
                 @test count_rows(db, "entities") == 0
+            end
+        end
+    end
+
+    @testset "a connection with foreign keys off still checks them" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                DBInterface.execute(db, "PRAGMA foreign_keys = OFF")
+                thermal = first_of(golden(), "ThermalStandard")
+                thermal["bus"] = 999999
+                input = Dict{String, Any}(
+                    "components" =>
+                        Dict{String, Any}("ThermalStandard" => Any[thermal]),
+                )
+                @test_throws r"FOREIGN KEY" insert_document!(db, input)
+            end
+        end
+    end
+
+    @testset "foreign keys off inside an open transaction" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                DBInterface.execute(db, "PRAGMA foreign_keys = OFF")
+                DBInterface.execute(db, "BEGIN")
+                @test_throws r"foreign keys are off" insert_component!(
+                    db,
+                    "ACBus",
+                    lone_bus(golden()),
+                )
+                DBInterface.execute(db, "ROLLBACK")
+            end
+        end
+    end
+
+    @testset "invalid attribute id: $message" for (section, row, message) in (
+        (
+            "supplemental_attributes",
+            Dict{String, Any}("id" => 1.5),
+            "supplemental attribute: id: expected an integer",
+        ),
+        (
+            "supplemental_attributes",
+            Dict{String, Any}("name" => "x"),
+            "supplemental attribute: no id",
+        ),
+        (
+            "supplemental_attribute_associations",
+            Dict{String, Any}("attribute_type" => "GeographicInfo", "component_id" => 1),
+            "supplemental_attribute_associations row: no attribute_id",
+        ),
+    )
+        mktempdir() do dir
+            fresh(dir) do db
+                input = Dict{String, Any}(section => Any[row])
+                @test_throws Regex(message) insert_document!(db, input)
+            end
+        end
+    end
+
+    @testset "a component entry that is not a list" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                input = Dict{String, Any}(
+                    "components" =>
+                        Dict{String, Any}("ACBus" => Dict{String, Any}("id" => 1)),
+                )
+                @test_throws r"components.ACBus: not a list" insert_document!(db, input)
             end
         end
     end

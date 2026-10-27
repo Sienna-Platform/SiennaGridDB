@@ -23,9 +23,9 @@ describe("encodings", () => {
     expect(() => encode("int", 1.5)).toThrow(EncodeError);
     expect(() => encode("int", true)).toThrow(EncodeError);
   });
-  test("int stays in Int64", () => {
-    expect(encode("int", -(2 ** 63))).toBe(-(2n ** 63n));
-    expect(() => encode("int", 2 ** 63)).toThrow(EncodeError);
+  test("int stays in the safe-integer range JSON.parse keeps exact", () => {
+    expect(encode("int", -(2 ** 53 - 1))).toBe(-(2n ** 53n - 1n));
+    expect(() => encode("int", 2 ** 53)).toThrow(EncodeError);
     expect(() => encode("int", 1e20)).toThrow(EncodeError);
   });
   test("others", () => {

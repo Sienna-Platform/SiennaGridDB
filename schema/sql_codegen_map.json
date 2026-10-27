@@ -191,7 +191,7 @@
         "id": {},
         "name": {},
         "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
-        "base_power": {},
+        "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
         "available": {"default": 1},
         "active_power": {},
@@ -598,7 +598,7 @@
         "R_th": {"column": "r_th"},
         "X_th": {"column": "x_th"},
         "parameter_units": {},
-        "operation_cost": {"default": {"import_offer_curves": null, "export_offer_curves": null, "energy_import_weekly_limit": 1000000.0, "energy_export_weekly_limit": 1000000.0, "ancillary_service_offers": []}}
+        "operation_cost": {"default": {"cost_type": "IMPORTEXPORT", "import_offer_curves": null, "export_offer_curves": null, "energy_import_weekly_limit": 1000000.0, "energy_export_weekly_limit": 1000000.0, "ancillary_service_offers": []}}
       },
       "skip": ["dynamic_injector"]
     },
@@ -795,7 +795,7 @@
         "settlement_point_id": {"references": "entities (id) ON DELETE SET NULL"},
         "max_supply": {"checks": ["max_supply >= 0"]},
         "max_demand": {"checks": ["max_demand >= 0"]},
-        "operation_cost": {"checks": ["ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')"]}
+        "operation_cost": {}
       }
     },
     "point_to_point_bids": {
@@ -812,7 +812,7 @@
         "from_id": {"references": "entities (id) ON DELETE CASCADE"},
         "to_id": {"references": "entities (id) ON DELETE CASCADE"},
         "max_active_power": {"checks": ["max_active_power >= 0"]},
-        "spread_bid": {"checks": ["ifnull(json_extract(spread_bid, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')"]},
+        "spread_bid": {},
         "price_limits": {},
         "linked_crr": {}
       },

@@ -135,7 +135,7 @@ flowchart TD
 ```
 
 Registry writes themselves (`quantity_kinds`, `allowed_units`, `unit_conventions`) are blocked
-outright once `unit_management_metadata.unit_conventions_checksum` exists — the only way to change
+outright once `unit_management_metadata` holds its `unit_conventions_checksum` key — the only way to change
 the vocabulary is regenerate-and-reload. The seal is **detection, not prevention**: SQLite has no
 privilege model, so `verify_unit_registry.py` is what actually catches tampering.
 
@@ -189,9 +189,9 @@ physical quantity, and — under `NATURAL_UNITS` — which representation of it?
 
 ### Axis 1: `parameter_units`, exactly two values
 
-One discriminator column, `parameter_units`, on seven tables — `transmission_lines`,
-`transformer_circuits`, `three_winding_transformers`, `sources`, `tmodel_hvdc_lines`,
-`facts_control_devices`, `interconnecting_converters`. The two shunt tables are not among them:
+One discriminator column, `parameter_units`, on six tables — `transmission_lines`,
+`series_compensators`, `transformer_circuits`, `three_winding_transformers`, `sources`,
+`facts_control_devices`. The two shunt tables are not among them:
 `fixed_admittance` and `switched_admittance` carry `admittance_units`, whose arms are
 `NATURAL_UNITS` and `COMPONENT_MVAR`, because a shunt has no MVA rating to per-unitize against.
 (Time series carry the same two-valued choice as `time_series_associations.unit_system`, in
@@ -212,15 +212,14 @@ is interpreted the same way once it's found.
 
 ### Axis 2: `quantity_kind` also selects the natural-unit representation
 
-Under `NATURAL_UNITS`, `quantity_kind` picks *which* physical representation a column holds. This is
-how the old `admittance_units` value `COMPONENT_MVAR` was absorbed without a third basis value:
-`fixed_admittance.y_b` (and `switched_admittance.y_b`) each carry three `unit_conventions` rows —
+Under `NATURAL_UNITS`, `quantity_kind` picks *which* physical representation a column holds. The
+shunt tables show it: `fixed_admittance.y_b` (and `switched_admittance.Y_increase`) carry one
+`unit_conventions` row per `admittance_units` arm, and neither arm is per-unit —
 
-| quantity_kind | unit | parameter_units |
+| quantity_kind | unit | admittance_units |
 |---|---|---|
 | `Susceptance` | `S` | `NATURAL_UNITS` |
-| `ReactivePower` | `MVAr` | `NATURAL_UNITS` |
-| `Susceptance` | `pu` | `COMPONENT_BASE` |
+| `ReactivePower` | `MVAr` | `COMPONENT_MVAR` |
 
 — the electrical form and the PSS/E form (MVAr at 1.0 pu voltage) are both natural units,
 distinguished only by `quantity_kind`. This required widening `unit_conventions`' uniqueness key
@@ -265,7 +264,7 @@ resolved base is non-null when `parameter_units = 'COMPONENT_BASE'`, or making
 
 ### Mechanical resolution: rules + base references
 
-A sealed table, `unit_basis_rules` (5 rows), maps the five quantity kinds that ever carry pu to the
+A sealed table, `unit_basis_rules` (9 rows), maps the nine quantity kinds that ever carry pu to the
 base expression that resolves them:
 
 | quantity_kind | base_expression |
@@ -273,6 +272,7 @@ base expression that resolves them:
 | `Voltage` | `base_voltage` |
 | `Resistance`, `Reactance` | `base_voltage^2/base_power` |
 | `Susceptance`, `Conductance` | `base_power/base_voltage^2` |
+| `ActivePower`, `ReactivePower`, `ApparentPower`, `ActivePowerChangeRate` | `base_power` |
 
 `unit_conventions` gained nullable `base_power_ref` / `base_voltage_ref` naming *which* bases apply.
 No arrow means a same-row column; an arrow is an FK hop, each segment after the first written

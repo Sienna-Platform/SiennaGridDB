@@ -312,8 +312,20 @@ def test_source_defaults_match_psy(fresh_db):
     assert row[4] is None, "base_voltage is nullable: may be taken from the bus"
     assert row[5] == "COMPONENT_BASE"
     cost = json.loads(row[6])
+    assert cost["cost_type"] == "IMPORTEXPORT"
     assert cost["import_offer_curves"] is None
     assert cost["energy_import_weekly_limit"] == 1000000.0
+
+
+def test_a_cost_payload_without_cost_type_is_rejected(fresh_db):
+    """A missing key reads as NULL, and a CHECK that evaluates to NULL passes."""
+    make_entity(fresh_db, 1, "hydro_reservoirs", "HydroReservoir")
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        fresh_db.execute(
+            "INSERT INTO hydro_reservoirs(id, name, storage_level_limits, initial_level, "
+            "head_to_volume_factor, operation_cost) VALUES (1, 'r', '{\"min\":0,\"max\":1}', "
+            "0.0, '{\"function_type\":\"LINEAR\",\"proportional_term\":0,\"constant_term\":0}', '{}')"
+        )
 
 
 def test_source_cost_units_trigger_guards_both_offer_curves(fresh_db):

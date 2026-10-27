@@ -44,8 +44,11 @@ jobs:
           name="sienna-griddb-${GITHUB_REF_NAME}"
           mkdir -p "dist/$name"
           # CHANGELOG ships too: it carries the schema version and the known
-          # limitations a consumer needs before building on this.
-          cp -r schema scripts README.md CHANGELOG.md LICENSE .justfile "dist/$name/"
+          # limitations a consumer needs before building on this. Of scripts/, only
+          # the verifier runs without the sibling repositories.
+          cp -r schema README.md CHANGELOG.md LICENSE .justfile "dist/$name/"
+          mkdir "dist/$name/scripts"
+          cp scripts/verify_unit_registry.py scripts/_common.py "dist/$name/scripts/"
           tar -czf "$name.tar.gz" -C dist "$name"
           echo "Top-level members:"
           tar -tzf "$name.tar.gz" | awk -F/ '{print $1}' | sort -u
@@ -62,7 +65,7 @@ jobs:
             echo "::error::tarball must unpack into a single top-level directory named $name, got: $roots" >&2
             exit 1
           fi
-          for internal in .claude .github test pyproject.toml; do
+          for internal in .claude .github test pyproject.toml scripts/__pycache__ scripts/generate_; do
             if tar -tzf "$name.tar.gz" | grep -q "^$name/$internal"; then
               echo "::error::internal tooling $internal must not ship in the release tarball" >&2
               exit 1

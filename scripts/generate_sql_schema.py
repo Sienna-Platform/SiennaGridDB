@@ -77,6 +77,7 @@ Derived rules:
               default on each, and its type does not admit null
   CHECK       enum values, minimum/maximum bounds, and a oneOf discriminator
   DEFAULT     the schema default, never for base_power
+  INDEX       every foreign-key column, unless an `indexes` entry leads with it
   tables      STRICT
   attributes  a unitless number is Dimensionless; a unitless object or array
               gets an attribute_identifiers row per owning component
@@ -100,6 +101,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_SCHEMAS_PATH = os.path.normpath(os.path.join(REPO_ROOT, "..", "SiennaSchemas"))
 SCHEMA_MAP = os.path.join(REPO_ROOT, "schema", "schema_map.json")
 CODEGEN_MAP = os.path.join(REPO_ROOT, "schema", "sql_codegen_map.json")
+INSERT_CONFIG = os.path.join(REPO_ROOT, "schema", "insert_config.json")
 SCHEMA_SQL = os.path.join(REPO_ROOT, "schema", "schema.sql")
 CONVENTIONS = os.path.join(REPO_ROOT, "schema", "column_conventions.json")
 TRIGGERS_SQL = os.path.join(REPO_ROOT, "schema", "triggers.sql")
@@ -149,6 +151,47 @@ DELETE FROM
     entities
 WHERE
     id = OLD.id;
+
+END;
+"""
+
+ID_UPDATE_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS prevent_{table}_id_update BEFORE
+UPDATE
+    OF id ON {table}
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        '{table}.id cannot change; delete the row and insert it again'
+    );
+
+END;
+"""
+
+ARC_ENDPOINT_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS enforce_{table}_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            {table} t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.{column} = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> {is_dc}
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the {table}.{column} of a branch, so its endpoints must connect {message}'
+    );
 
 END;
 """
@@ -208,6 +251,7 @@ ARC_DOMAINS = {
 }
 
 # Top-level SiennaSchemas directories that hold no component schemas.
+LEADING_INDEX_COLUMN = re.compile(r"\(\s*(\w+)")
 NON_SCHEMA_DIRS = {"docs", "scripts", "tests", "node_modules"}
 
 DISPOSITIONS = ("columns", "attribute_channel", "decomposed", "skip")
@@ -275,12 +319,17 @@ def bound_checks(column, prop):
     return checks
 
 
-def discriminator_check(column, prop):
+def discriminator_check(column, prop, nullable):
+    # ifnull: a payload with no discriminator key reads as NULL, and a CHECK that
+    # evaluates to NULL passes.
     disc = prop.get("discriminator")
     if not disc or "mapping" not in disc:
         return None
     values = ", ".join(sql_literal(v) for v in sorted(disc["mapping"]))
-    return f"json_extract({column}, '$.{disc['propertyName']}') IN ({values})"
+    check = f"ifnull(json_extract({column}, '$.{disc['propertyName']}'), '') IN ({values})"
+    if nullable:
+        return f"{column} IS NULL OR {check}"
+    return check
 
 
 # --------------------------------------------------------------------------- inventory
@@ -416,7 +465,7 @@ def column_decl(prop, entry, override, schemas_root, renames):
     if enum_values is not None:
         checks.append(f"{column} IN ({', '.join(sql_literal(v) for v in enum_values)})")
     checks.extend(bound_checks(column, node))
-    disc = discriminator_check(column, node)
+    disc = discriminator_check(column, node, not not_null)
     if disc:
         checks.append(disc)
     checks.extend(override.get("checks", []))
@@ -570,14 +619,19 @@ def emit_table(table, components, cfg, schemas_root, units_index):
     body = []
     present = set()
     conventions = []
+    fk_columns = []
     for prop, override in columns.items():
         if "sql" in override:
             body.append((f"{prop} {override['sql']}", override.get("comment")))
             present.add(prop)
+            if "REFERENCES" in override["sql"].upper():
+                fk_columns.append(prop)
             continue
         column, decl = column_decl(prop, merged[prop], override, schemas_root, renames)
         present.add(column)
         body.append((decl, override.get("comment")))
+        if "references" in override:
+            fk_columns.append(column)
     for prop, override in columns.items():
         if "sql" not in override:
             derived, conv_problems = column_conventions(
@@ -608,6 +662,13 @@ def emit_table(table, components, cfg, schemas_root, units_index):
         lines.append(f"    {decl}{sep}" + (f" -- {comment}" if comment else ""))
     lines.append(") STRICT;")
     lines.extend(f"{index};" for index in cfg.get("indexes", []))
+    # Without an index, deleting a parent row scans this table for its ON DELETE action.
+    indexed = {m.group(1) for m in map(LEADING_INDEX_COLUMN.search, cfg.get("indexes", [])) if m}
+    lines.extend(
+        f"CREATE INDEX idx_{table}_{column} ON {table} ({column});"
+        for column in fk_columns
+        if column not in indexed
+    )
     return "\n".join(lines) + "\n", conventions, attributes, present, problems
 
 
@@ -668,6 +729,51 @@ def identifiers_sql(identifiers):
     )
 
 
+def vocabulary(config, component_names, schemas_path):
+    """The lookup rows: every entity type with its topology flags, and each enum table."""
+    flags = config["entity_type_flags"]
+    entity_types = set(component_names)
+    for rel_dir in config["supplemental_attribute_dirs"]:
+        directory = os.path.join(schemas_path, rel_dir)
+        for file_name in os.listdir(directory):
+            if file_name.endswith(".json"):
+                entity_types.add(file_name[: -len(".json")])
+    vocab = {
+        "entity_types": [
+            {
+                "name": n,
+                "is_topology": flags.get(n, {}).get("is_topology", False),
+                "is_dc": flags.get(n, {}).get("is_dc", False),
+            }
+            for n in sorted(entity_types)
+        ]
+    }
+    for table, ref in sorted(config["vocabulary_enums"].items()):
+        rel_file, _, frag = ref.partition("#")
+        node, _ = resolve_ref(schemas_path, "#" + frag, rel_file)
+        vocab[table] = sorted(node["enum"])
+    return vocab
+
+
+def vocabulary_sql(vocab):
+    """The lookup rows as INSERTs, so a database built from the SQL alone accepts a
+    component row; the insert SDKs seed the same rows with INSERT OR IGNORE."""
+    rows = ",\n".join(
+        f"    ({sql_literal(t['name'])}, {int(t['is_topology'])}, {int(t['is_dc'])})"
+        for t in vocab["entity_types"]
+    )
+    parts = [
+        "-- Lookup vocabularies: entity types from schema_map.json and insert_config.json,\n"
+        "-- and the enum tables from their SiennaSchemas enums.\n"
+        f"INSERT INTO entity_types (name, is_topology, is_dc)\nVALUES\n{rows};\n"
+    ]
+    for table, names in vocab.items():
+        if table != "entity_types":
+            values = ",\n".join(f"    ({sql_literal(n)})" for n in names)
+            parts.append(f"INSERT INTO {table} (name)\nVALUES\n{values};\n")
+    return "\n".join(parts)
+
+
 def triggers_region(tables, codegen):
     """The per-table entity and arc-domain triggers, as the triggers.sql region.
 
@@ -675,11 +781,13 @@ def triggers_region(tables, codegen):
     """
     problems = []
     entity = []
+    identity = []
     delete = []
     arc = []
     references = []
     for table in tables:
         entity.append(ENTITY_EXISTS_TRIGGER.format(table=table))
+        identity.append(ID_UPDATE_TRIGGER.format(table=table))
         delete.append(DELETE_ENTITY_TRIGGER.format(table=table))
         cfg = codegen.get(table, {})
         types = ", ".join(sql_literal(c["component"]) for c in tables[table])
@@ -708,13 +816,19 @@ def triggers_region(tables, codegen):
                 table=table, event=event, event_clause=clause, column=column,
                 is_dc=is_dc, message=message,
             ))
+        arc.append(ARC_ENDPOINT_TRIGGER.format(
+            table=table, column=column, is_dc=is_dc, message=message,
+        ))
     blocks = [
         TRIGGERS_BEGIN + "\n", REGION_HEADER,
         "\n-- A row's id must already be in entities, under this table.\n\n",
         "\n".join(entity),
+        "\n-- A row's id is its entities row: changing it would move the row to another entity.\n\n",
+        "\n".join(identity),
         "\n-- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.\n",
         "\n".join(delete),
-        "\n-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc).\n"
+        "\n-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc),\n"
+        "-- on an insert or update of the branch and on an update of the arc's endpoints.\n"
         "-- A foreign key can't express this, since arcs reference entities generically\n"
         "-- and the domain lives on entity_types.\n",
         "\n".join(arc),
@@ -777,6 +891,9 @@ def generate(schemas_path):
         raise GenerationError(problems)
     conventions.extend(attr_conventions)
     blocks.append("\n" + identifiers_sql(identifiers))
+    component_names = [c["component"] for comps in schema_map["tables"].values() for c in comps]
+    vocab = vocabulary(load_json(INSERT_CONFIG), component_names, schemas_path)
+    blocks.append("\n" + vocabulary_sql(vocab))
     blocks.append("\n" + END_MARKER)
     regions = {
         SCHEMA_SQL: ("".join(blocks), BEGIN_MARKER, END_MARKER),

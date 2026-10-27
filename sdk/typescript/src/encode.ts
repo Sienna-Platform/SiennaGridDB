@@ -16,9 +16,12 @@ function sortDeep(value: unknown): unknown {
   return value;
 }
 
-/** What the int encoder accepts: an integral number in Int64. */
+/**
+ * What the int encoder accepts: a safe integer. JSON.parse has already rounded any
+ * integer beyond 2^53, so the value would no longer be the one in the document.
+ */
 export function isInt(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= -(2 ** 63) && v < 2 ** 63;
+  return Number.isSafeInteger(v);
 }
 
 // Integers bind as BigInt: better-sqlite3 binds every JS number as a double.

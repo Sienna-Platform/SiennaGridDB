@@ -22,6 +22,7 @@ def as_json_data(obj):
 
 @contextmanager
 def _savepoint(conn):
+    _require_foreign_keys(conn)
     conn.execute(f"SAVEPOINT {SAVEPOINT}")
     try:
         yield
@@ -30,6 +31,33 @@ def _savepoint(conn):
         conn.execute(f"RELEASE {SAVEPOINT}")
         raise
     conn.execute(f"RELEASE {SAVEPOINT}")
+
+
+def _require_foreign_keys(conn):
+    """The caller's connection may have foreign keys off. The PRAGMA does nothing
+    inside an open transaction, so read it back."""
+    conn.execute("PRAGMA foreign_keys = ON")
+    if conn.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
+        raise InsertError("foreign keys are off and cannot be turned on inside an open transaction")
+
+
+def _required_id(row, key, what):
+    """An id the insert needs before it writes a row, by the int encoder's rule."""
+    value = row.get(key)
+    if value is None:
+        raise InsertError(f"{what}: no {key}")
+    if not is_int(value):
+        raise InsertError(f"{what}: {key}: expected an integer, got {value!r}")
+    return int(value)
+
+
+def _components(doc):
+    """{type name: entries}; each entry list must be a JSON array."""
+    components = doc.get("components") or {}
+    for type_name, objs in components.items():
+        if not isinstance(objs, list):
+            raise InsertError(f"components.{type_name}: not a list")
+    return components
 
 
 def _execute(conn, sql, params, what):
@@ -142,7 +170,9 @@ def insert_model(conn, model, *, strict=False):
 def _attribute_types(doc):
     types = {}
     for assoc in _section_rows(doc, "supplemental_attribute_associations"):
-        types[assoc["attribute_id"]] = assoc["attribute_type"]
+        types[_required_id(assoc, "attribute_id", "supplemental_attribute_associations row")] = (
+            assoc["attribute_type"]
+        )
     return types
 
 
@@ -156,7 +186,7 @@ def insert_document(conn, doc, *, strict=False):
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
-    components = doc.get("components") or {}
+    components = _components(doc)
     plans = []
     unsupported_ids = set()
     for type_name in sorted(components):
@@ -182,19 +212,20 @@ def insert_document(conn, doc, *, strict=False):
                 _write_entity(conn, plan, obj)
         routed = []
         for attr in _section_rows(doc, "supplemental_attributes"):
-            if attr["id"] not in attr_types:
+            attr_id = _required_id(attr, "id", "supplemental attribute")
+            if attr_id not in attr_types:
                 raise InsertError(
-                    f"supplemental attribute id={attr['id']}: no association names its type"
+                    f"supplemental attribute id={attr_id}: no association names its type"
                 )
-            attr_type = attr_types[attr["id"]]
+            attr_type = attr_types[attr_id]
             table = "supplemental_attributes"
             if attr_type in supplemental["plant_types"]:
                 table = "plants"
-            what = f"{attr_type} id={attr['id']}"
+            what = f"{attr_type} id={attr_id}"
             _execute(
                 conn,
                 "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, ?, ?)",
-                [attr["id"], table, attr_type],
+                [attr_id, table, attr_type],
                 what,
             )
             routed.append((table, attr_type, attr, what))

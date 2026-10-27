@@ -33,7 +33,7 @@ import json
 import os
 import sys
 
-from _common import none_to_empty, repr_from_rows, sql_literal
+from _common import none_to_empty, repr_from_rows, sql_literal, write_or_check
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_UNITS_JSON = os.path.normpath(
@@ -353,6 +353,7 @@ def main(argv=None):
     parser.add_argument("--units-json", default=DEFAULT_UNITS_JSON)
     parser.add_argument("--conventions", default=DEFAULT_CONVENTIONS)
     parser.add_argument("--output", default=DEFAULT_OUTPUT)
+    parser.add_argument("--check", action="store_true", help="fail if --output is stale")
     args = parser.parse_args(argv)
 
     quantity_kinds, allowed_units, units_convention = load_units(args.units_json)
@@ -374,8 +375,11 @@ def main(argv=None):
     content = emit(
         quantity_kinds, allowed_units, conventions, basis_rules, units_convention, seal
     )
-    with open(args.output, "w", encoding="utf-8") as handle:
-        handle.write(content)
+    if write_or_check({args.output: content}, args.check, "run scripts/generate_unit_registry.py"):
+        return 1
+    if args.check:
+        sys.stderr.write("OK: {} matches units.json and column_conventions.json\n".format(args.output))
+        return 0
     sys.stderr.write(
         "Wrote {} ({} quantity_kinds, {} allowed_units, {} unit_conventions, "
         "{} unit_basis_rules)\n".format(

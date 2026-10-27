@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 5; -- bump on every schema or registry change
+PRAGMA user_version = 6; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -113,6 +113,7 @@ CREATE TABLE hydro_reservoir_connections (
     CHECK (source_id <> sink_id),
     PRIMARY KEY (source_id, sink_id)
 ) strict;
+CREATE INDEX idx_hydro_reservoir_connections_sink ON hydro_reservoir_connections (sink_id);
 
 -- Holds a field that doesn't fit an entity table's typed columns (fixed or
 -- variable O&M cost, etc.). Not for operational data -- that belongs in the
@@ -129,6 +130,8 @@ CREATE TABLE attributes (
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE(entity_id, name)
 );
+-- Triggers and views select attributes by name across every entity.
+CREATE INDEX idx_attributes_name ON attributes (name, TYPE);
 
 -- (TYPE, name) pairs that hold an identifier, not a physical quantity (bus
 -- numbers, node references, zone ids). Unit-validation triggers otherwise
@@ -199,6 +202,7 @@ CREATE TABLE plant_associations (
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE (plant_id, entity_id)
 ) strict;
+CREATE INDEX idx_plant_associations_entity ON plant_associations (entity_id);
 
 -- CombinedCycleBlock CT/CA <-> HRSG associations are n-to-m: a CT or CA can
 -- feed multiple HRSGs and an HRSG can have multiple CTs/CAs. Kept in its own
@@ -213,6 +217,7 @@ CREATE TABLE combined_cycle_associations (
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE (plant_id, entity_id, hrsg_index)
 ) strict;
+CREATE INDEX idx_combined_cycle_associations_entity ON combined_cycle_associations (entity_id);
 
 -- Mirrors infrastore's catalog table column-for-column so a row deserializes
 -- straight into a store, and projects onto the SiennaSchemas wire form.
@@ -312,7 +317,8 @@ CREATE TABLE time_series_associations (
     -- set, even an empty one.
     features_hash TEXT NOT NULL CHECK (
         length(features_hash) = 64 AND features_hash NOT GLOB '*[^0-9a-f]*'
-    )
+    ),
+    CHECK (time_series_type <> 'Scenarios' OR scenario_count IS NOT NULL)
 ) strict;
 
 -- Feature sets are content-addressed by the SHA-256 of the feature map and
@@ -348,12 +354,9 @@ CREATE TABLE feature_sets (
     PRIMARY KEY (features_hash, key)
 ) strict;
 
--- Both are needed: uq_ts_assoc cannot enforce uniqueness when resolution or
--- interval IS NULL (SQLite treats NULLs as distinct); the coalesced twin closes
--- that gap with the empty string, never a valid ISO-8601 period.
-CREATE UNIQUE INDEX uq_ts_assoc ON time_series_associations
-    (owner_id, owner_category, time_series_type, name, resolution, interval, features_hash);
-
+-- COALESCE: SQLite treats NULLs as distinct, so a NULL resolution or interval
+-- would escape a plain unique index. The empty string is never a valid
+-- ISO-8601 period.
 CREATE UNIQUE INDEX uq_ts_assoc_coalesced ON time_series_associations
     (owner_id, owner_category, time_series_type, name,
      COALESCE(resolution, ''), COALESCE(interval, ''), features_hash);
@@ -375,6 +378,7 @@ CREATE TABLE trading_hub_associations (
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE (trading_hub_id, entity_id)
 ) strict;
+CREATE INDEX idx_trading_hub_associations_entity ON trading_hub_associations (entity_id);
 
 -- Dense values, located by the association rows' uri (the role infrastore's
 -- HDF5 half plays; here the uri IS the key into this table). One copy per
@@ -533,11 +537,14 @@ CREATE TABLE thermal_generators (
     commitment_mode TEXT NOT NULL DEFAULT 'COMMITTED' CHECK (commitment_mode IN ('UNCOMMITTED', 'COMMITTED', 'SELF_SCHEDULED', 'RELIABILITY', 'MUST_RUN')),
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
-    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (json_extract(operation_cost, '$.cost_type') IN ('IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES', 'THERMAL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
+    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES', 'THERMAL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
     production_cost TEXT GENERATED ALWAYS AS (json_extract(operation_cost, '$.variable_operation_cost')) VIRTUAL,
     time_at_status REAL NOT NULL DEFAULT 600000.0,
     switching_times TEXT NULL CHECK (json_valid(switching_times))
 ) STRICT;
+CREATE INDEX idx_thermal_generators_prime_mover_type ON thermal_generators (prime_mover_type);
+CREATE INDEX idx_thermal_generators_fuel ON thermal_generators (fuel);
+CREATE INDEX idx_thermal_generators_balancing_topology ON thermal_generators (balancing_topology);
 
 -- Existing renewable generation units (RenewableDispatch, RenewableNonDispatch).
 -- operation_cost is NULL for RenewableNonDispatch, which has no cost. Its curve is
@@ -558,9 +565,11 @@ CREATE TABLE renewable_generators (
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
-    operation_cost TEXT NULL DEFAULT '{"cost_type":"RENEWABLE","curtailment_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}},"fixed":0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (json_extract(operation_cost, '$.cost_type') IN ('IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES', 'RENEWABLE')) CHECK (operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') = 'COST') CHECK (operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')),
+    operation_cost TEXT NULL DEFAULT '{"cost_type":"RENEWABLE","curtailment_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}},"fixed":0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (operation_cost IS NULL OR ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES', 'RENEWABLE')) CHECK (operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') = 'COST') CHECK (operation_cost IS NULL OR json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')),
     production_cost TEXT GENERATED ALWAYS AS (json_extract(operation_cost, '$.variable_operation_cost')) VIRTUAL
 ) STRICT;
+CREATE INDEX idx_renewable_generators_prime_mover_type ON renewable_generators (prime_mover_type);
+CREATE INDEX idx_renewable_generators_balancing_topology ON renewable_generators (balancing_topology);
 
 -- Existing hydro generation units (HydroDispatch, HydroTurbine, HydroPumpTurbine).
 -- HydroTurbine and HydroPumpTurbine fields are NULL for HydroDispatch.
@@ -591,10 +600,12 @@ CREATE TABLE hydro_generators (
     outflow_limits TEXT NULL CHECK (json_valid(outflow_limits)),
     conversion_factor REAL NULL DEFAULT 1.0 CHECK (conversion_factor > 0),
     travel_time REAL NULL CHECK (travel_time >= 0),
-    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_GEN","fixed":0.0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (json_extract(operation_cost, '$.cost_type') IN ('HYDRO_GEN', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
+    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_GEN","fixed":0.0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('HYDRO_GEN', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
     production_cost TEXT GENERATED ALWAYS AS (json_extract(operation_cost, '$.variable_operation_cost')) VIRTUAL,
     time_at_status REAL NOT NULL DEFAULT 600000.0
 ) STRICT;
+CREATE INDEX idx_hydro_generators_prime_mover_type ON hydro_generators (prime_mover_type);
+CREATE INDEX idx_hydro_generators_balancing_topology ON hydro_generators (balancing_topology);
 
 -- Existing energy storage units, including PHES and other kinds.
 -- energy_units MWMIN makes duration = energy / power come out in minutes.
@@ -629,8 +640,11 @@ CREATE TABLE storage_units (
     ramp_limits TEXT NULL CHECK (json_valid(ramp_limits)),
     self_discharge REAL NOT NULL DEFAULT 0.0 CHECK (self_discharge >= 0),
     standing_loss REAL NOT NULL DEFAULT 0.0 CHECK (standing_loss >= 0),
-    operation_cost TEXT NOT NULL DEFAULT '{"charge_variable_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST"},"cost_type":"STORAGE","discharge_variable_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST"}}' CHECK (json_valid(operation_cost)) CHECK (json_extract(operation_cost, '$.cost_type') IN ('IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES', 'STORAGE'))
+    operation_cost TEXT NOT NULL DEFAULT '{"charge_variable_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST"},"cost_type":"STORAGE","discharge_variable_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST"}}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES', 'STORAGE'))
 ) STRICT;
+CREATE INDEX idx_storage_units_prime_mover_type ON storage_units (prime_mover_type);
+CREATE INDEX idx_storage_units_storage_technology_type ON storage_units (storage_technology_type);
+CREATE INDEX idx_storage_units_balancing_topology ON storage_units (balancing_topology);
 
 -- Topological hydro reservoirs. operation_cost is always USD/MWh: level-native
 -- values convert to energy via head_to_volume_factor before costing.
@@ -649,7 +663,7 @@ CREATE TABLE hydro_reservoirs (
     level_targets REAL NULL,
     intake_elevation REAL NOT NULL DEFAULT 0.0,
     head_to_volume_factor TEXT NOT NULL CHECK (json_valid(head_to_volume_factor)),
-    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_RES","level_shortage_cost":0.0,"level_surplus_cost":0.0,"spillage_cost":0.0}' CHECK (json_valid(operation_cost)) CHECK (json_extract(operation_cost, '$.cost_type') IN ('HYDRO_RES', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES')),
+    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_RES","level_shortage_cost":0.0,"level_surplus_cost":0.0,"spillage_cost":0.0}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('HYDRO_RES', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES')),
     level_data_type TEXT NOT NULL DEFAULT 'USABLE_VOLUME' CHECK (level_data_type IN ('USABLE_VOLUME', 'TOTAL_VOLUME', 'HEAD', 'ENERGY')),
     evaporative_loss REAL NOT NULL DEFAULT 0.0 CHECK (evaporative_loss >= 0)
 ) STRICT;
@@ -664,7 +678,7 @@ CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    base_power REAL NOT NULL,
+    base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     active_power REAL NULL,
@@ -673,6 +687,7 @@ CREATE TABLE loads (
     max_reactive_power REAL NULL,
     conformity TEXT NULL DEFAULT 'UNDEFINED' CHECK (conformity IN ('NON_CONFORMING', 'CONFORMING', 'UNDEFINED'))
 ) STRICT;
+CREATE INDEX idx_loads_balancing_topology ON loads (balancing_topology);
 
 -- r/x/b/g follow parameter_units: COMPONENT_BASE is per-unit on base_power;
 -- NATURAL_UNITS is ohm (r/x) or siemens (b/g). All four share one row's basis
@@ -707,6 +722,7 @@ CREATE TABLE transmission_lines (
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit)),
     angle_limits TEXT NOT NULL CHECK (json_valid(angle_limits))
 ) STRICT;
+CREATE INDEX idx_transmission_lines_arc_id ON transmission_lines (arc_id);
 
 -- Physical flow limits between areas or balancing topologies, distinct from
 -- transmission_lines: these enforce market-level interchange limits.
@@ -726,6 +742,9 @@ CREATE TABLE transmission_interchanges (
     from_area INTEGER NOT NULL REFERENCES planning_regions (id) ON DELETE CASCADE,
     to_area INTEGER NOT NULL REFERENCES planning_regions (id) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX idx_transmission_interchanges_arc_id ON transmission_interchanges (arc_id);
+CREATE INDEX idx_transmission_interchanges_from_area ON transmission_interchanges (from_area);
+CREATE INDEX idx_transmission_interchanges_to_area ON transmission_interchanges (to_area);
 
 -- Reserve products (PSY OnlineReserve, OfflineReserve, GroupReserve), one table
 -- discriminated by entities.entity_type. enforce_reserves_type_shape_* keep each
@@ -785,6 +804,7 @@ CREATE TABLE discrete_controlled_ac_branches (
     normal_branch_status TEXT NOT NULL DEFAULT 'CLOSED' CHECK (normal_branch_status IN ('OPEN', 'CLOSED')),
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
+CREATE INDEX idx_discrete_controlled_ac_branches_arc_id ON discrete_controlled_ac_branches (arc_id);
 
 -- Series compensator (PSY SeriesCompensator): a series capacitor or reactor, a
 -- TCSC, or an SSSC on one AC arc. x is negative for a capacitor. r/x/reactance_limits
@@ -815,6 +835,7 @@ CREATE TABLE series_compensators (
     CHECK (control_mode NOT IN ('DISPATCHABLE', 'ACTIVE_POWER_FLOW') OR reactance_limits IS NOT NULL),
     CHECK (control_mode <> 'ACTIVE_POWER_FLOW' OR active_power_flow_setpoint IS NOT NULL)
 ) STRICT;
+CREATE INDEX idx_series_compensators_arc_id ON series_compensators (arc_id);
 
 -- One modeled arc of a transformer (PSY TransformerCircuit); unnamed
 -- subcomponents, so no name column. r/x follow parameter_units (COMPONENT_BASE ->
@@ -851,6 +872,7 @@ CREATE TABLE transformer_circuits (
     controlled_active_power_flow_limits TEXT NULL CHECK (json_valid(controlled_active_power_flow_limits)),
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
+CREATE INDEX idx_transformer_circuits_arc_id ON transformer_circuits (arc_id);
 
 -- Two-winding transformer (PSY TwoWindingTransformer); series data lives on
 -- the referenced circuit. magnetizing_shunt is a complex admittance as JSON
@@ -928,6 +950,7 @@ CREATE TABLE two_terminal_hvdc_lines (
     reactive_power_limits_to TEXT NOT NULL CHECK (json_valid(reactive_power_limits_to)),
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
+CREATE INDEX idx_two_terminal_hvdc_lines_arc_id ON two_terminal_hvdc_lines (arc_id);
 
 -- T-model HVDC line (PSY TModelHVDCLine): a DC-network element whose arc
 -- endpoints must both be DC buses (entity_types.is_dc = 1), enforced by
@@ -950,6 +973,7 @@ CREATE TABLE tmodel_hvdc_lines (
     c REAL NOT NULL,
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
+CREATE INDEX idx_tmodel_hvdc_lines_arc_id ON tmodel_hvdc_lines (arc_id);
 
 -- Synchronous machine for inertia or reactive support (PSY SynchronousCondenser).
 -- It injects no active power, so there is no active_power column;
@@ -970,6 +994,7 @@ CREATE TABLE synchronous_condensers (
     reactive_power_limits TEXT NULL CHECK (json_valid(reactive_power_limits)),
     active_power_losses REAL NOT NULL DEFAULT 0.0 CHECK (active_power_losses >= 0)
 ) STRICT;
+CREATE INDEX idx_synchronous_condensers_bus ON synchronous_condensers (bus);
 
 -- Fixed shunt admittance (PSY FixedAdmittance): Y as conductance (y_g) and
 -- susceptance (y_b). admittance_units is NATURAL_UNITS (siemens) or
@@ -989,6 +1014,7 @@ CREATE TABLE fixed_admittance (
     admittance_units TEXT NOT NULL DEFAULT 'COMPONENT_MVAR' CHECK (admittance_units IN ('NATURAL_UNITS', 'COMPONENT_MVAR')),
     base_power REAL NOT NULL CHECK (base_power > 0)
 ) STRICT;
+CREATE INDEX idx_fixed_admittance_bus ON fixed_admittance (bus);
 
 -- Switched shunt admittance (PSY SwitchedAdmittance). Effective admittance is
 -- number_engaged * Y_increase, or solved_admittance when present.
@@ -1012,6 +1038,7 @@ CREATE TABLE switched_admittance (
     voltage_limits TEXT NULL CHECK (json_valid(voltage_limits)),
     reactive_power_range_limits TEXT NULL CHECK (json_valid(reactive_power_range_limits))
 ) STRICT;
+CREATE INDEX idx_switched_admittance_bus ON switched_admittance (bus);
 
 -- Thevenin equivalent source (PSY Source). r_th/x_th follow parameter_units: pu on
 -- base_power, or natural-units ohm; COMPONENT_BASE is the default since PSY
@@ -1039,8 +1066,9 @@ CREATE TABLE sources (
     r_th REAL NOT NULL DEFAULT 0.0,
     x_th REAL NOT NULL DEFAULT 0.0,
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    operation_cost TEXT NOT NULL DEFAULT '{"ancillary_service_offers":[],"energy_export_weekly_limit":1000000.0,"energy_import_weekly_limit":1000000.0,"export_offer_curves":null,"import_offer_curves":null}' CHECK (json_valid(operation_cost)) CHECK (json_extract(operation_cost, '$.cost_type') IN ('IMPORTEXPORT', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES'))
+    operation_cost TEXT NOT NULL DEFAULT '{"ancillary_service_offers":[],"cost_type":"IMPORTEXPORT","energy_export_weekly_limit":1000000.0,"energy_import_weekly_limit":1000000.0,"export_offer_curves":null,"import_offer_curves":null}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('IMPORTEXPORT', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES'))
 ) STRICT;
+CREATE INDEX idx_sources_bus ON sources (bus);
 
 -- Interconnecting power converter (PSY InterconnectingConverter), an AC<->DC
 -- bus converter. bus is the AC side, dc_bus the DC side; the domain of each is
@@ -1073,6 +1101,8 @@ CREATE TABLE interconnecting_converters (
     ac_voltage_setpoint REAL NULL,
     CHECK (bus <> dc_bus)
 ) STRICT;
+CREATE INDEX idx_interconnecting_converters_bus ON interconnecting_converters (bus);
+CREATE INDEX idx_interconnecting_converters_dc_bus ON interconnecting_converters (dc_bus);
 
 -- FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly
 -- per parameter_units (COMPONENT_BASE: pu on bus base_voltage, the native external form;
@@ -1097,6 +1127,7 @@ CREATE TABLE facts_control_devices (
     max_shunt_current REAL NOT NULL,
     reactive_power_required REAL NOT NULL
 ) STRICT;
+CREATE INDEX idx_facts_control_devices_bus ON facts_control_devices (bus);
 
 -- Balancing topologies for the system: buses (ACBus, DCBus) or larger aggregated
 -- regions (LoadZone). load_zone and area reference other rows. load_zone is a
@@ -1119,6 +1150,8 @@ CREATE TABLE balancing_topologies (
     voltage_limits TEXT NULL CHECK (json_valid(voltage_limits)),
     load_zone INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
+CREATE INDEX idx_balancing_topologies_area ON balancing_topologies (area);
+CREATE INDEX idx_balancing_topologies_load_zone ON balancing_topologies (load_zone);
 
 -- Investment technology options for expansion problems
 -- Components: SupplyTechnology
@@ -1146,6 +1179,7 @@ CREATE TABLE supply_technologies (
     operation_costs TEXT NOT NULL DEFAULT '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,"variable":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_costs)),
     financial_data TEXT NOT NULL CHECK (json_valid(financial_data))
 ) STRICT;
+CREATE INDEX idx_supply_technologies_prime_mover_type ON supply_technologies (prime_mover_type);
 
 -- Components: StorageTechnology
 -- capital_costs is stored as: capital_costs_charge, capital_costs_discharge, capital_costs_energy, interconnection_cost
@@ -1176,6 +1210,7 @@ CREATE TABLE storage_technologies (
     operation_costs TEXT NOT NULL DEFAULT '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,"variable":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_costs)),
     financial_data TEXT NOT NULL CHECK (json_valid(financial_data))
 ) STRICT;
+CREATE INDEX idx_storage_technologies_prime_mover_type ON storage_technologies (prime_mover_type);
 
 -- Components: NodalACTransportTechnology, NodalHVDCTransportTechnology, AggregateTransportTechnology
 -- Attributes: resistance, voltage, reactance
@@ -1195,6 +1230,10 @@ CREATE TABLE transport_technologies (
     start_region INTEGER NULL REFERENCES entities (id) ON DELETE CASCADE,
     end_region INTEGER NULL REFERENCES entities (id) ON DELETE CASCADE
 ) STRICT;
+CREATE INDEX idx_transport_technologies_start_node ON transport_technologies (start_node);
+CREATE INDEX idx_transport_technologies_end_node ON transport_technologies (end_node);
+CREATE INDEX idx_transport_technologies_start_region ON transport_technologies (start_region);
+CREATE INDEX idx_transport_technologies_end_region ON transport_technologies (end_region);
 
 -- Components: DemandRequirement
 -- Attributes: conformity, growth_rate, new_demand_mw, new_construction_year, value_of_lost_load, unserved_demand_curve
@@ -1232,8 +1271,9 @@ CREATE TABLE virtual_participants (
     settlement_point_id INTEGER NULL REFERENCES entities (id) ON DELETE SET NULL,
     max_supply REAL NOT NULL CHECK (max_supply >= 0),
     max_demand REAL NOT NULL CHECK (max_demand >= 0),
-    operation_cost TEXT NOT NULL CHECK (json_valid(operation_cost)) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES'))
+    operation_cost TEXT NOT NULL CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES'))
 ) STRICT;
+CREATE INDEX idx_virtual_participants_settlement_point_id ON virtual_participants (settlement_point_id);
 
 -- A priced point-to-point spread bid (PSY PointToPointBid): a
 -- willingness-to-pay curve on the price spread between a source (from_id)
@@ -1248,11 +1288,13 @@ CREATE TABLE point_to_point_bids (
     from_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     to_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     max_active_power REAL NOT NULL CHECK (max_active_power >= 0),
-    spread_bid TEXT NOT NULL CHECK (json_valid(spread_bid)) CHECK (json_extract(spread_bid, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')) CHECK (ifnull(json_extract(spread_bid, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')),
+    spread_bid TEXT NOT NULL CHECK (json_valid(spread_bid)) CHECK (ifnull(json_extract(spread_bid, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')),
     price_limits TEXT NOT NULL CHECK (json_valid(price_limits)),
     linked_crr TEXT NULL,
     CHECK (from_id <> to_id)
 ) STRICT;
+CREATE INDEX idx_point_to_point_bids_from_id ON point_to_point_bids (from_id);
+CREATE INDEX idx_point_to_point_bids_to_id ON point_to_point_bids (to_id);
 
 -- Attribute-channel properties with no unit and a structured value
 -- (references, curves): exempt from the attributes unit rule.
@@ -1270,5 +1312,153 @@ VALUES
     ('TwoTerminalLCCLine', 'loss'),
     ('TwoTerminalVSCLine', 'converter_loss_from'),
     ('TwoTerminalVSCLine', 'converter_loss_to');
+
+-- Lookup vocabularies: entity types from schema_map.json and insert_config.json,
+-- and the enum tables from their SiennaSchemas enums.
+INSERT INTO entity_types (name, is_topology, is_dc)
+VALUES
+    ('ACBus', 1, 0),
+    ('AggregateTransportTechnology', 0, 0),
+    ('Arc', 0, 0),
+    ('Area', 0, 0),
+    ('AreaInterchange', 0, 0),
+    ('CombinedCycleBlock', 0, 0),
+    ('CombinedCycleFractional', 0, 0),
+    ('DCBus', 1, 1),
+    ('DataSource', 0, 0),
+    ('DemandRequirement', 0, 0),
+    ('DiscreteControlledACBranch', 0, 0),
+    ('EmissionsData', 0, 0),
+    ('EnergyReservoirStorage', 0, 0),
+    ('ExponentialLoad', 0, 0),
+    ('FACTSControlDevice', 0, 0),
+    ('FixedAdmittance', 0, 0),
+    ('FixedForcedOutage', 0, 0),
+    ('GeographicInfo', 0, 0),
+    ('GeometricDistributionForcedOutage', 0, 0),
+    ('GroupReserve', 0, 0),
+    ('HydroDispatch', 0, 0),
+    ('HydroPowerPlant', 0, 0),
+    ('HydroPumpTurbine', 0, 0),
+    ('HydroReservoir', 0, 0),
+    ('HydroTurbine', 0, 0),
+    ('ImpedanceCorrectionData', 0, 0),
+    ('InterconnectingConverter', 0, 0),
+    ('InterruptiblePowerLoad', 0, 0),
+    ('InterruptibleStandardLoad', 0, 0),
+    ('Line', 0, 0),
+    ('LoadZone', 0, 0),
+    ('MotorLoad', 0, 0),
+    ('NodalACTransportTechnology', 0, 0),
+    ('NodalHVDCTransportTechnology', 0, 0),
+    ('OfflineReserve', 0, 0),
+    ('OnlineReserve', 0, 0),
+    ('PlannedOutage', 0, 0),
+    ('PointToPointBid', 0, 0),
+    ('PowerLoad', 0, 0),
+    ('ReactivePowerSharing', 0, 0),
+    ('RenewableDispatch', 0, 0),
+    ('RenewableNonDispatch', 0, 0),
+    ('RenewablePowerPlant', 0, 0),
+    ('SeriesCompensator', 0, 0),
+    ('ShiftablePowerLoad', 0, 0),
+    ('Source', 0, 0),
+    ('StandardLoad', 0, 0),
+    ('StorageTechnology', 0, 0),
+    ('Substation', 0, 0),
+    ('SupplyTechnology', 0, 0),
+    ('SwitchedAdmittance', 0, 0),
+    ('SynchronousCondenser', 0, 0),
+    ('TModelHVDCLine', 0, 0),
+    ('ThermalMultiStart', 0, 0),
+    ('ThermalPowerPlant', 0, 0),
+    ('ThermalStandard', 0, 0),
+    ('ThreeWindingTransformer', 0, 0),
+    ('TradingHub', 0, 0),
+    ('TransformerCircuit', 0, 0),
+    ('TransmissionInterface', 0, 0),
+    ('TwoTerminalGenericHVDCLine', 0, 0),
+    ('TwoTerminalLCCLine', 0, 0),
+    ('TwoTerminalVSCLine', 0, 0),
+    ('TwoWindingTransformer', 0, 0),
+    ('VirtualParticipant', 0, 0),
+    ('VoltageDroopControl', 0, 0);
+
+INSERT INTO fuels (name)
+VALUES
+    ('AG_BYPRODUCT'),
+    ('ANTHRACITE_COAL'),
+    ('BITUMINOUS_COAL'),
+    ('BLACK_LIQUOR'),
+    ('BLAST_FURNACE_GAS'),
+    ('COAL'),
+    ('DISTILLATE_FUEL_OIL'),
+    ('GEOTHERMAL'),
+    ('JET_FUEL'),
+    ('KEROSENE'),
+    ('LANDFILL_GAS'),
+    ('LIGNITE_COAL'),
+    ('MUNICIPAL_WASTE'),
+    ('NATURAL_GAS'),
+    ('NUCLEAR'),
+    ('OTHER'),
+    ('OTHER_BIOMASS_GAS'),
+    ('OTHER_BIOMASS_LIQUIDS'),
+    ('OTHER_BIOMASS_SOLIDS'),
+    ('OTHER_GAS'),
+    ('PETROLEUM_COKE'),
+    ('PROPANE'),
+    ('REFINED_COAL'),
+    ('RESIDUAL_FUEL_OIL'),
+    ('SLUDGE_WASTE'),
+    ('SUBBITUMINOUS_COAL'),
+    ('SYNTHESIS_GAS_COAL'),
+    ('SYNTHESIS_GAS_PETROLEUM_COKE'),
+    ('TIRE_DERIVED_FUEL'),
+    ('WASTE_COAL'),
+    ('WASTE_HEAT'),
+    ('WASTE_OIL'),
+    ('WOOD_WASTE_LIQUIDS'),
+    ('WOOD_WASTE_SOLIDS');
+
+INSERT INTO prime_mover_types (name)
+VALUES
+    ('BA'),
+    ('BT'),
+    ('CA'),
+    ('CC'),
+    ('CE'),
+    ('CP'),
+    ('CS'),
+    ('CT'),
+    ('ES'),
+    ('FC'),
+    ('FW'),
+    ('GT'),
+    ('HA'),
+    ('HB'),
+    ('HK'),
+    ('HY'),
+    ('IC'),
+    ('OT'),
+    ('PS'),
+    ('PVe'),
+    ('ST'),
+    ('WS'),
+    ('WT');
+
+INSERT INTO storage_technology_types (name)
+VALUES
+    ('FLWB'),
+    ('HGS'),
+    ('LAB'),
+    ('LAES'),
+    ('LIB'),
+    ('OTHER_CHEM'),
+    ('OTHER_MECH'),
+    ('OTHER_THERM'),
+    ('PTES'),
+    ('SIB'),
+    ('ZIB');
 
 -- END GENERATED COMPONENT TABLES

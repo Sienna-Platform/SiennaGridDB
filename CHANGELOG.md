@@ -6,6 +6,40 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
+### Schema
+
+- `PRAGMA user_version = 6`.
+- Every foreign-key column has an index. `scripts/generate_sql_schema.py` emits one for each
+  generated column with `references`, and `schema.sql` adds the four hand-written ones that
+  reference `entities`. Before, a bus delete scanned every device table for its cascade.
+- A cost payload without its `cost_type` key fails the discriminator CHECK. Before, the missing
+  key read as NULL, and a CHECK that evaluates to NULL passes. The `sources.operation_cost`
+  default now carries `"cost_type": "IMPORTEXPORT"`.
+- An update of `arcs.from_id` or `arcs.to_id` re-checks the AC/DC domain of every branch on that
+  arc. Before, only an insert or update of the branch row was checked.
+- The `id` of a generated table cannot change. Before, an update could re-parent the row onto
+  an entities row of another subtype.
+- The lookup tables `entity_types`, `prime_mover_types`, `fuels` and `storage_technology_types`
+  are seeded in the generated region of `schema.sql`. Before, a database built from the SQL
+  alone rejected every generator insert on its foreign keys until an insert SDK seeded them.
+- `loads.base_power` must be positive, like every other `base_power`.
+- `hydro_reservoir_connections` must connect `hydro_reservoirs`, `hydro_generators` or
+  `storage_units` rows. Before, any two entities connected.
+- A `time_series_associations.owner_type` must be its owner's `entities.entity_type`, a
+  `Component` owner cannot be a supplemental attribute or plant, and a `Scenarios` row needs
+  `scenario_count`.
+- New index `idx_attributes_name` on `attributes (name, TYPE)`: triggers and views select by name.
+- Removed `uq_ts_assoc`: `uq_ts_assoc_coalesced` rejects every row it rejected.
+
+### Insert SDKs
+
+- Every insert turns on `PRAGMA foreign_keys`, so a connection the caller opened with the raw
+  driver still checks them. Inside an open transaction the PRAGMA has no effect, so the insert
+  raises `InsertError` instead of writing unchecked rows.
+- An invalid or missing supplemental attribute id, or a `components` entry that is not a list,
+  raises `InsertError` in all three SDKs. Before, each SDK raised its own exception type.
+- The TypeScript SDK rejects an integer id beyond 2^53: `JSON.parse` has already rounded it.
+
 ## [0.3.0] - 2026-10-27
 
 Built from SiennaSchemas v0.3.0. `PRAGMA user_version = 5`.
