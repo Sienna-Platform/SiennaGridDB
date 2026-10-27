@@ -37,10 +37,17 @@ jobs:
 
       - name: Push the release tag
         run: |
-          tag="v$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          version="$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          tag="v$version"
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
             echo "$tag already exists; nothing to release."
             exit 0
+          fi
+          # release.yml asserts this too, but only after the tag exists. Fail here
+          # instead, so a bump without its changelog section leaves no orphan tag.
+          if ! grep -q "^## \[$version\] - " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no [$version] section; not tagging $tag" >&2
+            exit 1
           fi
           git tag "$tag" "$GITHUB_SHA"
           git push origin "refs/tags/$tag"
