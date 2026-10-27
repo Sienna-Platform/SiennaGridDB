@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-    tags: ["*"]
   # Every branch, not just PRs into main: this repo develops in stacked PRs
   # (#174 -> #173 -> main and so on), and branch-filtering to main meant the
   # stacked ones never ran CI at all.
