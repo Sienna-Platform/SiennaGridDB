@@ -103,6 +103,30 @@ def _is_reference(key):
     )
 
 
+def _references(node):
+    """(key, id) for each time series reference inside node, at any depth."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if _is_reference(k) and is_int(v):
+                yield k, int(v)
+            else:
+                yield from _references(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _references(v)
+
+
+def dangling_references(payloads, stored_ids):
+    """(entity id, key, id) for each reference no stored association has. payloads holds
+    (entity id, payload) for every row the insert writes."""
+    return [
+        (entity_id, key, ref)
+        for entity_id, payload in payloads
+        for key, ref in _references(payload)
+        if ref not in stored_ids
+    ]
+
+
 def point_at_sources(node, sources):
     """node with its time series references to a derived series naming the source
     instead (the keys dangling_time_series_references reads). A dict or list is

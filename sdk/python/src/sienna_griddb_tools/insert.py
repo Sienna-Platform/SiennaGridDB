@@ -9,6 +9,7 @@ from .errors import InsertError, describe
 from .manifest import load_manifest
 from .report import InsertReport
 from .time_series import (
+    dangling_references,
     derived_sources,
     export_values,
     insert_associations,
@@ -190,6 +191,19 @@ def _time_series_rows(doc, report, strict, unsupported_ids, owners):
     return stored
 
 
+def _report_dangling(report, strict, plans, attrs, series):
+    """Report payload references that name no association this insert stores; a foreign
+    key cannot reach into JSON, so the insert is the only place that sees them."""
+    stored_ids = {int(r["association_id"]) for r in series if is_int(r.get("association_id"))}
+    rows = [o for _, objs in plans for o in objs] + attrs
+    payloads = [(int(o["id"]), o) for o in rows if isinstance(o, dict) and is_int(o.get("id"))]
+    dangling = dangling_references(payloads, stored_ids)
+    if dangling:
+        entity_id, key, ref = min(dangling)
+        reason = f"no stored time series association has the id (first: entity {entity_id} {key}={ref})"
+        _unsupported(report, strict, "dangling_time_series_references", len(dangling), reason)
+
+
 def insert_document(conn, doc, *, strict=False, time_series=None):
     """Insert a whole SystemDocument in one savepoint. time_series is the HDF5
     sidecar holding its arrays (time_series_storage_file); it is only read."""
@@ -227,6 +241,7 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
     missing = values_missing(time_series) if series else None
     if missing is not None:
         _unsupported(report, strict, "time_series_values", len(series), missing)
+    _report_dangling(report, strict, plans, attrs, series)
     supplemental = manifest["supplemental_attributes"]
     with _savepoint(conn):
         seed_vocabulary(conn)

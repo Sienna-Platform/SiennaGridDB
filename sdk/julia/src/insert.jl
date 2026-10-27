@@ -235,6 +235,28 @@ function write_supplemental!(cache, table::AbstractString, attr_type, attr, what
     return nothing
 end
 
+# A foreign key cannot reach into JSON, so the insert is the only place that sees a payload
+# reference to an association it does not store.
+function report_dangling!(report::InsertReport, strict::Bool, plans, attrs, series)
+    stored_ids = Set{Int}(
+        Int(r["association_id"]) for
+        r in series if is_int_value(get(r, "association_id", nothing))
+    )
+    payloads = Tuple{Int, Any}[]
+    for o in Iterators.flatten((Iterators.flatten(objs for (_, objs) in plans), attrs))
+        if is_object(o) && is_int_value(get(o, "id", nothing))
+            push!(payloads, (Int(o["id"]), o))
+        end
+    end
+    dangling = dangling_references(payloads, stored_ids)
+    isempty(dangling) && return nothing
+    entity_id, key, ref = minimum(dangling)
+    reason = "no stored time series association has the id (first: entity $entity_id $key=$ref)"
+    key_name = "dangling_time_series_references"
+    mark_unsupported!(report, strict, key_name, length(dangling), reason)
+    return nothing
+end
+
 """
     insert_document!(db, doc; strict=false, time_series=nothing) -> InsertReport
 
@@ -294,6 +316,7 @@ function insert_document!(
         reason = values_missing_reason(time_series)
         mark_unsupported!(report, strict, "time_series_values", length(series), reason)
     end
+    report_dangling!(report, strict, plans, attrs, series)
     with_statements(db) do cache
         seed_vocabulary!(db)
         for (plan, objs) in plans

@@ -399,6 +399,7 @@ out in that file.
   A `NonSequentialTimeSeries` is reported, not written: GridDB has no column for its `timestamps_uri`.
   A `DeterministicSingleTimeSeries` is reported, not written: it is a view over its `SingleTimeSeries`' array, which a consumer derives again with `transform_single_time_series!`.
   A reference to one (an `association_id`, a `*_association_id` or a `fuel_cost_time_series`) is written as its source's id: the series with the same owner, name, features and `uri`.
+  A reference that names no stored association (a reported series, or one the document does not hold) is reported under `dangling_time_series_references`, and strict raises. The view of the same name lists them in the file.
   Their values come from the document's HDF5 sidecar (`time_series_storage_file`, or `time_series=` / `--time-series`): the Python or Julia SDK has infrastore export them as its SQLite tables under the `ts_` prefix, in the same transaction as the rest of the document.
   After the export, the SDK creates the views in `schema/time_series_views.sql`: `time_series_values` joins the values to the associations by id; `orphaned_time_series` lists exported series no association names.
   `views.sql` leaves them out, because a view over a missing table makes `ALTER TABLE ... RENAME COLUMN` fail.

@@ -151,6 +151,47 @@ point_at_sources(node, ::Dict{Int, Int}) = node
 widened_copy(node::AbstractDict) = Dict{String, Any}(node)
 widened_copy(node::AbstractVector) = Vector{Any}(node)
 
+"""
+`(entity id, key, id)` for each time series reference that names no id in `stored_ids`.
+`payloads` holds `(entity id, payload)` for every row the insert writes.
+"""
+function dangling_references(payloads::Vector{Tuple{Int, Any}}, stored_ids::Set{Int})
+    found = Tuple{Int, String, Int}[]
+    for (entity_id, payload) in payloads
+        collect_dangling!(found, entity_id, payload, stored_ids)
+    end
+    return found
+end
+
+function collect_dangling!(found, entity_id::Int, node::AbstractDict, stored_ids::Set{Int})
+    for (k, v) in node
+        collect_dangling!(found, entity_id, String(k), v, stored_ids)
+    end
+    return found
+end
+function collect_dangling!(
+    found,
+    entity_id::Int,
+    node::AbstractVector,
+    stored_ids::Set{Int},
+)
+    for v in node
+        collect_dangling!(found, entity_id, v, stored_ids)
+    end
+    return found
+end
+collect_dangling!(found, ::Int, _, ::Set{Int}) = found
+
+function collect_dangling!(found, entity_id::Int, key::String, v, stored_ids::Set{Int})
+    if is_reference(key) && is_int_value(v)
+        if !(Int(v) in stored_ids)
+            push!(found, (entity_id, key, Int(v)))
+        end
+        return found
+    end
+    return collect_dangling!(found, entity_id, v, stored_ids)
+end
+
 function pointed_at_source(key::AbstractString, v, sources::Dict{Int, Int})
     if is_reference(key) && is_int_value(v) && haskey(sources, Int(v))
         return sources[Int(v)]

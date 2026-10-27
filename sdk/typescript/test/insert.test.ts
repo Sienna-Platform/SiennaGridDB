@@ -272,6 +272,21 @@ test.skipIf(!hasGolden)("a reference to a derived series points at its source", 
   expect(cost.fuel_cost_time_series).toBe(8);
 });
 
+test.skipIf(!hasGolden)("a reference no stored series has is reported and strict raises", () => {
+  const doc = golden();
+  const gen = fuelCostSeries(doc);
+  // The payload names 8, but the document holds no series.
+  doc.time_series_associations = [];
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.dangling_time_series_references).toBe(1);
+  expect(db.prepare("SELECT association_id FROM dangling_time_series_references").all()).toEqual([
+    { association_id: 8 },
+  ]);
+  expect(() => insertDocument(fresh(), doc, { strict: true })).toThrow(
+    `first: entity ${String(gen.id)} fuel_cost_time_series=8`,
+  );
+});
+
 test("pointAtSources copies only what changes", () => {
   const untouched = { curve: [1, 2], association_id: 3 };
   const node = { a: untouched, b: [{ fuel_cost_time_series: 8 }], c: 8 };

@@ -61,6 +61,32 @@ function isReference(key: string): boolean {
   return key === "association_id" || key === "fuel_cost_time_series" || key.endsWith("_association_id");
 }
 
+function collectDangling(found: Dangling[], entityId: number, node: unknown, storedIds: Set<number>): void {
+  if (Array.isArray(node)) {
+    for (const v of node) collectDangling(found, entityId, v, storedIds);
+  } else if (isObject(node)) {
+    for (const [k, v] of Object.entries(node)) {
+      if (isReference(k) && isInt(v)) {
+        if (!storedIds.has(v)) found.push([entityId, k, v]);
+      } else {
+        collectDangling(found, entityId, v, storedIds);
+      }
+    }
+  }
+}
+
+export type Dangling = [entityId: number, key: string, id: number];
+
+/**
+ * [entity id, key, id] for each time series reference that names no id in storedIds.
+ * payloads holds [entity id, payload] for every row the insert writes.
+ */
+export function danglingReferences(payloads: [number, unknown][], storedIds: Set<number>): Dangling[] {
+  const found: Dangling[] = [];
+  for (const [entityId, payload] of payloads) collectDangling(found, entityId, payload, storedIds);
+  return found;
+}
+
 /**
  * node with its time series references to a derived series naming the source instead
  * (the keys dangling_time_series_references reads). An object or array is copied only

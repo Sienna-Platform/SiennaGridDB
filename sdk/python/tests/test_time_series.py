@@ -158,6 +158,19 @@ def test_a_reference_to_a_derived_series_points_at_its_source(conn):
     assert gen["operation_cost"]["variable_operation_cost"]["fuel_cost_time_series"] == 8
 
 
+def test_a_reference_no_stored_series_has_is_reported_and_strict_raises(conn):
+    doc = golden()
+    gen = fuel_cost_series(doc)
+    # The payload names 8, but the document holds no series.
+    doc["time_series_associations"] = []
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["dangling_time_series_references"] == 1
+    assert conn.execute("SELECT association_id FROM dangling_time_series_references").fetchall() == [(8,)]
+    first = f"first: entity {gen['id']} fuel_cost_time_series=8"
+    with pytest.raises(griddb.InsertError, match=first):
+        griddb.insert_document(conn, doc, strict=True)
+
+
 def test_point_at_sources_copies_only_what_changes():
     from sienna_griddb_tools.time_series import point_at_sources
 

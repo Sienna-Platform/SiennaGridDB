@@ -10,7 +10,14 @@ import {
 } from "./errors.js";
 import { loadManifest, type Binding, type ComponentPlan, type TimeSeriesPlan } from "./manifest.js";
 import { InsertReport } from "./report.js";
-import { derivedSources, featureRows, pointAtSources, requireOwnerLabel } from "./time_series.js";
+import {
+  danglingReferences,
+  derivedSources,
+  featureRows,
+  pointAtSources,
+  requireOwnerLabel,
+  type Dangling,
+} from "./time_series.js";
 
 const SAVEPOINT = "sienna_griddb_tools_insert";
 
@@ -226,6 +233,31 @@ function insertAssociations(db: Connection, plan: TimeSeriesPlan, rows: JsonObje
   }
 }
 
+// A foreign key cannot reach into JSON, so the insert is the only place that sees a payload
+// reference to an association it does not store.
+function reportDangling(
+  report: InsertReport,
+  strict: boolean,
+  plans: [ComponentPlan, JsonObject[]][],
+  attrs: JsonObject[],
+  series: JsonObject[],
+) {
+  const storedIds = new Set(series.map((r) => r.association_id).filter(isInt));
+  const rows = [...plans.flatMap(([, objs]) => objs), ...attrs];
+  const payloads = rows.filter((o) => isObject(o) && isInt(o.id)).map((o): [number, unknown] => [o.id as number, o]);
+  const dangling = danglingReferences(payloads, storedIds);
+  if (dangling.length === 0) return;
+  const [entityId, key, ref] = dangling.reduce((a, b) => (compareDangling(a, b) <= 0 ? a : b));
+  const reason = `no stored time series association has the id (first: entity ${entityId} ${key}=${ref})`;
+  unsupported(report, strict, "dangling_time_series_references", dangling.length, reason);
+}
+
+function compareDangling(a: Dangling, b: Dangling): number {
+  if (a[0] !== b[0]) return a[0] - b[0];
+  if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;
+  return a[2] - b[2];
+}
+
 function sectionSize(value: unknown): number {
   if (Array.isArray(value)) return value.length;
   if (value !== null && typeof value === "object") return Object.keys(value).length;
@@ -271,6 +303,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     const reason = "the TypeScript SDK has no infrastore binding to read the time series sidecar";
     unsupported(report, strict, "time_series_values", series.length, reason);
   }
+  reportDangling(report, strict, plans, attrs, series);
   const supp = m.supplemental_attributes;
   withSavepoint(db, () => {
     seedVocabulary(db);
