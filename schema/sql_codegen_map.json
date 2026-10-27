@@ -12,6 +12,8 @@
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {}
       },
+      "attribute_channel": ["scheduled_net_interchange", "out_of_area_load_ids"],
+      "attribute_references": {"out_of_area_load_ids": "loads"},
       "comment": [
         "Control or planning areas (PSY Area)."
       ]
@@ -301,6 +303,41 @@
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {}
       }
+    },
+    "series_compensators": {
+      "arc_domain": "AC",
+      "interface_member": true,
+      "comment": [
+        "Series compensator (PSY SeriesCompensator): a series capacitor or reactor, a",
+        "TCSC, or an SSSC on one AC arc. x is negative for a capacitor. r/x/reactance_limits",
+        "follow parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);",
+        "power_units governs the power-family columns. DISPATCHABLE and ACTIVE_POWER_FLOW",
+        "require reactance_limits; ACTIVE_POWER_FLOW also requires active_power_flow_setpoint."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "rating": {"column": "continuous_rating", "checks": ["continuous_rating >= 0"]},
+        "r": {"checks": ["r >= 0"], "unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "x": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "control_mode": {},
+        "reactance_limits": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "active_power_flow_setpoint": {},
+        "parameter_units": {},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "available": {"default": 1},
+        "active_power_flow": {"default": 0.0},
+        "reactive_power_flow": {"default": 0.0},
+        "rating_b": {},
+        "rating_c": {},
+        "operational_flow_limit": {}
+      },
+      "constraints": [
+        "CHECK (control_mode NOT IN ('DISPATCHABLE', 'ACTIVE_POWER_FLOW') OR reactance_limits IS NOT NULL)",
+        "CHECK (control_mode <> 'ACTIVE_POWER_FLOW' OR active_power_flow_setpoint IS NOT NULL)"
+      ]
     },
     "discrete_controlled_ac_branches": {
       "interface_member": true,
@@ -594,7 +631,7 @@
         "power_factor_setpoint": {},
         "ac_voltage_setpoint": {}
       },
-      "attribute_channel": ["dc_current", "max_dc_current", "loss_function", "dc_voltage_droop"],
+      "attribute_channel": ["dc_current", "max_dc_current", "loss_function", "dc_voltage_droop", "rated_dc_voltage", "rated_ac_voltage"],
       "skip": ["dynamic_injector"],
       "constraints": ["CHECK (bus <> dc_bus)"]
     },

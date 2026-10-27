@@ -10,8 +10,24 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 Built from SiennaSchemas v0.3.0. `PRAGMA user_version = 5`.
 
+### Breaking
+
+- The DC current conventions are in kA, not A: `dc_current`, `max_dc_current`,
+  `max_dc_current_from`, `max_dc_current_to`, `current_transfer_setpoint`, and
+  `tmodel_hvdc_lines.base_current`. A 0.2 database holds these values 1000 times too large;
+  rebuild it.
+- The hydro `efficiency` attribute is a `Fraction`, not `Dimensionless`.
+
 ### Schema
 
+- New table `series_compensators` (`SeriesCompensator`): a series capacitor or reactor, a
+  TCSC, or an SSSC on an AC arc. `DISPATCHABLE` and `ACTIVE_POWER_FLOW` require
+  `reactance_limits`; `ACTIVE_POWER_FLOW` also requires `active_power_flow_setpoint`.
+- New attributes: `rated_dc_voltage` and `rated_ac_voltage` on `InterconnectingConverter`,
+  and `scheduled_net_interchange` and `out_of_area_load_ids` on `Area`.
+- A load listed in an `Area`'s `out_of_area_load_ids` cannot be deleted. Remove it from the
+  list first. `attribute_references` in `sql_codegen_map.json` generates the trigger.
+- `interval_alignment` is a reserved `feature_sets.key`.
 - `scripts/generate_sql_schema.py` writes the per-table triggers into a marked region of
   `schema/triggers.sql`: entity-existence and delete triggers for every generated table, and
   the arc-domain triggers of each table with `arc_domain` in `sql_codegen_map.json`. A new
@@ -21,6 +37,12 @@ Built from SiennaSchemas v0.3.0. `PRAGMA user_version = 5`.
   association triggers and `interface_branch_directions` read them in place of hard-coded
   table lists.
 - Every AC arc-domain error now ends with "use tmodel_hvdc_lines for DC-network branches".
+
+### Fixed
+
+- The schema update workflow no longer commits its SiennaSchemas checkout as a gitlink.
+- The schema update workflow regenerates `schema/insert_manifest.json`. Before, the insert
+  SDKs kept the previous `schema_user_version` and refused the new database.
 
 ## [0.2.0] - 2026-10-13
 

@@ -65,8 +65,10 @@ Table keys besides the dispositions: comment (lines above CREATE TABLE),
 constraints (table-level), indexes (full CREATE INDEX statements),
 attribute_units ({prop: {"unit", "quantity_kind"}} for an attribute-channel
 property the schemas leave unannotated), arc_domain ("AC" or "DC": the arc
-column must connect topologies with that entity_types.is_dc), and
-interface_member (true: the table's rows may be TransmissionInterface members).
+column must connect topologies with that entity_types.is_dc),
+interface_member (true: the table's rows may be TransmissionInterface members),
+and attribute_references ({prop: target table}: an attribute-channel id array;
+a target row that the array lists cannot be deleted).
 
 Derived rules:
   type        integer -> INTEGER, number -> REAL, string/enum -> TEXT,
@@ -170,6 +172,30 @@ SELECT
     RAISE(
         ABORT,
         '{table}.{column} must connect {message}'
+    );
+
+END;
+"""
+
+ATTRIBUTE_REFERENCE_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS restrict_{target}_delete_{table}_{prop} BEFORE
+DELETE ON {target}
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ({types})
+            AND a.name = '{prop}'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        '{target} row is listed in {table}.{prop}; remove it from the list first'
     );
 
 END;
@@ -651,10 +677,21 @@ def triggers_region(tables, codegen):
     entity = []
     delete = []
     arc = []
+    references = []
     for table in tables:
         entity.append(ENTITY_EXISTS_TRIGGER.format(table=table))
         delete.append(DELETE_ENTITY_TRIGGER.format(table=table))
         cfg = codegen.get(table, {})
+        types = ", ".join(sql_literal(c["component"]) for c in tables[table])
+        for prop, target in cfg.get("attribute_references", {}).items():
+            if prop not in cfg.get("attribute_channel", []):
+                problems.append(f"{table}.{prop} has attribute_references but is not in attribute_channel")
+            elif target not in tables:
+                problems.append(f"{table}.{prop} references {target}, which schema_map.json does not map")
+            else:
+                references.append(ATTRIBUTE_REFERENCE_TRIGGER.format(
+                    target=target, table=table, prop=prop, types=types,
+                ))
         if "arc_domain" not in cfg:
             continue
         if cfg["arc_domain"] not in ARC_DOMAINS:
@@ -681,6 +718,9 @@ def triggers_region(tables, codegen):
         "-- A foreign key can't express this, since arcs reference entities generically\n"
         "-- and the domain lives on entity_types.\n",
         "\n".join(arc),
+        "\n-- A row listed in an attribute_references id array cannot be deleted: the array\n"
+        "-- lives in attributes, where a foreign key cannot reach it.\n",
+        "\n".join(references),
         "\n" + TRIGGERS_END,
     ]
     return "".join(blocks), problems

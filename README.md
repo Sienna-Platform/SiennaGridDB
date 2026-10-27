@@ -224,7 +224,8 @@ mapped in `schema/schema_map.json` into the marked region at the end of `schema/
 and writes the unit conventions of the generated columns into
 `schema/column_conventions.json` (entries marked `"source": "schemas"`). It also writes a
 marked region at the start of `schema/triggers.sql`, with each table's entity-existence and
-delete triggers and the arc-domain triggers of the tables with `arc_domain`. A marked
+delete triggers, the arc-domain triggers of the tables with `arc_domain`, and the delete
+guards of `attribute_references` id arrays. A marked
 region at the start of `schema/views.sql` holds `interface_member_tables` and
 `branch_names`, over the tables with `interface_member`. Everything else in those files
 is hand-written.

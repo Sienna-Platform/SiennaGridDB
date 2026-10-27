@@ -321,6 +321,85 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
         )
 
 
+def test_series_compensators_store_and_reject_control_modes(fresh_db):
+    """A FIXED row needs no limits; DISPATCHABLE needs reactance_limits, and
+    ACTIVE_POWER_FLOW also needs active_power_flow_setpoint."""
+    from test_unit_registry import make_entity
+
+    arc, a, b = 601, 602, 603
+    make_entity(fresh_db, arc, entity_table="arcs")
+    fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    for eid in (a, b):
+        fresh_db.execute(
+            "INSERT INTO entities(id, entity_table, entity_type) "
+            "VALUES (?, 'balancing_topologies', 'bus')",
+            (eid,),
+        )
+    fresh_db.execute("INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)", (arc, a, b))
+
+    insert = (
+        "INSERT INTO series_compensators "
+        "(id, name, arc_id, r, x, continuous_rating, power_units, base_power, control_mode, "
+        "reactance_limits, active_power_flow_setpoint) "
+        "VALUES (?, ?, ?, 0.0, -0.05, 100.0, 'COMPONENT_BASE', 100.0, ?, ?, ?)"
+    )
+    limits = '{"min": -0.1, "max": 0.0}'
+    for eid in range(1, 6):
+        make_entity(fresh_db, eid, entity_table="series_compensators", entity_type="SeriesCompensator")
+    fresh_db.execute(insert, (1, "sc1", arc, "FIXED", None, None))
+    fresh_db.execute(insert, (2, "sc2", arc, "ACTIVE_POWER_FLOW", limits, 50.0))
+    row = fresh_db.execute(
+        "SELECT x, control_mode, reactance_limits FROM series_compensators WHERE id = 1"
+    ).fetchone()
+    assert row == (-0.05, "FIXED", None)
+
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        fresh_db.execute(insert, (3, "sc3", arc, "DISPATCHABLE", None, None))
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
+        fresh_db.execute(insert, (4, "sc4", arc, "ACTIVE_POWER_FLOW", limits, None))
+    fresh_db.execute(insert, (5, "sc5", arc, "DISPATCHABLE", limits, None))
+
+
+def test_out_of_area_load_cannot_be_deleted(fresh_db):
+    """A load in an Area's out_of_area_load_ids is not deletable, directly or through
+    the entities cascade, until it leaves the list."""
+    from test_unit_registry import make_entity
+
+    bus, area, listed, unlisted = 701, 702, 703, 704
+    make_entity(fresh_db, bus, entity_table="balancing_topologies", entity_type="bus", is_topology=1)
+    fresh_db.execute("INSERT INTO balancing_topologies(id, name, base_voltage) VALUES (?, 'b', 230.0)", (bus,))
+    make_entity(fresh_db, area, entity_table="planning_regions", entity_type="Area")
+    fresh_db.execute(
+        "INSERT INTO planning_regions(id, name, base_power, power_units) "
+        "VALUES (?, 'area', 100.0, 'NATURAL_UNITS')",
+        (area,),
+    )
+    for load in (listed, unlisted):
+        make_entity(fresh_db, load, entity_table="loads", entity_type="PowerLoad")
+        fresh_db.execute(
+            "INSERT INTO loads(id, name, balancing_topology, base_power, power_units) "
+            "VALUES (?, ?, ?, 100.0, 'NATURAL_UNITS')",
+            (load, f"load{load}", bus),
+        )
+    fresh_db.execute(
+        "INSERT INTO attributes(entity_id, TYPE, name, value) "
+        "VALUES (?, 'Area', 'out_of_area_load_ids', ?)",
+        (area, json.dumps([listed])),
+    )
+
+    for statement in ("DELETE FROM loads WHERE id = ?", "DELETE FROM entities WHERE id = ?"):
+        with pytest.raises(sqlite3.IntegrityError, match="out_of_area_load_ids"):
+            fresh_db.execute(statement, (listed,))
+    fresh_db.execute("DELETE FROM loads WHERE id = ?", (unlisted,))
+
+    fresh_db.execute(
+        "UPDATE attributes SET value = '[]' WHERE entity_id = ? AND name = 'out_of_area_load_ids'",
+        (area,),
+    )
+    fresh_db.execute("DELETE FROM loads WHERE id = ?", (listed,))
+    assert fresh_db.execute("SELECT count(*) FROM loads").fetchone() == (0,)
+
+
 def test_transformer_circuits_columns_and_units(fresh_db):
     """Circuit r/x are first-class impedance columns stored flexibly in pu on the
     component base OR natural-units ohm, recorded per row by parameter_units exactly

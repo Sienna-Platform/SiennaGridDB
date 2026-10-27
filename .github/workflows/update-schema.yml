@@ -70,6 +70,7 @@ jobs:
           echo "${{ steps.schema.outputs.latest }}" > .schema-version
           if python3 scripts/generate_sql_schema.py --schemas-path SiennaSchemas 2> generate.log; then
             python3 scripts/generate_unit_registry.py --units-json SiennaSchemas/Core/units.json
+            python3 scripts/generate_insert_manifest.py --schemas-path SiennaSchemas
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
