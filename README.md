@@ -1,6 +1,6 @@
 # SiennaGridDB
 
-Schema for the SQL database for Sienna Applications
+Schema for the SQL database for Power Systems Analysis Applications
 
 > [!IMPORTANT]
 > This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
