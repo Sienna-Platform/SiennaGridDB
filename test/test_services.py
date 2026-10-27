@@ -315,7 +315,7 @@ def system(fresh_db):
     for pair in [(1, 10), (1, 11), (2, 12), (4, 20), (4, 21), (4, 22), (5, 22)]:
         join(conn, *pair)
     add_series(conn, 10, "online_up", "SingleTimeSeries")
-    add_series(conn, 10, "online_up", "DeterministicSingleTimeSeries")
+    add_series(conn, 10, "online_up", "Deterministic")
     add_series(conn, 10, "max_active_power", "SingleTimeSeries")
     return conn
 
@@ -424,7 +424,7 @@ def test_service_bids_are_the_device_series_named_after_the_reserve(system):
     assert rows(
         system, "SELECT device_id, service_id, time_series_type FROM service_bids"
     ) == [
-        (10, 1, "DeterministicSingleTimeSeries"),
+        (10, 1, "Deterministic"),
         (10, 1, "SingleTimeSeries"),
     ]
 
@@ -433,3 +433,18 @@ def test_offer_without_membership_is_a_violation(system):
     assert rows(system, "SELECT * FROM service_offer_violations") == [(11, 2)]
     join(system, 2, 11)
     assert rows(system, "SELECT * FROM service_offer_violations") == []
+
+
+def test_a_reserve_demand_curve_reference_must_resolve(fresh_db):
+    add_reserve(fresh_db, 1, "OnlineReserve")
+    view = "SELECT * FROM dangling_time_series_references"
+    path = '$."value_curve"."function_data"."association_id"'
+    assert rows(fresh_db, view) == [(1, "reserves", "variable", path, 7)]
+    fresh_db.execute(
+        "INSERT INTO time_series_associations (id, owner_id, owner_type, owner_category, "
+        "time_series_type, name, uri, features_hash) "
+        "VALUES (7, 1, 'OnlineReserve', 'Component', 'SingleTimeSeries', 'variable_cost', "
+        "'u', ?)",
+        ("0" * 64,),
+    )
+    assert rows(fresh_db, view) == []

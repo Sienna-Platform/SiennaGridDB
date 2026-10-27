@@ -8,6 +8,12 @@ from .encode import EncodeError, canonical_json, encode, is_int, value_at
 from .errors import InsertError, describe
 from .manifest import load_manifest
 from .report import InsertReport
+from .time_series import (
+    derived_sources,
+    insert_associations,
+    point_at_sources,
+    require_owner_label,
+)
 
 SAVEPOINT = "sienna_griddb_tools_insert"
 
@@ -81,7 +87,14 @@ def _write_row(conn, plan, obj, report, strict):
         _execute(
             conn,
             attribute_sql,
-            [obj["id"], plan["type_name"], attribute["field"], canonical_json(value), unit, quantity_kind],
+            [
+                obj["id"],
+                plan["type_name"],
+                attribute["field"],
+                canonical_json(value),
+                unit,
+                quantity_kind,
+            ],
             what,
         )
     unknown = [k for k in obj if k not in plan["known_fields"] and obj[k] is not None]
@@ -152,21 +165,49 @@ def _names_unsupported(row, references, ids):
     return any(is_int(v) and v in ids for v in (value_at(row, r) for r in references))
 
 
+def _time_series_rows(doc, report, strict, unsupported_ids, owners):
+    """The association rows to insert, after reporting the ones GridDB cannot store;
+    owners maps each id the document holds to its (owner_type, owner_category)."""
+    plan = load_manifest()["time_series"]
+    rows = _section_rows(doc, plan["section"])
+    for row in rows:
+        require_owner_label(row, owners)
+    unsupported = plan["unsupported_types"]
+    counts = {}
+    stored = []
+    for row in rows:
+        series_type = row.get("time_series_type")
+        if series_type in unsupported:
+            counts[series_type] = counts.get(series_type, 0) + 1
+        elif _names_unsupported(row, plan["references"], unsupported_ids):
+            report.add_unsupported(plan["section"], 1)
+        else:
+            stored.append(row)
+    for series_type, n in sorted(counts.items()):
+        _unsupported(report, strict, series_type, n, unsupported[series_type])
+    return stored
+
+
 def insert_document(conn, doc, *, strict=False):
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
     components = doc.get("components") or {}
+    # References to a derived series name its source, which GridDB stores instead.
+    sources = derived_sources(_section_rows(doc, manifest["time_series"]["section"]))
     plans = []
     unsupported_ids = set()
+    owners = {}
     for type_name in sorted(components):
-        objs = [as_json_data(o) for o in components[type_name]]
+        objs = [point_at_sources(as_json_data(o), sources) for o in components[type_name]]
+        ids = [o.get("id") for o in objs if isinstance(o, dict)]
+        ids = [i for i in ids if is_int(i)]
+        owners.update(dict.fromkeys(ids, (type_name, "Component")))
         plan = _plan_for(type_name, len(objs), report, strict)
         if plan is not None:
             plans.append((plan, objs))
         else:
-            ids = (o.get("id") for o in objs if isinstance(o, dict))
-            unsupported_ids.update(i for i in ids if is_int(i))
+            unsupported_ids.update(ids)
     plans.sort(key=lambda p: (p[0]["rank"], p[0]["type_name"]))
     for section, reason in sorted(manifest["unsupported_sections"].items()):
         rows = doc.get(section) or []
@@ -174,6 +215,11 @@ def insert_document(conn, doc, *, strict=False):
             _unsupported(report, strict, section, len(rows), reason)
 
     attr_types = _attribute_types(doc)
+    attrs = point_at_sources(_section_rows(doc, "supplemental_attributes"), sources)
+    for attr in attrs:
+        if attr.get("id") in attr_types:
+            owners[attr["id"]] = (attr_types[attr["id"]], "SupplementalAttribute")
+    series = _time_series_rows(doc, report, strict, unsupported_ids, owners)
     supplemental = manifest["supplemental_attributes"]
     with _savepoint(conn):
         seed_vocabulary(conn)
@@ -181,7 +227,7 @@ def insert_document(conn, doc, *, strict=False):
             for obj in objs:
                 _write_entity(conn, plan, obj)
         routed = []
-        for attr in _section_rows(doc, "supplemental_attributes"):
+        for attr in attrs:
             if attr["id"] not in attr_types:
                 raise InsertError(
                     f"supplemental attribute id={attr['id']}: no association names its type"
@@ -223,4 +269,5 @@ def insert_document(conn, doc, *, strict=False):
                     conn, section["row_sql"], _params(section["bindings"], row, what), what
                 )
                 report.add_inserted(name)
+        insert_associations(conn, manifest["time_series"], series, report)
     return report
