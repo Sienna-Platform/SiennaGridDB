@@ -222,7 +222,10 @@ if HAS_GOLDEN
         mktempdir() do dir
             fresh(dir) do db
                 doc = golden()
-                owner = haskey(doc["components"], where) ? doc["components"] : doc
+                owner = doc
+                if haskey(doc["components"], where)
+                    owner = doc["components"]
+                end
                 push!(get!(owner, where, Any[]), value)
                 @test_throws InsertError insert_document!(db, doc)
                 @test_throws r"not an object" insert_document!(db, doc)

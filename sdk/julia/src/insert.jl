@@ -246,6 +246,8 @@ function push_id!(ids::Set{Int}, id)
     end
     return ids
 end
+push_entry_id!(ids::Set{Int}, obj::AbstractDict) = push_id!(ids, get(obj, "id", nothing))
+push_entry_id!(ids::Set{Int}, _) = ids
 
 names_unsupported(row::AbstractDict, references::Vector{String}, ids::Set{Int}) =
     any(references) do r
@@ -294,7 +296,7 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
         else
             note_unsupported!(report, strict, type_name, length(objs))
             for obj in objs
-                obj isa AbstractDict && push_id!(unsupported_ids, get(obj, "id", nothing))
+                push_entry_id!(unsupported_ids, obj)
             end
         end
     end

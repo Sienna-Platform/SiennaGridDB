@@ -18,7 +18,8 @@ canonical_json(value) = JSON.json(value)
 """
 What the int encoder accepts: an integer or integral float, not a `Bool`, in Int64.
 """
-is_int_value(v::Real) = !(v isa Bool) && isinteger(v) && typemin(Int) <= v <= typemax(Int)
+is_int_value(v::Real) = isinteger(v) && typemin(Int) <= v <= typemax(Int)
+is_int_value(::Bool) = false
 is_int_value(_) = false
 
 function encode(::IntEncoding, v)
