@@ -36,6 +36,8 @@ the seal.
 """
 
 import json
+import os
+import sys
 
 US = "\x1f"
 RS = "\x1e"
@@ -89,3 +91,25 @@ def sql_literal(value):
         + json.dumps(value, sort_keys=True, separators=(",", ":")).replace("'", "''")
         + "'"
     )
+
+
+def write_or_check(outputs, check, hint):
+    """Write each {path: str|bytes}, or with check=True report stale paths. Returns an exit code."""
+    stale = []
+    for path, content in outputs.items():
+        data = content.encode("utf-8") if isinstance(content, str) else content
+        if check:
+            current = None
+            if os.path.exists(path):
+                with open(path, "rb") as handle:
+                    current = handle.read()
+            if current != data:
+                stale.append(path)
+        else:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as handle:
+                handle.write(data)
+    if stale:
+        sys.stderr.write(f"stale ({hint}): " + ", ".join(stale) + "\n")
+        return 1
+    return 0

@@ -47,6 +47,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Sienna-Platform/power-openapi-models
+          ref: 82c0d0c3edd72216e5ffbe177271d5e3b598df40
           path: power-openapi-models
           fetch-depth: 1
 
@@ -82,3 +83,6 @@ jobs:
 
       - name: Cross-repo units sync check
         run: python3 scripts/check_units_sync.py --schemas-path SiennaSchemas --psy-path PowerSystems.jl --db griddb-example.sqlite
+
+      - name: Check insert manifest staleness
+        run: python3 scripts/generate_insert_manifest.py --schemas-path SiennaSchemas --check
