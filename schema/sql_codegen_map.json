@@ -191,7 +191,7 @@
         "id": {},
         "name": {},
         "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
-        "base_power": {},
+        "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
         "available": {"default": 1},
         "active_power": {},

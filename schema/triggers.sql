@@ -2262,6 +2262,51 @@ SELECT
 
 END;
 
+-- Both ends of a hydro connection are hydro components: a reservoir, a turbine
+-- (hydro_generators) or a pumped-storage unit (storage_units).
+CREATE TRIGGER IF NOT EXISTS enforce_hydro_reservoir_connections_domain BEFORE
+INSERT
+    ON hydro_reservoir_connections
+    WHEN (
+        SELECT
+            count(*)
+        FROM
+            entities
+        WHERE
+            id IN (NEW.source_id, NEW.sink_id)
+            AND entity_table IN ('hydro_reservoirs', 'hydro_generators', 'storage_units')
+    ) < 2
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoir_connections must connect hydro_reservoirs, hydro_generators or storage_units rows'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_hydro_reservoir_connections_domain_update BEFORE
+UPDATE
+    OF source_id,
+    sink_id ON hydro_reservoir_connections
+    WHEN (
+        SELECT
+            count(*)
+        FROM
+            entities
+        WHERE
+            id IN (NEW.source_id, NEW.sink_id)
+            AND entity_table IN ('hydro_reservoirs', 'hydro_generators', 'storage_units')
+    ) < 2
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoir_connections must connect hydro_reservoirs, hydro_generators or storage_units rows'
+    );
+
+END;
+
 -- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.
 CREATE TRIGGER IF NOT EXISTS delete_supplemental_attributes_entity
 AFTER
@@ -2987,6 +3032,60 @@ SELECT
     RAISE(
         ABORT,
         'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = ''SupplementalAttribute''.'
+    );
+
+END;
+
+-- owner_type names the owner's entities.entity_type, and a 'Component' owner is
+-- not a supplemental attribute or plant.
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_label BEFORE
+INSERT
+    ON time_series_associations
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.owner_id
+            AND entity_type = NEW.owner_type
+            AND (
+                NEW.owner_category <> 'Component'
+                OR entity_table NOT IN ('supplemental_attributes', 'plants')
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_type must be the owner''s entity_type, and a Component owner cannot be a supplemental attribute.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_label_update BEFORE
+UPDATE
+    OF owner_id,
+    owner_type,
+    owner_category ON time_series_associations
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.owner_id
+            AND entity_type = NEW.owner_type
+            AND (
+                NEW.owner_category <> 'Component'
+                OR entity_table NOT IN ('supplemental_attributes', 'plants')
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'time_series_associations.owner_type must be the owner''s entity_type, and a Component owner cannot be a supplemental attribute.'
     );
 
 END;

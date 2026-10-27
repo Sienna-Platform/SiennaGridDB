@@ -390,7 +390,7 @@ def _insert_association(
         "uri", "data_hash", "features_hash",
     ]
     values = [
-        owner_id, "thing", owner_category, "SingleTimeSeries", name,
+        owner_id, "thing_type", owner_category, "SingleTimeSeries", name,
         "2020-01-01T00:00:00", "PT1H", 24, units, quantity_kind,
         uri, "01" * 32, "02" * 32,
     ]
@@ -449,7 +449,7 @@ def test_association_data_hash_optional(fresh_db):
         "INSERT INTO time_series_associations("
         "owner_id, owner_type, owner_category, time_series_type, name, "
         "initial_timestamp, resolution, length, uri, features_hash) "
-        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'nohash', '2020-01-01T00:00:00', 'PT1H', 24, "
+        "VALUES (1, 'thing_type', 'Component', 'SingleTimeSeries', 'nohash', '2020-01-01T00:00:00', 'PT1H', 24, "
         "'static:nohash', ?)",
         ("02" * 32,),
     )
@@ -514,14 +514,14 @@ def test_association_uniqueness_null_resolution_enforced(fresh_db):
     fresh_db.execute(
         "INSERT INTO time_series_associations("
         "owner_id, owner_type, owner_category, time_series_type, name, "
-        "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:a', ?)",
+        "uri, features_hash) VALUES (1, 'thing_type', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:a', ?)",
         ("04" * 32,),
     )
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
         fresh_db.execute(
             "INSERT INTO time_series_associations("
             "owner_id, owner_type, owner_category, time_series_type, name, "
-            "uri, features_hash) VALUES (1, 'thing', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:b', ?)",
+            "uri, features_hash) VALUES (1, 'thing_type', 'Component', 'NonSequentialTimeSeries', 'irregular', 'static:b', ?)",
             ("04" * 32,),
         )
 
@@ -590,7 +590,7 @@ def test_scenarios_association_carries_scenario_count(fresh_db):
         "owner_id, owner_type, owner_category, time_series_type, "
         "name, initial_timestamp, resolution, horizon, interval, count, "
         "scenario_count, uri, features_hash) "
-        "VALUES (1, 'thing', 'Component', 'Scenarios', 'scen', '2020-01-01T00:00:00', 'PT1H', "
+        "VALUES (1, 'thing_type', 'Component', 'Scenarios', 'scen', '2020-01-01T00:00:00', 'PT1H', "
         "'PT24H', 'PT1H', 24, 10, 'static:scen', ?)",
         ("06" * 32,),
     )
@@ -1815,7 +1815,7 @@ def test_association_unit_system_round_trips_lowercase(fresh_db):
         "INSERT INTO time_series_associations("
         "owner_id, owner_type, owner_category, time_series_type, name, "
         "unit_system, uri, features_hash) "
-        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'v', 'component_base', 'static:v', ?)",
+        "VALUES (1, 'thing_type', 'Component', 'SingleTimeSeries', 'v', 'component_base', 'static:v', ?)",
         ("07" * 32,),
     )
     (system,) = fresh_db.execute(

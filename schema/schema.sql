@@ -130,6 +130,8 @@ CREATE TABLE attributes (
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE(entity_id, name)
 );
+-- Triggers and views select attributes by name across every entity.
+CREATE INDEX idx_attributes_name ON attributes (name, TYPE);
 
 -- (TYPE, name) pairs that hold an identifier, not a physical quantity (bus
 -- numbers, node references, zone ids). Unit-validation triggers otherwise
@@ -315,7 +317,8 @@ CREATE TABLE time_series_associations (
     -- set, even an empty one.
     features_hash TEXT NOT NULL CHECK (
         length(features_hash) = 64 AND features_hash NOT GLOB '*[^0-9a-f]*'
-    )
+    ),
+    CHECK (time_series_type <> 'Scenarios' OR scenario_count IS NOT NULL)
 ) strict;
 
 -- Feature sets are content-addressed by the SHA-256 of the feature map and
@@ -351,12 +354,9 @@ CREATE TABLE feature_sets (
     PRIMARY KEY (features_hash, key)
 ) strict;
 
--- Both are needed: uq_ts_assoc cannot enforce uniqueness when resolution or
--- interval IS NULL (SQLite treats NULLs as distinct); the coalesced twin closes
--- that gap with the empty string, never a valid ISO-8601 period.
-CREATE UNIQUE INDEX uq_ts_assoc ON time_series_associations
-    (owner_id, owner_category, time_series_type, name, resolution, interval, features_hash);
-
+-- COALESCE: SQLite treats NULLs as distinct, so a NULL resolution or interval
+-- would escape a plain unique index. The empty string is never a valid
+-- ISO-8601 period.
 CREATE UNIQUE INDEX uq_ts_assoc_coalesced ON time_series_associations
     (owner_id, owner_category, time_series_type, name,
      COALESCE(resolution, ''), COALESCE(interval, ''), features_hash);
@@ -678,7 +678,7 @@ CREATE TABLE loads (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    base_power REAL NOT NULL,
+    base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     active_power REAL NULL,

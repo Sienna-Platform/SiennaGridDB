@@ -352,7 +352,7 @@ def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
         "INSERT INTO time_series_associations("
         "owner_id, owner_type, owner_category, time_series_type, name, "
         "initial_timestamp, resolution, length, uri, features_hash) "
-        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
+        "VALUES (1, 'thing_type', 'Component', 'SingleTimeSeries', 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
         "'static:load', ?)",
         ("0b" * 32,),
     )
@@ -667,3 +667,55 @@ def test_lookup_vocabularies_are_seeded(db):
     for table, names in vocab.items():
         if table != "entity_types":
             assert sorted(r[0] for r in db.execute(f"SELECT name FROM {table}")) == names
+
+
+@pytest.mark.parametrize("base_power", [0.0, -5.0])
+def test_load_base_power_must_be_positive(fresh_db, base_power):
+    bus = make_bus(fresh_db, 1, "b1")
+    make_entity(fresh_db, 2, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        fresh_db.execute(
+            "INSERT INTO loads(id, name, balancing_topology, base_power, power_units) "
+            "VALUES (2, 'l', ?, ?, 'NATURAL_UNITS')",
+            (bus, base_power),
+        )
+
+
+def test_hydro_connection_requires_hydro_endpoints(fresh_db):
+    make_bus(fresh_db, 1, "b1")
+    make_bus(fresh_db, 2, "b2")
+    with pytest.raises(sqlite3.IntegrityError, match="must connect hydro_reservoirs"):
+        fresh_db.execute(
+            "INSERT INTO hydro_reservoir_connections(source_id, sink_id) VALUES (1, 2)"
+        )
+
+
+def _series(conn, owner_id, owner_type, owner_category="Component", series_type="SingleTimeSeries"):
+    conn.execute(
+        "INSERT INTO time_series_associations(owner_id, owner_type, owner_category, "
+        "time_series_type, name, uri, features_hash) VALUES (?, ?, ?, ?, 's', 'u', ?)",
+        (owner_id, owner_type, owner_category, series_type, "0" * 64),
+    )
+
+
+def test_time_series_owner_type_must_be_the_entity_type(fresh_db):
+    make_entity(fresh_db, 1, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match="owner_type must be the owner's entity_type"):
+        _series(fresh_db, 1, "ThermalStandard")
+    _series(fresh_db, 1, "PowerLoad")
+
+
+def test_a_component_series_owner_is_not_a_supplemental_attribute(fresh_db):
+    make_entity(fresh_db, 1, "supplemental_attributes", "GeographicInfo")
+    fresh_db.execute(
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (1, 'GeographicInfo', '{}')"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="Component owner cannot be"):
+        _series(fresh_db, 1, "GeographicInfo")
+    _series(fresh_db, 1, "GeographicInfo", owner_category="SupplementalAttribute")
+
+
+def test_scenarios_series_requires_scenario_count(fresh_db):
+    make_entity(fresh_db, 1, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _series(fresh_db, 1, "PowerLoad", series_type="Scenarios")

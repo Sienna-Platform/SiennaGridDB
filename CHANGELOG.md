@@ -22,6 +22,14 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 - The lookup tables `entity_types`, `prime_mover_types`, `fuels` and `storage_technology_types`
   are seeded in the generated region of `schema.sql`. Before, a database built from the SQL
   alone rejected every generator insert on its foreign keys until an insert SDK seeded them.
+- `loads.base_power` must be positive, like every other `base_power`.
+- `hydro_reservoir_connections` must connect `hydro_reservoirs`, `hydro_generators` or
+  `storage_units` rows. Before, any two entities connected.
+- A `time_series_associations.owner_type` must be its owner's `entities.entity_type`, a
+  `Component` owner cannot be a supplemental attribute or plant, and a `Scenarios` row needs
+  `scenario_count`.
+- New index `idx_attributes_name` on `attributes (name, TYPE)`: triggers and views select by name.
+- Removed `uq_ts_assoc`: `uq_ts_assoc_coalesced` rejects every row it rejected.
 
 ## [0.3.0] - 2026-10-27
 
