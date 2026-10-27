@@ -13,6 +13,10 @@ query_rows(db, sql) = [Tuple(r) for r in DBInterface.execute(db, sql)]
 
 # The golden document with two series of its first thermal in a real InfraStore
 # sidecar; a deleted series leaves a gap so ids are not 1..n.
+# InfraStore returns the association rows as a JSON string or as parsed rows.
+wire_rows(rows::AbstractString) = JSON.parse(rows)
+wire_rows(rows) = JSON.parse(JSON.json(rows))
+
 function sidecar_document(dir)
     doc = JSON.parsefile(
         joinpath(GOLDEN_DIR, "case14_NATURAL_UNITS.json");
@@ -35,8 +39,7 @@ function sidecar_document(dir)
     add("min_active_power", [0.5, 0.5, 0.5])
     InfraStore.remove_by_ids!(store, [gone])
     rows = InfraStore.export_time_series_associations_openapi(store)
-    doc["time_series_associations"] =
-        JSON.parse(rows isa AbstractString ? rows : JSON.json(rows))
+    doc["time_series_associations"] = wire_rows(rows)
     InfraStore.close!(store)
     delete!(doc, "ext")
     return doc, path
@@ -72,6 +75,23 @@ if HAS_GOLDEN
             report = insert_document!(db, doc)
             @test report.unsupported["time_series_values"] == 2
             @test_throws r"no time series sidecar" insert_document!(db, doc; strict=true)
+            close(db)
+        end
+    end
+
+    @testset "a missing sidecar is reported by path, and strict raises" begin
+        mktempdir() do dir
+            doc, _ = sidecar_document(dir)
+            gone = joinpath(dir, "gone.h5")
+            db = create_database(joinpath(dir, "a.sqlite"))
+            report = insert_document!(db, doc; time_series=gone)
+            @test report.unsupported["time_series_values"] == 2
+            @test_throws r"gone.h5 not found" insert_document!(
+                db,
+                doc;
+                strict=true,
+                time_series=gone,
+            )
             close(db)
         end
     end

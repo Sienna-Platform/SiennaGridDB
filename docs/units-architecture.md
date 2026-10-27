@@ -179,6 +179,7 @@ is a defect, not new vocabulary.
 The values are infrastore's SQLite export, written into the GridDB file under the `ts_` prefix: per partition an `_arrays`, `_values` and `_series` table, and the views `ts_all_values`, `ts_all_series` and `ts_all_arrays`.
 Each distinct array is stored once, and `ts_all_series.id` is the store's association id, so it joins `time_series_associations.id`.
 `time_series_values` is that join, with UTC timestamps; `orphaned_time_series` lists exported series no association names any more, since the export's tables have no foreign key into GridDB.
+The SDK creates both views from `schema/time_series_views.sql` after it copies the export in, so a database without an export has no view over a missing table.
 A `DeterministicSingleTimeSeries` is not stored: it is a view over its `SingleTimeSeries`' array, which a consumer derives again.
 
 The SDKs write the export through a private file.

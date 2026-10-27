@@ -175,8 +175,6 @@ def sidecar_document(tmp_path):
     infrastore sidecar; a deleted series leaves a gap so ids are not 1..n."""
     infrastore = pytest.importorskip("infrastore")
     np = pytest.importorskip("numpy")
-    if not hasattr(infrastore.Store, "export_sqlite"):
-        pytest.skip("infrastore has no SQLite export")
     from datetime import datetime, timedelta, timezone
 
     doc = golden()
@@ -231,6 +229,28 @@ def test_values_without_a_sidecar_are_reported_and_strict_raises(conn, tmp_path)
     assert count(conn, "time_series_associations") == 2
     with pytest.raises(griddb.InsertError, match="no time series sidecar"):
         griddb.insert_document(conn, doc, strict=True)
+
+
+def test_a_missing_sidecar_is_reported_by_path_and_strict_raises(conn, tmp_path):
+    doc, _ = sidecar_document(tmp_path)
+    gone = str(tmp_path / "gone.h5")
+    report = griddb.insert_document(conn, doc, time_series=gone)
+    assert report.unsupported["time_series_values"] == 2
+    with pytest.raises(griddb.InsertError, match="gone.h5 not found"):
+        griddb.insert_document(conn, doc, strict=True, time_series=gone)
+
+
+def test_the_cli_reports_a_named_sidecar_that_is_missing(tmp_path, capsys):
+    from sienna_griddb_tools.__main__ import main
+
+    doc, _ = sidecar_document(tmp_path)
+    doc["time_series_storage_file"] = "gone.h5"
+    path = tmp_path / "doc.json"
+    path.write_text(json.dumps(doc))
+    assert main(["build", str(path), str(tmp_path / "out.sqlite")]) == 0
+    assert json.loads(capsys.readouterr().out)["unsupported"]["time_series_values"] == 2
+    with pytest.raises(griddb.InsertError, match="gone.h5 not found"):
+        main(["build", str(path), str(tmp_path / "strict.sqlite"), "--strict"])
 
 
 def test_deleting_an_owner_leaves_its_values_orphaned(conn, tmp_path):

@@ -289,15 +289,10 @@ function insert_document!(
         end
     end
     series = storable_time_series(doc, report, strict, unsupported_ids, owners)
-    missing_reason = isempty(series) ? nothing : values_missing(time_series)
-    if !isnothing(missing_reason)
-        mark_unsupported!(
-            report,
-            strict,
-            "time_series_values",
-            length(series),
-            missing_reason,
-        )
+    store_series = !isempty(series) && values_storable(time_series)
+    if !isempty(series) && !store_series
+        reason = values_missing_reason(time_series)
+        mark_unsupported!(report, strict, "time_series_values", length(series), reason)
     end
     with_statements(db) do cache
         seed_vocabulary!(db)
@@ -354,7 +349,7 @@ function insert_document!(
             end
         end
         insert_associations!(cache, m.time_series, series, report)
-        if !isempty(series) && isnothing(missing_reason)
+        if store_series
             store_values!(db, m.time_series, series, time_series)
         end
     end

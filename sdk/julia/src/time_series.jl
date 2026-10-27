@@ -66,7 +66,7 @@ function insert_associations!(
     rows::Vector{Any},
     report::InsertReport,
 )
-    hash_at = findfirst(b -> b.encoding isa FeaturesHashEncoding, plan.bindings)
+    hash_at = findfirst(b -> is_features_hash(b.encoding), plan.bindings)
     features_seen = Set{String}()
     for row in rows
         what = "time series association id=$(get(row, "association_id", nothing))"
@@ -83,6 +83,9 @@ function insert_associations!(
     end
     return nothing
 end
+
+is_features_hash(::FeaturesHashEncoding) = true
+is_features_hash(::Encoding) = false
 
 const DERIVED = "DeterministicSingleTimeSeries"
 
@@ -104,7 +107,7 @@ view over its source's array: same owner, name, features and uri.
 """
 function derived_sources(rows)
     sources = Dict(
-        series_key(r) => r["association_id"] for
+        series_key(r) => get(r, "association_id", nothing) for
         r in rows if get(r, "time_series_type", nothing) == "SingleTimeSeries"
     )
     derived = Dict{Int, Int}()
@@ -127,31 +130,43 @@ is_reference(key::AbstractString) =
 (the keys `dangling_time_series_references` reads). A dict or vector is copied only
 when something inside it changes; the caller's stays as it was.
 """
-function point_at_sources(
-    node::Union{AbstractDict, AbstractVector},
-    sources::Dict{Int, Int},
-)
-    isempty(sources) && return node
-    out = nothing
-    for (k, v) in pairs(node)
-        new =
-            if k isa AbstractString &&
-               is_reference(k) &&
-               is_int_value(v) &&
-               haskey(sources, Int(v))
-                sources[Int(v)]
-            else
-                point_at_sources(v, sources)
-            end
-        new === v && continue
-        if isnothing(out)
-            out = node isa AbstractDict ? Dict{String, Any}(node) : Vector{Any}(node)
-        end
-        out[k] = new
+function point_at_sources(node::AbstractDict, sources::Dict{Int, Int})
+    changed = changed_references(node, sources)
+    isempty(changed) && return node
+    out = Dict{String, Any}(node)
+    for (k, v) in changed
+        out[k] = v
     end
-    return isnothing(out) ? node : out
+    return out
+end
+function point_at_sources(node::AbstractVector, sources::Dict{Int, Int})
+    changed = changed_references(node, sources)
+    isempty(changed) && return node
+    out = Vector{Any}(node)
+    for (i, v) in changed
+        out[i] = v
+    end
+    return out
 end
 point_at_sources(node, ::Dict{Int, Int}) = node
+
+function changed_references(node, sources::Dict{Int, Int})
+    changed = Pair{Any, Any}[]
+    isempty(sources) && return changed
+    for (k, v) in pairs(node)
+        new = pointed_at_source(k, v, sources)
+        new === v || push!(changed, k => new)
+    end
+    return changed
+end
+
+function pointed_at_source(key::AbstractString, v, sources::Dict{Int, Int})
+    if is_reference(key) && is_int_value(v) && haskey(sources, Int(v))
+        return sources[Int(v)]
+    end
+    return point_at_sources(v, sources)
+end
+pointed_at_source(_, v, sources::Dict{Int, Int}) = point_at_sources(v, sources)
 
 """
     export_values(f, sidecar, rows, prefix)
@@ -162,22 +177,27 @@ by the InfraStore extension.
 """
 function export_values end
 
+infrastore_loaded() =
+    !isnothing(Base.get_extension(@__MODULE__, :SiennaGridDBToolsInfraStoreExt))
+
 """
-Why the values cannot be stored in this session, or `nothing` when they can.
+Whether this session can store the values from `sidecar`; `values_missing_reason` says
+why not.
 """
-function values_missing(sidecar)
-    isnothing(sidecar) && return "no time series sidecar given"
-    if isnothing(Base.get_extension(@__MODULE__, :SiennaGridDBToolsInfraStoreExt))
-        return "load InfraStore.jl to read the time series sidecar"
-    end
-    return nothing
+values_storable(::Nothing) = false
+values_storable(sidecar::AbstractString) = isfile(sidecar) && infrastore_loaded()
+
+values_missing_reason(::Nothing) = "no time series sidecar given"
+function values_missing_reason(sidecar::AbstractString)
+    isfile(sidecar) || return "time series sidecar $sidecar not found"
+    return "load InfraStore.jl to read the time series sidecar"
 end
 
 """
 infrastore's export, written into `db` inside the caller's transaction: its tables with
-their rows, then their indexes and views.
+their rows, then their indexes and views, then GridDB's views over it.
 """
-function copy_export!(db::SQLite.DB, path::AbstractString)
+function copy_export!(db::SQLite.DB, path::AbstractString, views_sql::Vector{String})
     src = SQLite.DB(path)
     try
         sql = "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
@@ -202,6 +222,7 @@ function copy_export!(db::SQLite.DB, path::AbstractString)
         for (kind, _, ddl) in objects
             kind == "table" || DBInterface.execute(db, ddl)
         end
+        foreach(sql -> DBInterface.execute(db, sql), views_sql)
     finally
         close(src)
     end
@@ -211,12 +232,15 @@ end
 # InfraStore exports through its own connection, so it cannot join the document's open
 # savepoint. It writes a temporary file that copy_export! brings in, which keeps the
 # document atomic (infrastore #106 item 1 would let it write into `db` directly).
+is_sqlite_error(::SQLite.SQLiteException) = true
+is_sqlite_error(_) = false
+
 function store_values!(db::SQLite.DB, plan::TimeSeriesPlan, rows::Vector{Any}, sidecar)
     export_values(sidecar, rows, plan.table_prefix) do path
         try
-            copy_export!(db, path)
+            copy_export!(db, path, plan.views_sql)
         catch e
-            e isa SQLite.SQLiteException || rethrow()
+            is_sqlite_error(e) || rethrow()
             throw(InsertError("time series values: $(sprint(showerror, e))"))
         end
     end

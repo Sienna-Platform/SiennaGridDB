@@ -27,8 +27,7 @@ def main(argv=None):
     sidecar = args.time_series
     stored = doc.get("time_series_storage_file")
     if sidecar is None and stored:
-        beside = os.path.join(os.path.dirname(os.path.abspath(args.document)), stored)
-        sidecar = beside if os.path.isfile(beside) else None
+        sidecar = os.path.join(os.path.dirname(os.path.abspath(args.document)), stored)
     conn = create_database(args.out)
     report = insert_document(conn, doc, strict=args.strict, time_series=sidecar)
     conn.close()

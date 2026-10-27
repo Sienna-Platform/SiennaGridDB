@@ -8,8 +8,9 @@ import {
   describe,
   type JsonObject,
 } from "./errors.js";
-import { loadManifest, type Binding, type ComponentPlan } from "./manifest.js";
+import { loadManifest, type Binding, type ComponentPlan, type TimeSeriesPlan } from "./manifest.js";
 import { InsertReport } from "./report.js";
+import { derivedSources, featureRows, pointAtSources, requireOwnerLabel } from "./time_series.js";
 
 const SAVEPOINT = "sienna_griddb_tools_insert";
 
@@ -169,6 +170,62 @@ export function insertComponent(
   return insertComponents(db, typeName, [obj], opts);
 }
 
+// Whether a reference names a component the insert does not write; ids follow the int
+// encoder's rule, so any other value reaches the encoder and fails there.
+function namesUnsupported(row: JsonObject, references: string[], ids: Set<number>): boolean {
+  return references.some((r) => {
+    const id = valueAt(row, r);
+    return isInt(id) && ids.has(id);
+  });
+}
+
+// The association rows to insert, after reporting the ones GridDB cannot store; owners
+// maps each id the document holds to its [owner_type, owner_category].
+function timeSeriesRows(
+  doc: JsonObject,
+  report: InsertReport,
+  strict: boolean,
+  unsupportedIds: Set<number>,
+  owners: Map<number, [string, string]>,
+): JsonObject[] {
+  const plan = loadManifest().time_series;
+  const rows = sectionRows(doc, plan.section);
+  for (const row of rows) requireOwnerLabel(row, owners);
+  const counts = new Map<string, number>();
+  const stored: JsonObject[] = [];
+  for (const row of rows) {
+    const seriesType = String(row.time_series_type);
+    if (Object.hasOwn(plan.unsupported_types, seriesType)) {
+      counts.set(seriesType, (counts.get(seriesType) ?? 0) + 1);
+    } else if (namesUnsupported(row, plan.references, unsupportedIds)) {
+      report.addUnsupported(plan.section, 1);
+    } else {
+      stored.push(row);
+    }
+  }
+  for (const seriesType of [...counts.keys()].sort()) {
+    unsupported(report, strict, seriesType, counts.get(seriesType)!, plan.unsupported_types[seriesType]);
+  }
+  return stored;
+}
+
+// Association rows, then each feature set the first time its hash appears.
+function insertAssociations(db: Connection, plan: TimeSeriesPlan, rows: JsonObject[], report: InsertReport) {
+  const hashAt = plan.bindings.findIndex((b) => b.encode === "features_hash");
+  const featuresSeen = new Set<string>();
+  for (const row of rows) {
+    const what = `time series association id=${String(row.association_id)}`;
+    const values = params(plan.bindings, row, what);
+    run(db, plan.row_sql, values, what);
+    const hash = values[hashAt] as string;
+    if (!featuresSeen.has(hash)) {
+      featuresSeen.add(hash);
+      for (const f of featureRows(hash, row.features as JsonObject)) run(db, plan.feature_sql, f, what);
+    }
+    report.addInserted(plan.section);
+  }
+}
+
 function sectionSize(value: unknown): number {
   if (Array.isArray(value)) return value.length;
   if (value !== null && typeof value === "object") return Object.keys(value).length;
@@ -180,35 +237,46 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   const m = loadManifest();
   const report = new InsertReport();
   const components = (doc.components ?? {}) as Record<string, JsonObject[]>;
+  // References to a derived series name its source, which GridDB stores instead.
+  const sources = derivedSources(sectionRows(doc, m.time_series.section));
   const plans: [ComponentPlan, JsonObject[]][] = [];
   // Ids follow the int encoder's rule, so any other value reaches the encoder and fails there.
   // A non-object entry (schema-invalid) has no id and is only counted.
   const unsupportedIds = new Set<number>();
+  const owners = new Map<number, [string, string]>();
   for (const typeName of Object.keys(components).sort()) {
-    const plan = planFor(typeName, components[typeName].length, report, strict);
-    if (plan) plans.push([plan, components[typeName]]);
-    else for (const obj of components[typeName]) if (isInt(obj?.id)) unsupportedIds.add(obj.id);
+    const objs = components[typeName].map((o) => pointAtSources(o, sources));
+    const ids = objs.map((o) => o?.id).filter(isInt);
+    for (const id of ids) owners.set(id, [typeName, "Component"]);
+    const plan = planFor(typeName, objs.length, report, strict);
+    if (plan) plans.push([plan, objs]);
+    else for (const id of ids) unsupportedIds.add(id);
   }
   plans.sort((a, b) => a[0].rank - b[0].rank || (a[0].typeName < b[0].typeName ? -1 : 1));
   for (const section of Object.keys(m.unsupported_sections).sort()) {
     const n = sectionSize(doc[section]);
     if (n > 0) unsupported(report, strict, section, n, m.unsupported_sections[section]);
   }
-  const nSeries = sectionSize(doc[m.time_series.section]);
-  if (nSeries > 0) {
-    const reason = "the TypeScript SDK has no infrastore binding for time series";
-    unsupported(report, strict, m.time_series.section, nSeries, reason);
-  }
   const attrTypes = new Map<number, string>();
   for (const a of sectionRows(doc, "supplemental_attribute_associations")) {
     attrTypes.set(a.attribute_id as number, a.attribute_type as string);
+  }
+  const attrs = pointAtSources(sectionRows(doc, "supplemental_attributes"), sources);
+  for (const attr of attrs) {
+    const attrType = attrTypes.get(attr.id as number);
+    if (attrType !== undefined) owners.set(attr.id as number, [attrType, "SupplementalAttribute"]);
+  }
+  const series = timeSeriesRows(doc, report, strict, unsupportedIds, owners);
+  if (series.length > 0) {
+    const reason = "the TypeScript SDK has no infrastore binding to read the time series sidecar";
+    unsupported(report, strict, "time_series_values", series.length, reason);
   }
   const supp = m.supplemental_attributes;
   withSavepoint(db, () => {
     seedVocabulary(db);
     for (const [plan, objs] of plans) for (const obj of objs) writeEntity(db, plan, obj);
     const routed: [string, string, JsonObject, string][] = [];
-    for (const attr of sectionRows(doc, "supplemental_attributes")) {
+    for (const attr of attrs) {
       const id = attr.id as number;
       const attrType = attrTypes.get(id);
       if (attrType === undefined) {
@@ -239,8 +307,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     for (const section of m.associations) {
       for (const row of sectionRows(doc, section.section)) {
         // A row naming a component that has no table is not written either.
-        const refs = section.references.map((r) => valueAt(row, r));
-        if (refs.some((id) => isInt(id) && unsupportedIds.has(id))) {
+        if (namesUnsupported(row, section.references, unsupportedIds)) {
           report.addUnsupported(section.section, 1);
           continue;
         }
@@ -249,6 +316,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
         report.addInserted(section.section);
       }
     }
+    insertAssociations(db, m.time_series, series, report);
   });
   return report;
 }

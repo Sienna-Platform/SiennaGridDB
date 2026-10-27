@@ -89,11 +89,11 @@ def derived_sources(rows):
     }
     derived = {}
     for r in rows:
-        source = (
-            sources.get(_series_key(r)) if r.get("time_series_type") == DERIVED else None
-        )
-        if source is not None:
-            derived[r.get("association_id")] = source
+        if r.get("time_series_type") != DERIVED:
+            continue
+        source = sources.get(_series_key(r))
+        if is_int(source) and is_int(r.get("association_id")):
+            derived[int(r["association_id"])] = int(source)
     return derived
 
 
@@ -129,18 +129,18 @@ def values_missing(sidecar):
     """Why the values cannot be stored here, or None when they can."""
     if sidecar is None:
         return "no time series sidecar given"
+    if not os.path.isfile(sidecar):
+        return f"time series sidecar {sidecar} not found"
     try:
-        import infrastore
+        import infrastore  # noqa: F401
     except ImportError:
         return "install sienna-griddb-tools[time-series] to read the sidecar"
-    if not hasattr(infrastore.Store, "export_sqlite"):
-        return "the installed infrastore has no SQLite export (needs infrastore >= 0.15.0)"
     return None
 
 
-def _copy_export(conn, path):
+def _copy_export(conn, path, views_sql):
     """infrastore's export, written into conn inside the caller's transaction: its
-    tables with their rows, then their indexes and views."""
+    tables with their rows, then their indexes and views, then GridDB's views over it."""
     src = sqlite3.connect(path)
     try:
         objects = src.execute(
@@ -155,6 +155,8 @@ def _copy_export(conn, path):
         for kind, _, sql in objects:
             if kind != "table":
                 conn.execute(sql)
+        for sql in views_sql:
+            conn.execute(sql)
     finally:
         src.close()
 
@@ -185,6 +187,6 @@ def export_values(conn, plan, rows, sidecar):
         except (infrastore.TimeSeriesError, OSError) as exc:
             raise InsertError(f"time series sidecar {sidecar}: {exc}") from exc
         try:
-            _copy_export(conn, out)
+            _copy_export(conn, out, plan["views_sql"])
         except sqlite3.Error as exc:
             raise InsertError(f"time series values: {exc}") from exc

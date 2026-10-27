@@ -10,6 +10,7 @@ foreign keys -- no DDL parsing). generate_insert_manifest.py is the CLI.
 import graphlib
 import json
 import os
+import sqlite3
 
 from _common import load_json, sql_literal
 from check_units_sync import build_db
@@ -244,9 +245,22 @@ def resolved_encoding(prop, schemas_root, rel_file):
     return ENCODING_BY_KIND[sql_type_for(prop, schemas_root, rel_file)[0]]
 
 
-def time_series_entry(conn, schemas_root, spec):
+def time_series_views(schema_dir):
+    """The CREATE VIEW statements over infrastore's export, one per entry."""
+    statements, pending = [], ""
+    with open(os.path.join(schema_dir, "time_series_views.sql"), encoding="utf-8") as f:
+        for line in f:
+            pending += line
+            if sqlite3.complete_statement(pending):
+                statements.append(pending.strip())
+                pending = ""
+    return statements
+
+
+def time_series_entry(conn, schemas_root, spec, schema_dir):
     """Association INSERT over the union of the storable series types' wire
-    properties, plus the feature-set INSERT the SDKs pair with it."""
+    properties, plus the feature-set INSERT the SDKs pair with it and the views
+    they create after copying the export in."""
     section = spec["section"]
     columns = table_columns(conn, section)
     props = {}
@@ -279,8 +293,9 @@ def time_series_entry(conn, schemas_root, spec):
             "ON CONFLICT (features_hash, key) DO NOTHING"
         ),
         "unsupported_types": spec["unsupported_types"],
-        # infrastore's SQLite export of the values; views.sql reads its <prefix>all_* views.
+        # infrastore's SQLite export of the values; views_sql reads its <prefix>all_* views.
         "table_prefix": spec["table_prefix"],
+        "views_sql": time_series_views(schema_dir),
     }
 
 
@@ -304,7 +319,7 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
         association_entry(conn, schemas_path, section, rel_file)
         for section, rel_file in config["association_sections"]
     ]
-    time_series = time_series_entry(conn, schemas_path, config["time_series"])
+    time_series = time_series_entry(conn, schemas_path, config["time_series"], schema_dir)
     for sql in (time_series["row_sql"], time_series["feature_sql"]):
         conn.execute("EXPLAIN " + sql, [None] * sql.count("?"))
     return {

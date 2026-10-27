@@ -579,3 +579,8 @@ def test_dc_flag_requires_topology_type(fresh_db):
         )
 
 
+
+
+def test_rename_column_works_before_any_time_series_export(fresh_db):
+    """No view reads the ts_all_* tables an export creates: ALTER TABLE re-checks every view."""
+    fresh_db.execute("ALTER TABLE plants RENAME COLUMN name TO plant_name")
