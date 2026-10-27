@@ -1,3 +1,37 @@
+-- BEGIN GENERATED BRANCH VIEWS
+-- Do not edit this region. scripts/generate_sql_schema.py writes it from the
+-- SiennaSchemas components (schema/schema_map.json) and the per-table
+-- dispositions (schema/sql_codegen_map.json). Edit those and regenerate.
+
+-- The tables whose rows may be TransmissionInterface members.
+CREATE VIEW IF NOT EXISTS interface_member_tables (name) AS
+VALUES
+    ('transmission_lines'),
+    ('transmission_interchanges'),
+    ('discrete_controlled_ac_branches'),
+    ('two_winding_transformers'),
+    ('three_winding_transformers'),
+    ('two_terminal_hvdc_lines'),
+    ('tmodel_hvdc_lines');
+
+-- Every row of those tables, by id and name.
+CREATE VIEW IF NOT EXISTS branch_names AS
+    SELECT id, name FROM transmission_lines
+    UNION ALL
+    SELECT id, name FROM transmission_interchanges
+    UNION ALL
+    SELECT id, name FROM discrete_controlled_ac_branches
+    UNION ALL
+    SELECT id, name FROM two_winding_transformers
+    UNION ALL
+    SELECT id, name FROM three_winding_transformers
+    UNION ALL
+    SELECT id, name FROM two_terminal_hvdc_lines
+    UNION ALL
+    SELECT id, name FROM tmodel_hvdc_lines;
+
+-- END GENERATED BRANCH VIEWS
+
 CREATE VIEW IF NOT EXISTS column_units AS
 SELECT
     uc.table_name,
@@ -69,21 +103,6 @@ FROM
 -- Each direction_mapping entry resolved to a member branch: the keys are branch
 -- names, matched against the names of the interface's service_associations members.
 CREATE VIEW IF NOT EXISTS interface_branch_directions AS
-WITH branch_names (id, name) AS (
-    SELECT id, name FROM transmission_lines
-    UNION ALL
-    SELECT id, name FROM discrete_controlled_ac_branches
-    UNION ALL
-    SELECT id, name FROM two_winding_transformers
-    UNION ALL
-    SELECT id, name FROM three_winding_transformers
-    UNION ALL
-    SELECT id, name FROM transmission_interchanges
-    UNION ALL
-    SELECT id, name FROM two_terminal_hvdc_lines
-    UNION ALL
-    SELECT id, name FROM tmodel_hvdc_lines
-)
 SELECT
     ti.id AS interface_id,
     b.id AS branch_id,

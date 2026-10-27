@@ -1,3 +1,10 @@
+-- BEGIN GENERATED TABLE TRIGGERS
+-- Do not edit this region. scripts/generate_sql_schema.py writes it from the
+-- SiennaSchemas components (schema/schema_map.json) and the per-table
+-- dispositions (schema/sql_codegen_map.json). Edit those and regenerate.
+
+-- A row's id must already be in entities, under this table.
+
 CREATE TRIGGER IF NOT EXISTS check_planning_regions_entity_exists BEFORE
 INSERT
     ON planning_regions
@@ -19,27 +26,6 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_balancing_topologies_entity_exists BEFORE
-INSERT
-    ON balancing_topologies
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'balancing_topologies'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'balancing_topologies.id must exist in entities with entity_table balancing_topologies before insert'
-    );
-
-END;
-
 CREATE TRIGGER IF NOT EXISTS check_arcs_entity_exists BEFORE
 INSERT
     ON arcs
@@ -57,174 +43,6 @@ SELECT
     RAISE(
         ABORT,
         'arcs.id must exist in entities with entity_table arcs before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_transmission_lines_entity_exists BEFORE
-INSERT
-    ON transmission_lines
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'transmission_lines'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transmission_lines.id must exist in entities with entity_table transmission_lines before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_discrete_controlled_ac_branches_entity_exists BEFORE
-INSERT
-    ON discrete_controlled_ac_branches
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'discrete_controlled_ac_branches'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'discrete_controlled_ac_branches.id must exist in entities with entity_table discrete_controlled_ac_branches before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_transformer_circuits_entity_exists BEFORE
-INSERT
-    ON transformer_circuits
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'transformer_circuits'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transformer_circuits.id must exist in entities with entity_table transformer_circuits before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_two_winding_transformers_entity_exists BEFORE
-INSERT
-    ON two_winding_transformers
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'two_winding_transformers'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'two_winding_transformers.id must exist in entities with entity_table two_winding_transformers before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_three_winding_transformers_entity_exists BEFORE
-INSERT
-    ON three_winding_transformers
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'three_winding_transformers'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'three_winding_transformers.id must exist in entities with entity_table three_winding_transformers before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_transmission_interchanges_entity_exists BEFORE
-INSERT
-    ON transmission_interchanges
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'transmission_interchanges'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transmission_interchanges.id must exist in entities with entity_table transmission_interchanges before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_reserves_entity_exists BEFORE
-INSERT
-    ON reserves
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'reserves'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'reserves.id must exist in entities with entity_table reserves before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_transmission_interfaces_entity_exists BEFORE
-INSERT
-    ON transmission_interfaces
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'transmission_interfaces'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transmission_interfaces.id must exist in entities with entity_table transmission_interfaces before insert'
     );
 
 END;
@@ -334,125 +152,6 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_supply_technologies_entity_exists BEFORE
-INSERT
-    ON supply_technologies
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'supply_technologies'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'supply_technologies.id must exist in entities with entity_table supply_technologies before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_transport_technologies_entity_exists BEFORE
-INSERT
-    ON transport_technologies
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'transport_technologies'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transport_technologies.id must exist in entities with entity_table transport_technologies before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_storage_technologies_entity_exists BEFORE
-INSERT
-    ON storage_technologies
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'storage_technologies'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'storage_technologies.id must exist in entities with entity_table storage_technologies before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_demand_technologies_entity_exists BEFORE
-INSERT
-    ON demand_technologies
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'demand_technologies'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'demand_technologies.id must exist in entities with entity_table demand_technologies before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_supplemental_attributes_entity_exists BEFORE
-INSERT
-    ON supplemental_attributes
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'supplemental_attributes'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'supplemental_attributes.id must exist in entities with entity_table supplemental_attributes before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_plants_entity_exists BEFORE
-INSERT ON plants
-    WHEN NOT EXISTS (
-        SELECT 1
-        FROM entities
-        WHERE id = NEW.id
-            AND entity_table = 'plants'
-    ) BEGIN
-SELECT RAISE(
-        ABORT,
-        'plants.id must exist in entities with entity_table plants before insert'
-    );
-END;
-
 CREATE TRIGGER IF NOT EXISTS check_loads_entity_exists BEFORE
 INSERT
     ON loads
@@ -470,6 +169,237 @@ SELECT
     RAISE(
         ABORT,
         'loads.id must exist in entities with entity_table loads before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_lines_entity_exists BEFORE
+INSERT
+    ON transmission_lines
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transmission_lines'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_lines.id must exist in entities with entity_table transmission_lines before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_interchanges_entity_exists BEFORE
+INSERT
+    ON transmission_interchanges
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transmission_interchanges'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interchanges.id must exist in entities with entity_table transmission_interchanges before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_reserves_entity_exists BEFORE
+INSERT
+    ON reserves
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'reserves'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'reserves.id must exist in entities with entity_table reserves before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_interfaces_entity_exists BEFORE
+INSERT
+    ON transmission_interfaces
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transmission_interfaces'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.id must exist in entities with entity_table transmission_interfaces before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_discrete_controlled_ac_branches_entity_exists BEFORE
+INSERT
+    ON discrete_controlled_ac_branches
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'discrete_controlled_ac_branches'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'discrete_controlled_ac_branches.id must exist in entities with entity_table discrete_controlled_ac_branches before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transformer_circuits_entity_exists BEFORE
+INSERT
+    ON transformer_circuits
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transformer_circuits'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transformer_circuits.id must exist in entities with entity_table transformer_circuits before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_winding_transformers_entity_exists BEFORE
+INSERT
+    ON two_winding_transformers
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'two_winding_transformers'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_winding_transformers.id must exist in entities with entity_table two_winding_transformers before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_three_winding_transformers_entity_exists BEFORE
+INSERT
+    ON three_winding_transformers
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'three_winding_transformers'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'three_winding_transformers.id must exist in entities with entity_table three_winding_transformers before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_entity_exists BEFORE
+INSERT
+    ON two_terminal_hvdc_lines
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'two_terminal_hvdc_lines'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.id must exist in entities with entity_table two_terminal_hvdc_lines before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_tmodel_hvdc_lines_entity_exists BEFORE
+INSERT
+    ON tmodel_hvdc_lines
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'tmodel_hvdc_lines'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'tmodel_hvdc_lines.id must exist in entities with entity_table tmodel_hvdc_lines before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_synchronous_condensers_entity_exists BEFORE
+INSERT
+    ON synchronous_condensers
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'synchronous_condensers'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'synchronous_condensers.id must exist in entities with entity_table synchronous_condensers before insert'
     );
 
 END;
@@ -537,9 +467,9 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_entity_exists BEFORE
+CREATE TRIGGER IF NOT EXISTS check_interconnecting_converters_entity_exists BEFORE
 INSERT
-    ON two_terminal_hvdc_lines
+    ON interconnecting_converters
     WHEN NOT EXISTS (
         SELECT
             1
@@ -547,59 +477,16 @@ INSERT
             entities
         WHERE
             id = NEW.id
-            AND entity_table = 'two_terminal_hvdc_lines'
+            AND entity_table = 'interconnecting_converters'
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'two_terminal_hvdc_lines.id must exist in entities with entity_table two_terminal_hvdc_lines before insert'
+        'interconnecting_converters.id must exist in entities with entity_table interconnecting_converters before insert'
     );
 
 END;
-
-CREATE TRIGGER IF NOT EXISTS check_synchronous_condensers_entity_exists BEFORE
-INSERT
-    ON synchronous_condensers
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'synchronous_condensers'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'synchronous_condensers.id must exist in entities with entity_table synchronous_condensers before insert'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_tmodel_hvdc_lines_entity_exists BEFORE
-INSERT
-    ON tmodel_hvdc_lines
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            entities
-        WHERE
-            id = NEW.id
-            AND entity_table = 'tmodel_hvdc_lines'
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'tmodel_hvdc_lines.id must exist in entities with entity_table tmodel_hvdc_lines before insert'
-    );
-
-END;
-
 
 CREATE TRIGGER IF NOT EXISTS check_facts_control_devices_entity_exists BEFORE
 INSERT
@@ -622,9 +509,9 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_interconnecting_converters_entity_exists BEFORE
+CREATE TRIGGER IF NOT EXISTS check_balancing_topologies_entity_exists BEFORE
 INSERT
-    ON interconnecting_converters
+    ON balancing_topologies
     WHEN NOT EXISTS (
         SELECT
             1
@@ -632,13 +519,97 @@ INSERT
             entities
         WHERE
             id = NEW.id
-            AND entity_table = 'interconnecting_converters'
+            AND entity_table = 'balancing_topologies'
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'interconnecting_converters.id must exist in entities with entity_table interconnecting_converters before insert'
+        'balancing_topologies.id must exist in entities with entity_table balancing_topologies before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_supply_technologies_entity_exists BEFORE
+INSERT
+    ON supply_technologies
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'supply_technologies'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supply_technologies.id must exist in entities with entity_table supply_technologies before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_storage_technologies_entity_exists BEFORE
+INSERT
+    ON storage_technologies
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'storage_technologies'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'storage_technologies.id must exist in entities with entity_table storage_technologies before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transport_technologies_entity_exists BEFORE
+INSERT
+    ON transport_technologies
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'transport_technologies'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transport_technologies.id must exist in entities with entity_table transport_technologies before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_demand_technologies_entity_exists BEFORE
+INSERT
+    ON demand_technologies
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'demand_technologies'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'demand_technologies.id must exist in entities with entity_table demand_technologies before insert'
     );
 
 END;
@@ -705,6 +676,630 @@ SELECT
     );
 
 END;
+
+-- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.
+CREATE TRIGGER IF NOT EXISTS delete_planning_regions_entity
+AFTER
+    DELETE ON planning_regions FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_arcs_entity
+AFTER
+    DELETE ON arcs FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_thermal_generators_entity
+AFTER
+    DELETE ON thermal_generators FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_renewable_generators_entity
+AFTER
+    DELETE ON renewable_generators FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_hydro_generators_entity
+AFTER
+    DELETE ON hydro_generators FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_storage_units_entity
+AFTER
+    DELETE ON storage_units FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_hydro_reservoirs_entity
+AFTER
+    DELETE ON hydro_reservoirs FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_loads_entity
+AFTER
+    DELETE ON loads FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_transmission_lines_entity
+AFTER
+    DELETE ON transmission_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_transmission_interchanges_entity
+AFTER
+    DELETE ON transmission_interchanges FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_reserves_entity
+AFTER
+    DELETE ON reserves FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_transmission_interfaces_entity
+AFTER
+    DELETE ON transmission_interfaces FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_discrete_controlled_ac_branches_entity
+AFTER
+    DELETE ON discrete_controlled_ac_branches FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_transformer_circuits_entity
+AFTER
+    DELETE ON transformer_circuits FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_two_winding_transformers_entity
+AFTER
+    DELETE ON two_winding_transformers FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_three_winding_transformers_entity
+AFTER
+    DELETE ON three_winding_transformers FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_two_terminal_hvdc_lines_entity
+AFTER
+    DELETE ON two_terminal_hvdc_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_tmodel_hvdc_lines_entity
+AFTER
+    DELETE ON tmodel_hvdc_lines FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_synchronous_condensers_entity
+AFTER
+    DELETE ON synchronous_condensers FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_fixed_admittance_entity
+AFTER
+    DELETE ON fixed_admittance FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_switched_admittance_entity
+AFTER
+    DELETE ON switched_admittance FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_sources_entity
+AFTER
+    DELETE ON sources FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_interconnecting_converters_entity
+AFTER
+    DELETE ON interconnecting_converters FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_facts_control_devices_entity
+AFTER
+    DELETE ON facts_control_devices FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_balancing_topologies_entity
+AFTER
+    DELETE ON balancing_topologies FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_supply_technologies_entity
+AFTER
+    DELETE ON supply_technologies FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_storage_technologies_entity
+AFTER
+    DELETE ON storage_technologies FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_transport_technologies_entity
+AFTER
+    DELETE ON transport_technologies FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_demand_technologies_entity
+AFTER
+    DELETE ON demand_technologies FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_trading_hubs_entity
+AFTER
+    DELETE ON trading_hubs FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_virtual_participants_entity
+AFTER
+    DELETE ON virtual_participants FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_point_to_point_bids_entity
+AFTER
+    DELETE ON point_to_point_bids FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
+-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc).
+-- A foreign key can't express this, since arcs reference entities generically
+-- and the domain lives on entity_types.
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_insert BEFORE
+INSERT
+    ON transmission_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON transmission_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_discrete_controlled_ac_branches_arc_domain_insert BEFORE
+INSERT
+    ON discrete_controlled_ac_branches
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'discrete_controlled_ac_branches.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_discrete_controlled_ac_branches_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON discrete_controlled_ac_branches
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'discrete_controlled_ac_branches.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_insert BEFORE
+INSERT
+    ON transformer_circuits
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transformer_circuits.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON transformer_circuits
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transformer_circuits.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_insert BEFORE
+INSERT
+    ON two_terminal_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON two_terminal_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_insert BEFORE
+INSERT
+    ON tmodel_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 1
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON tmodel_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 1
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
+    );
+
+END;
+
+-- END GENERATED TABLE TRIGGERS
+
+CREATE TRIGGER IF NOT EXISTS check_supplemental_attributes_entity_exists BEFORE
+INSERT
+    ON supplemental_attributes
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'supplemental_attributes'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attributes.id must exist in entities with entity_table supplemental_attributes before insert'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_plants_entity_exists BEFORE
+INSERT ON plants
+    WHEN NOT EXISTS (
+        SELECT 1
+        FROM entities
+        WHERE id = NEW.id
+            AND entity_table = 'plants'
+    ) BEGIN
+SELECT RAISE(
+        ABORT,
+        'plants.id must exist in entities with entity_table plants before insert'
+    );
+END;
+
 
 -- An entity's table and type are fixed once inserted: the triggers keyed on them
 -- check a row only when that row is written, so a later change would bypass them.
@@ -990,226 +1585,6 @@ SELECT
 END;
 
 -- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.
-CREATE TRIGGER IF NOT EXISTS delete_planning_regions_entity
-AFTER
-    DELETE ON planning_regions FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_balancing_topologies_entity
-AFTER
-    DELETE ON balancing_topologies FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_arcs_entity
-AFTER
-    DELETE ON arcs FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_transmission_lines_entity
-AFTER
-    DELETE ON transmission_lines FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_discrete_controlled_ac_branches_entity
-AFTER
-    DELETE ON discrete_controlled_ac_branches FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_transformer_circuits_entity
-AFTER
-    DELETE ON transformer_circuits FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_two_winding_transformers_entity
-AFTER
-    DELETE ON two_winding_transformers FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_three_winding_transformers_entity
-AFTER
-    DELETE ON three_winding_transformers FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_transmission_interchanges_entity
-AFTER
-    DELETE ON transmission_interchanges FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_reserves_entity
-AFTER
-    DELETE ON reserves FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_transmission_interfaces_entity
-AFTER
-    DELETE ON transmission_interfaces FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_thermal_generators_entity
-AFTER
-    DELETE ON thermal_generators FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_renewable_generators_entity
-AFTER
-    DELETE ON renewable_generators FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_hydro_generators_entity
-AFTER
-    DELETE ON hydro_generators FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_storage_units_entity
-AFTER
-    DELETE ON storage_units FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_hydro_reservoirs_entity
-AFTER
-    DELETE ON hydro_reservoirs FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_supply_technologies_entity
-AFTER
-    DELETE ON supply_technologies FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_transport_technologies_entity
-AFTER
-    DELETE ON transport_technologies FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_storage_technologies_entity
-AFTER
-    DELETE ON storage_technologies FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_demand_technologies_entity
-AFTER
-    DELETE ON demand_technologies FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
 CREATE TRIGGER IF NOT EXISTS delete_supplemental_attributes_entity
 AFTER
     DELETE ON supplemental_attributes FOR EACH ROW
@@ -1226,138 +1601,6 @@ AFTER DELETE ON plants
 FOR EACH ROW
 BEGIN
     DELETE FROM entities WHERE id = OLD.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_loads_entity
-AFTER
-    DELETE ON loads FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_fixed_admittance_entity
-AFTER
-    DELETE ON fixed_admittance FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_switched_admittance_entity
-AFTER
-    DELETE ON switched_admittance FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_sources_entity
-AFTER
-    DELETE ON sources FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_two_terminal_hvdc_lines_entity
-AFTER
-    DELETE ON two_terminal_hvdc_lines FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_synchronous_condensers_entity
-AFTER
-    DELETE ON synchronous_condensers FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_tmodel_hvdc_lines_entity
-AFTER
-    DELETE ON tmodel_hvdc_lines FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_facts_control_devices_entity
-AFTER
-    DELETE ON facts_control_devices FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_interconnecting_converters_entity
-AFTER
-    DELETE ON interconnecting_converters FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_trading_hubs_entity
-AFTER
-    DELETE ON trading_hubs FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_virtual_participants_entity
-AFTER
-    DELETE ON virtual_participants FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS delete_point_to_point_bids_entity
-AFTER
-    DELETE ON point_to_point_bids FOR EACH ROW
-BEGIN
-DELETE FROM
-    entities
-WHERE
-    id = OLD.id;
-
 END;
 
 -- =============================================================================
@@ -1853,13 +2096,10 @@ SELECT
         )
         WHEN s.entity_table = 'transmission_interfaces'
         AND m.entity_table NOT IN (
-                'transmission_lines',
-                'discrete_controlled_ac_branches',
-                'two_winding_transformers',
-                'three_winding_transformers',
-                'transmission_interchanges',
-                'two_terminal_hvdc_lines',
-                'tmodel_hvdc_lines'
+                SELECT
+                    name
+                FROM
+                    interface_member_tables
             ) THEN RAISE(
             ABORT,
             'A TransmissionInterface''s members must be branches.'
@@ -1928,13 +2168,10 @@ SELECT
         )
         WHEN s.entity_table = 'transmission_interfaces'
         AND m.entity_table NOT IN (
-                'transmission_lines',
-                'discrete_controlled_ac_branches',
-                'two_winding_transformers',
-                'three_winding_transformers',
-                'transmission_interchanges',
-                'two_terminal_hvdc_lines',
-                'tmodel_hvdc_lines'
+                SELECT
+                    name
+                FROM
+                    interface_member_tables
             ) THEN RAISE(
             ABORT,
             'A TransmissionInterface''s members must be branches.'
@@ -2717,243 +2954,9 @@ END;
 
 -- =============================================================================
 -- Bus-domain triggers (AC vs DC)
--- tmodel_hvdc_lines must run between DC buses (is_dc = 1); every AC branch,
--- including point-to-point two_terminal_hvdc_lines, must run between AC
--- topologies (is_dc = 0). A foreign key can't express this, since arcs
--- reference entities generically and the domain lives on entity_types.
--- transmission_interchanges, a market construct rather than a physical
--- branch, is not checked here.
+-- The branch arc-domain triggers are generated (arc_domain in
+-- sql_codegen_map.json). A converter has no arc: its bus and dc_bus are checked here.
 -- =============================================================================
-CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_insert BEFORE
-INSERT
-    ON transmission_lines
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transmission_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_update BEFORE
-UPDATE
-    OF arc_id ON transmission_lines
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transmission_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_discrete_controlled_ac_branches_arc_domain_insert BEFORE
-INSERT
-    ON discrete_controlled_ac_branches
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'discrete_controlled_ac_branches.arc_id must connect AC topologies (entity_types.is_dc = 0)'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_discrete_controlled_ac_branches_arc_domain_update BEFORE
-UPDATE
-    OF arc_id ON discrete_controlled_ac_branches
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'discrete_controlled_ac_branches.arc_id must connect AC topologies (entity_types.is_dc = 0)'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_insert BEFORE
-INSERT
-    ON transformer_circuits
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transformer_circuits.arc_id must connect AC topologies (entity_types.is_dc = 0)'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_update BEFORE
-UPDATE
-    OF arc_id ON transformer_circuits
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'transformer_circuits.arc_id must connect AC topologies (entity_types.is_dc = 0)'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_insert BEFORE
-INSERT
-    ON two_terminal_hvdc_lines
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for a DC-network branch instead.'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_update BEFORE
-UPDATE
-    OF arc_id ON two_terminal_hvdc_lines
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 0
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'two_terminal_hvdc_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for a DC-network branch instead.'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_insert BEFORE
-INSERT
-    ON tmodel_hvdc_lines
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 1
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_update BEFORE
-UPDATE
-    OF arc_id ON tmodel_hvdc_lines
-    WHEN EXISTS (
-        SELECT
-            1
-        FROM
-            arcs a
-            JOIN entities e ON e.id IN (a.from_id, a.to_id)
-            JOIN entity_types et ON et.name = e.entity_type
-        WHERE
-            a.id = NEW.arc_id
-            AND et.is_dc <> 1
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
-    );
-
-END;
-
 CREATE TRIGGER IF NOT EXISTS enforce_interconnecting_converters_bus_domain_insert BEFORE
 INSERT
     ON interconnecting_converters
