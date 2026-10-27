@@ -10,6 +10,18 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 Built from SiennaSchemas v0.3.0. `PRAGMA user_version = 5`.
 
+### Schema
+
+- `scripts/generate_sql_schema.py` writes the per-table triggers into a marked region of
+  `schema/triggers.sql`: entity-existence and delete triggers for every generated table, and
+  the arc-domain triggers of each table with `arc_domain` in `sql_codegen_map.json`. A new
+  table no longer needs hand-written triggers.
+- New views `interface_member_tables` and `branch_names`, generated into
+  `schema/views.sql` from `interface_member` in `sql_codegen_map.json`. The service
+  association triggers and `interface_branch_directions` read them in place of hard-coded
+  table lists.
+- Every AC arc-domain error now ends with "use tmodel_hvdc_lines for DC-network branches".
+
 ## [0.2.0] - 2026-10-13
 
 Built from SiennaSchemas v0.2.0 (`.schema-version`). `PRAGMA user_version = 3`.

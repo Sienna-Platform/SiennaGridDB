@@ -29,8 +29,8 @@ def _codegen_map():
 
 
 def test_generated_outputs_are_not_stale():
-    """schema.sql's generated region and the derived unit conventions match a
-    fresh generation from the pinned schemas."""
+    """The generated regions of schema.sql, triggers.sql and views.sql and the
+    derived unit conventions match a fresh generation from the pinned schemas."""
     result = subprocess.run(
         [sys.executable, str(GENERATE_SCRIPT), "--schemas-path", SCHEMAS_PATH, "--check"],
         capture_output=True,
@@ -45,6 +45,23 @@ def test_every_mapped_table_is_built_with_entity_id_pk(fresh_db):
         assert info, f"{table} is mapped but not in the built database"
         pk_cols = [row[1] for row in info if row[5] == 1]
         assert pk_cols == ["id"], f"{table} PK is {pk_cols}"
+
+
+def test_table_triggers_and_branch_views_follow_the_maps(fresh_db):
+    """Every mapped table gets its entity triggers, every arc_domain table its arc
+    pair, and interface_member_tables lists exactly the interface_member tables."""
+    triggers = {row[0] for row in fresh_db.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger'")}
+    codegen_map = _codegen_map()
+    for table in _schema_map()["tables"]:
+        assert {f"check_{table}_entity_exists", f"delete_{table}_entity"} <= triggers
+        arc_pair = {f"enforce_{table}_arc_domain_insert", f"enforce_{table}_arc_domain_update"}
+        if "arc_domain" in codegen_map.get(table, {}):
+            assert arc_pair <= triggers
+        else:
+            assert not arc_pair & triggers
+    members = {row[0] for row in fresh_db.execute("SELECT name FROM interface_member_tables")}
+    assert members == {t for t, cfg in codegen_map.items() if cfg.get("interface_member")}
 
 
 def test_attribute_channel_properties_not_columns(fresh_db):

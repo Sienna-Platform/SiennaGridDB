@@ -2,19 +2,26 @@
 """Generate the component-table DDL and its unit conventions from SiennaSchemas.
 
 The SiennaSchemas JSON Schemas are the source of truth for every component
-table. This script writes two outputs from them:
+table. This script writes four outputs from them:
 
   schema/schema.sql            the region between BEGIN_MARKER and END_MARKER:
                                one DROP + CREATE TABLE (+ indexes) per
                                schema_map.json table, then the
                                attribute_identifiers rows
+  schema/triggers.sql          the region between TRIGGERS_BEGIN and TRIGGERS_END:
+                               per table, the entity-exists and delete-entity
+                               triggers, plus the arc-domain triggers of each
+                               table with arc_domain
+  schema/views.sql             the region between VIEWS_BEGIN and VIEWS_END:
+                               the interface_member_tables and branch_names views
+                               over the tables with interface_member
   schema/column_conventions.json
                                the entries marked "source": "schemas": the unit
                                conventions of the unit-bearing generated columns
                                and attribute-channel properties
 
-Everything outside the marked region of schema.sql, and every convention entry
-without the "source" marker, is hand-written and left untouched.
+Everything outside the marked regions, and every convention entry without the
+"source" marker, is hand-written and left untouched.
 
 Inputs (stdlib only):
   --schemas-path               SiennaSchemas checkout root (default ../SiennaSchemas)
@@ -55,9 +62,11 @@ Column overrides (all optional):
   hand_units  true: hand-written conventions own this column's units
 
 Table keys besides the dispositions: comment (lines above CREATE TABLE),
-constraints (table-level), indexes (full CREATE INDEX statements), and
+constraints (table-level), indexes (full CREATE INDEX statements),
 attribute_units ({prop: {"unit", "quantity_kind"}} for an attribute-channel
-property the schemas leave unannotated).
+property the schemas leave unannotated), arc_domain ("AC" or "DC": the arc
+column must connect topologies with that entity_types.is_dc), and
+interface_member (true: the table's rows may be TransmissionInterface members).
 
 Derived rules:
   type        integer -> INTEGER, number -> REAL, string/enum -> TEXT,
@@ -72,7 +81,7 @@ Derived rules:
 
 Modes:
   (none)   rewrite both outputs
-  --check  exit non-zero if either output differs from a fresh generation
+  --check  exit non-zero if any output differs from a fresh generation
 """
 
 import argparse
@@ -91,14 +100,86 @@ SCHEMA_MAP = os.path.join(REPO_ROOT, "schema", "schema_map.json")
 CODEGEN_MAP = os.path.join(REPO_ROOT, "schema", "sql_codegen_map.json")
 SCHEMA_SQL = os.path.join(REPO_ROOT, "schema", "schema.sql")
 CONVENTIONS = os.path.join(REPO_ROOT, "schema", "column_conventions.json")
+TRIGGERS_SQL = os.path.join(REPO_ROOT, "schema", "triggers.sql")
+VIEWS_SQL = os.path.join(REPO_ROOT, "schema", "views.sql")
 
 BEGIN_MARKER = "-- BEGIN GENERATED COMPONENT TABLES"
 END_MARKER = "-- END GENERATED COMPONENT TABLES"
+TRIGGERS_BEGIN = "-- BEGIN GENERATED TABLE TRIGGERS"
+TRIGGERS_END = "-- END GENERATED TABLE TRIGGERS"
+VIEWS_BEGIN = "-- BEGIN GENERATED BRANCH VIEWS"
+VIEWS_END = "-- END GENERATED BRANCH VIEWS"
 REGION_HEADER = """\
 -- Do not edit this region. scripts/generate_sql_schema.py writes it from the
 -- SiennaSchemas components (schema/schema_map.json) and the per-table
 -- dispositions (schema/sql_codegen_map.json). Edit those and regenerate.
 """
+
+ENTITY_EXISTS_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS check_{table}_entity_exists BEFORE
+INSERT
+    ON {table}
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = '{table}'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        '{table}.id must exist in entities with entity_table {table} before insert'
+    );
+
+END;
+"""
+
+DELETE_ENTITY_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS delete_{table}_entity
+AFTER
+    DELETE ON {table} FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+"""
+
+ARC_DOMAIN_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS enforce_{table}_arc_domain_{event} BEFORE
+{event_clause}
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.{column}
+            AND et.is_dc <> {is_dc}
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        '{table}.{column} must connect {message}'
+    );
+
+END;
+"""
+
+# entity_types.is_dc and the error-message tail of each arc domain.
+ARC_DOMAINS = {
+    "AC": (0, "AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches"),
+    "DC": (1, "DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead."),
+}
 
 # Top-level SiennaSchemas directories that hold no component schemas.
 NON_SCHEMA_DIRS = {"docs", "scripts", "tests", "node_modules"}
@@ -561,8 +642,70 @@ def identifiers_sql(identifiers):
     )
 
 
+def triggers_region(tables, codegen):
+    """The per-table entity and arc-domain triggers, as the triggers.sql region.
+
+    Returns (region text, problems).
+    """
+    problems = []
+    entity = []
+    delete = []
+    arc = []
+    for table in tables:
+        entity.append(ENTITY_EXISTS_TRIGGER.format(table=table))
+        delete.append(DELETE_ENTITY_TRIGGER.format(table=table))
+        cfg = codegen.get(table, {})
+        if "arc_domain" not in cfg:
+            continue
+        if cfg["arc_domain"] not in ARC_DOMAINS:
+            problems.append(f"{table}: arc_domain must be one of {', '.join(ARC_DOMAINS)}")
+            continue
+        if "arc" not in cfg.get("columns", {}):
+            problems.append(f"{table}: arc_domain is set, but arc is not a column")
+            continue
+        is_dc, message = ARC_DOMAINS[cfg["arc_domain"]]
+        column = cfg["columns"]["arc"].get("column", "arc")
+        for event, clause in (("insert", f"INSERT\n    ON {table}"),
+                              ("update", f"UPDATE\n    OF {column} ON {table}")):
+            arc.append(ARC_DOMAIN_TRIGGER.format(
+                table=table, event=event, event_clause=clause, column=column,
+                is_dc=is_dc, message=message,
+            ))
+    blocks = [
+        TRIGGERS_BEGIN + "\n", REGION_HEADER,
+        "\n-- A row's id must already be in entities, under this table.\n\n",
+        "\n".join(entity),
+        "\n-- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.\n",
+        "\n".join(delete),
+        "\n-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc).\n"
+        "-- A foreign key can't express this, since arcs reference entities generically\n"
+        "-- and the domain lives on entity_types.\n",
+        "\n".join(arc),
+        "\n" + TRIGGERS_END,
+    ]
+    return "".join(blocks), problems
+
+
+def views_region(tables, codegen):
+    """The interface_member_tables and branch_names views, as the views.sql region."""
+    members = [t for t in tables if codegen.get(t, {}).get("interface_member")]
+    values = ",\n".join(f"    ({sql_literal(t)})" for t in members)
+    union = "\n    UNION ALL\n".join(f"    SELECT id, name FROM {t}" for t in members)
+    return (
+        f"{VIEWS_BEGIN}\n{REGION_HEADER}"
+        "\n-- The tables whose rows may be TransmissionInterface members.\n"
+        "CREATE VIEW IF NOT EXISTS interface_member_tables (name) AS\n"
+        f"VALUES\n{values};\n"
+        "\n-- Every row of those tables, by id and name.\n"
+        "CREATE VIEW IF NOT EXISTS branch_names AS\n"
+        f"{union};\n"
+        f"\n{VIEWS_END}"
+    )
+
+
 def generate(schemas_path):
-    """Return (region text, derived conventions, {table: columns}). Raises GenerationError."""
+    """Return ({path: (region text, begin marker, end marker)}, derived conventions,
+    {table: columns}). Raises GenerationError."""
     units_index = load_units_index(schemas_path)
     schema_map = load_json(SCHEMA_MAP)
     codegen = load_json(CODEGEN_MAP)["tables"]
@@ -588,23 +731,30 @@ def generate(schemas_path):
         attributes.extend((table, prop, c, o) for prop, c, o in attrs)
     attr_conventions, identifiers, attr_problems = merge_attribute_rows(attributes)
     problems.extend(attr_problems)
+    triggers, trigger_problems = triggers_region(schema_map["tables"], codegen)
+    problems.extend(trigger_problems)
     if problems:
         raise GenerationError(problems)
     conventions.extend(attr_conventions)
     blocks.append("\n" + identifiers_sql(identifiers))
     blocks.append("\n" + END_MARKER)
-    return "".join(blocks), conventions, table_columns
+    regions = {
+        SCHEMA_SQL: ("".join(blocks), BEGIN_MARKER, END_MARKER),
+        TRIGGERS_SQL: (triggers, TRIGGERS_BEGIN, TRIGGERS_END),
+        VIEWS_SQL: (views_region(schema_map["tables"], codegen), VIEWS_BEGIN, VIEWS_END),
+    }
+    return regions, conventions, table_columns
 
 
 # --------------------------------------------------------------------------- outputs
 
 
-def splice_schema_sql(current, region):
-    begin = current.find(BEGIN_MARKER)
-    end = current.find(END_MARKER)
+def splice(path, current, region, begin_marker, end_marker):
+    begin = current.find(begin_marker)
+    end = current.find(end_marker)
     if begin < 0 or end < begin:
-        raise GenerationError([f"{SCHEMA_SQL} has no {BEGIN_MARKER} ... {END_MARKER} region"])
-    return current[:begin] + region + current[end + len(END_MARKER):]
+        raise GenerationError([f"{path} has no {begin_marker} ... {end_marker} region"])
+    return current[:begin] + region + current[end + len(end_marker):]
 
 
 def conventions_key(entry):
@@ -652,18 +802,21 @@ def render_conventions(document):
 
 
 def outputs(schemas_path):
-    region, derived, table_columns = generate(schemas_path)
-    with open(SCHEMA_SQL, encoding="utf-8") as f:
-        schema_sql = splice_schema_sql(f.read(), region)
+    regions, derived, table_columns = generate(schemas_path)
+    fresh = {}
+    for path, (region, begin_marker, end_marker) in regions.items():
+        with open(path, encoding="utf-8") as f:
+            fresh[path] = splice(path, f.read(), region, begin_marker, end_marker)
     conventions = render_conventions(merge_conventions(load_json(CONVENTIONS), derived, table_columns))
-    return {SCHEMA_SQL: schema_sql, CONVENTIONS: conventions}
+    fresh[CONVENTIONS] = conventions
+    return fresh
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--schemas-path", default=DEFAULT_SCHEMAS_PATH)
     parser.add_argument("--check", action="store_true",
-                        help="exit non-zero if schema.sql or column_conventions.json is stale")
+                        help="exit non-zero if any generated output is stale")
     args = parser.parse_args()
 
     try:
@@ -693,7 +846,7 @@ def main():
                   "Run scripts/generate_sql_schema.py and commit the result.")
         sys.exit(1)
     if args.check:
-        print("OK: schema.sql and column_conventions.json match the schemas.")
+        print("OK: schema.sql, triggers.sql, views.sql and column_conventions.json match the schemas.")
 
 
 if __name__ == "__main__":

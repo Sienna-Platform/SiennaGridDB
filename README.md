@@ -222,8 +222,12 @@ Just as the OpenAPI specs generate the Python and Julia model packages, the JSON
 generate the component tables here. `scripts/generate_sql_schema.py` writes every table
 mapped in `schema/schema_map.json` into the marked region at the end of `schema/schema.sql`,
 and writes the unit conventions of the generated columns into
-`schema/column_conventions.json` (entries marked `"source": "schemas"`). Everything else in
-those two files is hand-written.
+`schema/column_conventions.json` (entries marked `"source": "schemas"`). It also writes a
+marked region at the start of `schema/triggers.sql`, with each table's entity-existence and
+delete triggers and the arc-domain triggers of the tables with `arc_domain`. A marked
+region at the start of `schema/views.sql` holds `interface_member_tables` and
+`branch_names`, over the tables with `interface_member`. Everything else in those files
+is hand-written.
 
 Generation is closed-world. It fails, listing every problem, when a schema file is neither
 mapped nor `excluded` in `schema_map.json`, when a component property has no disposition in
@@ -414,11 +418,11 @@ Two generators project SiennaSchemas into this repo.
 
 | Generated from | Generator | Output |
 |---|---|---|
-| SiennaSchemas JSON Schemas, via `schema/schema_map.json` × `schema/sql_codegen_map.json` | `scripts/generate_sql_schema.py` | the component tables in `schema/schema.sql`, and the `"source": "schemas"` entries of `schema/column_conventions.json` |
+| SiennaSchemas JSON Schemas, via `schema/schema_map.json` × `schema/sql_codegen_map.json` | `scripts/generate_sql_schema.py` | the component tables in `schema/schema.sql`, the per-table triggers in `schema/triggers.sql`, the branch views in `schema/views.sql`, and the `"source": "schemas"` entries of `schema/column_conventions.json` |
 | SiennaSchemas `Core/units.json` × `schema/column_conventions.json` | `scripts/generate_unit_registry.py` | `schema/unit_registry.sql` (sha256-sealed) |
 
 Hand-written: the rest of `schema/schema.sql` (entities, attributes, associations, time
-series, the registry tables), `schema/triggers.sql`, and `schema/views.sql`.
+series, the registry tables), and the rest of `schema/triggers.sql` and `schema/views.sql`.
 
 ### Mapping and config files
 
