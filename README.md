@@ -28,7 +28,8 @@ Read this before building on it:
 
 - **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
-  `PRAGMA user_version` is bumped on every schema change but nothing reads it.
+  `PRAGMA user_version` is bumped on every schema change. The insert SDKs read it: they open
+  only a database whose `user_version` matches the schema they write, and refuse any other.
 - **Roughly half the data model is typed.**
   Dynamics and the investment policy layer have no tables; see the open coverage issue.
 - **The unit registry is the load-bearing deliverable.**
