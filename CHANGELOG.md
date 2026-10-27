@@ -31,6 +31,15 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 - New index `idx_attributes_name` on `attributes (name, TYPE)`: triggers and views select by name.
 - Removed `uq_ts_assoc`: `uq_ts_assoc_coalesced` rejects every row it rejected.
 
+### Insert SDKs
+
+- Every insert turns on `PRAGMA foreign_keys`, so a connection the caller opened with the raw
+  driver still checks them. Inside an open transaction the PRAGMA has no effect, so the insert
+  raises `InsertError` instead of writing unchecked rows.
+- An invalid or missing supplemental attribute id, or a `components` entry that is not a list,
+  raises `InsertError` in all three SDKs. Before, each SDK raised its own exception type.
+- The TypeScript SDK rejects an integer id beyond 2^53: `JSON.parse` has already rounded it.
+
 ## [0.3.0] - 2026-10-27
 
 Built from SiennaSchemas v0.3.0. `PRAGMA user_version = 5`.

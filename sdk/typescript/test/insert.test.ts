@@ -253,6 +253,46 @@ test.skipIf(!hasGolden)("dangling bus reference rolls back the document", () => 
   expect(count(db, "entities")).toBe(0);
 });
 
+test.skipIf(!hasGolden)("a connection with foreign keys off still checks them", () => {
+  const db = fresh();
+  db.pragma("foreign_keys = OFF");
+  const thermal = { ...firstOf(golden(), "ThermalStandard"), bus: 999999 };
+  expect(() => insertDocument(db, { components: { ThermalStandard: [thermal] } })).toThrow(/FOREIGN KEY/);
+});
+
+test.skipIf(!hasGolden)("foreign keys off inside an open transaction raises", () => {
+  const db = fresh();
+  db.pragma("foreign_keys = OFF");
+  db.exec("BEGIN");
+  expect(() => insertComponent(db, "ACBus", loneBus(golden()))).toThrow(/foreign keys are off/);
+  db.exec("ROLLBACK");
+});
+
+test.each([
+  ["supplemental_attributes", { id: 1.5 }, "supplemental attribute: id: expected an integer"],
+  ["supplemental_attributes", { name: "x" }, "supplemental attribute: no id"],
+  [
+    "supplemental_attribute_associations",
+    { attribute_type: "GeographicInfo", component_id: 1 },
+    "supplemental_attribute_associations row: no attribute_id",
+  ],
+])("an invalid attribute id in %s raises InsertError", (section, row, message) => {
+  expect(() => insertDocument(fresh(), { [section]: [row] })).toThrow(InsertError);
+  expect(() => insertDocument(fresh(), { [section]: [row] })).toThrow(message);
+});
+
+test("a component entry that is not a list raises InsertError", () => {
+  expect(() => insertDocument(fresh(), { components: { ACBus: { id: 1 } } })).toThrow(
+    "components.ACBus: not a list",
+  );
+});
+
+test("an id beyond 2^53 is rejected, since JSON.parse already rounded it", () => {
+  expect(() => insertComponent(fresh(), "Arc", { id: 2 ** 53, from_id: 1, to_id: 2 })).toThrow(
+    /expected an integer/,
+  );
+});
+
 // Review Focus 3
 test.skipIf(!hasGolden)("integral float ids are integers", () => {
   const db = fresh();

@@ -15,7 +15,25 @@ const SAVEPOINT = "sienna_griddb_tools_insert";
 
 export interface InsertOptions { strict?: boolean }
 
+// The caller's connection may have foreign keys off. The PRAGMA does nothing inside an
+// open transaction, so read it back.
+function requireForeignKeys(db: Connection): void {
+  db.pragma("foreign_keys = ON");
+  if (db.pragma("foreign_keys", { simple: true }) !== 1) {
+    throw new InsertError("foreign keys are off and cannot be turned on inside an open transaction");
+  }
+}
+
+// An id the insert needs before it writes a row, by the int encoder's rule.
+function requiredId(row: JsonObject, key: string, what: string): number {
+  const value = row[key];
+  if (isNull(value)) throw new InsertError(`${what}: no ${key}`);
+  if (!isInt(value)) throw new InsertError(`${what}: ${key}: expected an integer, got ${JSON.stringify(value)}`);
+  return value;
+}
+
 function withSavepoint(db: Connection, f: () => void): void {
+  requireForeignKeys(db);
   db.exec(`SAVEPOINT ${SAVEPOINT}`);
   try {
     f();
@@ -180,6 +198,9 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   const m = loadManifest();
   const report = new InsertReport();
   const components = (doc.components ?? {}) as Record<string, JsonObject[]>;
+  for (const [typeName, objs] of Object.entries(components)) {
+    if (!Array.isArray(objs)) throw new InsertError(`components.${typeName}: not a list`);
+  }
   const plans: [ComponentPlan, JsonObject[]][] = [];
   // Ids follow the int encoder's rule, so any other value reaches the encoder and fails there.
   // A non-object entry (schema-invalid) has no id and is only counted.
@@ -196,7 +217,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   }
   const attrTypes = new Map<number, string>();
   for (const a of sectionRows(doc, "supplemental_attribute_associations")) {
-    attrTypes.set(a.attribute_id as number, a.attribute_type as string);
+    attrTypes.set(requiredId(a, "attribute_id", "supplemental_attribute_associations row"), a.attribute_type as string);
   }
   const supp = m.supplemental_attributes;
   withSavepoint(db, () => {
@@ -204,7 +225,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     for (const [plan, objs] of plans) for (const obj of objs) writeEntity(db, plan, obj);
     const routed: [string, string, JsonObject, string][] = [];
     for (const attr of sectionRows(doc, "supplemental_attributes")) {
-      const id = attr.id as number;
+      const id = requiredId(attr, "id", "supplemental attribute");
       const attrType = attrTypes.get(id);
       if (attrType === undefined) {
         throw new InsertError(`supplemental attribute id=${id}: no association names its type`);
