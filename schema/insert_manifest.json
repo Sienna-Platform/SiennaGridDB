@@ -4594,7 +4594,7 @@
       "table": "virtual_participants"
     }
   },
-  "schema_user_version": 5,
+  "schema_user_version": 6,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",
@@ -4719,10 +4719,15 @@
     ],
     "row_sql": "INSERT INTO time_series_associations (id, owner_id, owner_type, owner_category, time_series_type, name, initial_timestamp, resolution, length, horizon, interval, count, scenario_count, units, quantity_kind, unit_system, time_reference, component_field, percentiles_json, element_type, element_shape, array_shape, application_data, uri, data_hash, features_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     "section": "time_series_associations",
+    "table_prefix": "ts_",
     "unsupported_types": {
       "DeterministicSingleTimeSeries": "derived from its SingleTimeSeries; regenerate it with transform_single_time_series!",
       "NonSequentialTimeSeries": "GridDB has no column for its timestamps_uri"
-    }
+    },
+    "views_sql": [
+      "-- Views over infrastore's SQLite export of the time series values. Not part of\n-- new-db: they read the ts_all_* views the export creates, so the SDKs run these\n-- statements (insert_manifest.json time_series.views_sql) after they copy an export in.\n-- A view over a table that does not exist makes ALTER TABLE ... RENAME COLUMN fail.\n\n-- Time series values, from infrastore's SQLite export under the ts_ prefix. ts_all_series.id\n-- is the association id. The timestamps are spelled in UTC; a 'zoneless' time_reference\n-- means wall-clock time. A forecast value also has its issue_time.\nCREATE VIEW IF NOT EXISTS time_series_values AS\nSELECT\n    a.id AS association_id,\n    a.owner_id,\n    a.owner_type,\n    a.owner_category,\n    a.name,\n    a.time_series_type,\n    strftime('%Y-%m-%dT%H:%M:%fZ', v.timestamp / 1000.0, 'unixepoch') AS timestamp,\n    strftime('%Y-%m-%dT%H:%M:%fZ', v.issue_time / 1000.0, 'unixepoch') AS issue_time,\n    v.percentile,\n    v.scenario,\n    v.value,\n    a.units,\n    s.time_reference\nFROM\n    time_series_associations a\n    JOIN ts_all_series s ON s.id = a.id\n    JOIN ts_all_values v ON v.partition_name = s.partition_name\n    AND v.array_id = s.array_id;",
+      "-- Exported series no association names any more (an owner was deleted, say): their\n-- values are left behind, since the export's tables have no foreign key into GridDB.\nCREATE VIEW IF NOT EXISTS orphaned_time_series AS\nSELECT\n    s.partition_name,\n    s.id AS association_id,\n    s.owner_id,\n    s.name\nFROM\n    ts_all_series s\nWHERE\n    NOT EXISTS (\n        SELECT\n            1\n        FROM\n            time_series_associations a\n        WHERE\n            a.id = s.id\n    );"
+    ]
   },
   "unsupported_sections": {
     "ext": "no table in schema.sql",

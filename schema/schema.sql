@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 5; -- bump on every schema or registry change
+PRAGMA user_version = 6; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -17,8 +17,6 @@ DROP TABLE IF EXISTS feature_sets;
 DROP TABLE IF EXISTS attribute_identifiers;
 
 DROP TABLE IF EXISTS attributes;
-
-DROP TABLE IF EXISTS static_time_series;
 
 DROP TABLE IF EXISTS allowed_units;
 
@@ -359,10 +357,6 @@ CREATE UNIQUE INDEX uq_ts_assoc_coalesced ON time_series_associations
     (owner_id, owner_category, time_series_type, name,
      COALESCE(resolution, ''), COALESCE(interval, ''), features_hash);
 
--- Used on every static_time_series insert/update: the FK-style existence
--- check (triggers.sql) filters time_series_associations by uri per row.
-CREATE INDEX idx_uri ON time_series_associations (uri);
-
 -- One (trading hub, member) pair (PSY TradingHubAssociation). entity_id names
 -- a bus or a market transaction settling at the hub, resolved through the
 -- entities supertype. The surrogate id lets a consumer store a stable
@@ -376,28 +370,6 @@ CREATE TABLE trading_hub_associations (
     FOREIGN KEY (entity_id) REFERENCES entities (id) ON DELETE CASCADE,
     UNIQUE (trading_hub_id, entity_id)
 ) strict;
-
--- Dense values, located by the association rows' uri (the role infrastore's
--- HDF5 half plays; here the uri IS the key into this table). One copy per
--- distinct array: associations sharing a uri share these rows, and the
--- association's optional data_hash lets a consumer verify the array's content.
--- Units/basis live on the association (units, quantity_kind, unit_system); a
--- COMPONENT_BASE series is interpreted against the owning component's own base
--- columns, so no per-series base snapshot is stored.
-CREATE TABLE static_time_series (
-    id INTEGER PRIMARY KEY,
-    uri TEXT NOT NULL,
-    -- The timestep's ordinal position within the array named by `uri`, 0-based
-    -- (confirmed by test_static_time_series_rejects_duplicate_timepoint, whose
-    -- first inserted timestep uses timestep = 0). Enforced unique per array by
-    -- the (uri, timestep) index below.
-    timestep INTEGER NOT NULL,
-    value REAL NOT NULL
-) strict;
-
--- UNIQUE: one value per (array, timepoint); loader double-inserts must fail
--- loudly rather than silently duplicate timepoints.
-CREATE UNIQUE INDEX uq_static_time_series_uri_timestep ON static_time_series (uri, timestep);
 
 -- Registry metadata, not runtime data; sealed and trigger-protected.
 CREATE TABLE unit_management_metadata (

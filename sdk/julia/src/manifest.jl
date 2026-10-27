@@ -45,6 +45,8 @@ struct TimeSeriesPlan
     references::Vector{String}
     feature_sql::String
     unsupported_types::Dict{String, String}
+    table_prefix::String
+    views_sql::Vector{String}
 end
 
 struct Manifest
@@ -122,6 +124,8 @@ function parse_manifest(raw::AbstractDict)
         String.(ts["references"]),
         ts["feature_sql"],
         Dict{String, String}(ts["unsupported_types"]),
+        ts["table_prefix"],
+        String.(ts["views_sql"]),
     )
     return Manifest(
         raw["schema_user_version"],

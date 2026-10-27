@@ -66,7 +66,7 @@ function insert_associations!(
     rows::Vector{Any},
     report::InsertReport,
 )
-    hash_at = findfirst(b -> b.encoding isa FeaturesHashEncoding, plan.bindings)
+    hash_at = findfirst(b -> is_features_hash(b.encoding), plan.bindings)
     features_seen = Set{String}()
     for row in rows
         what = "time series association id=$(get(row, "association_id", nothing))"
@@ -83,6 +83,9 @@ function insert_associations!(
     end
     return nothing
 end
+
+is_features_hash(::FeaturesHashEncoding) = true
+is_features_hash(::Encoding) = false
 
 const DERIVED = "DeterministicSingleTimeSeries"
 
@@ -104,7 +107,7 @@ view over its source's array: same owner, name, features and uri.
 """
 function derived_sources(rows)
     sources = Dict(
-        series_key(r) => r["association_id"] for
+        series_key(r) => get(r, "association_id", nothing) for
         r in rows if get(r, "time_series_type", nothing) == "SingleTimeSeries"
     )
     derived = Dict{Int, Int}()
@@ -131,24 +134,147 @@ function point_at_sources(
     node::Union{AbstractDict, AbstractVector},
     sources::Dict{Int, Int},
 )
-    isempty(sources) && return node
-    out = nothing
+    out = node
+    isempty(sources) && return out
     for (k, v) in pairs(node)
-        new =
-            if k isa AbstractString &&
-               is_reference(k) &&
-               is_int_value(v) &&
-               haskey(sources, Int(v))
-                sources[Int(v)]
-            else
-                point_at_sources(v, sources)
-            end
+        new = pointed_at_source(k, v, sources)
         new === v && continue
-        if isnothing(out)
-            out = node isa AbstractDict ? Dict{String, Any}(node) : Vector{Any}(node)
+        if out === node
+            out = widened_copy(node)
         end
         out[k] = new
     end
-    return isnothing(out) ? node : out
+    return out
 end
 point_at_sources(node, ::Dict{Int, Int}) = node
+
+widened_copy(node::AbstractDict) = Dict{String, Any}(node)
+widened_copy(node::AbstractVector) = Vector{Any}(node)
+
+"""
+`(entity id, key, id)` for each time series reference that names no id in `stored_ids`.
+`payloads` holds `(entity id, payload)` for every row the insert writes.
+"""
+function dangling_references(payloads::Vector{Tuple{Int, Any}}, stored_ids::Set{Int})
+    found = Tuple{Int, String, Int}[]
+    for (entity_id, payload) in payloads
+        collect_dangling!(found, entity_id, payload, stored_ids)
+    end
+    return found
+end
+
+function collect_dangling!(found, entity_id::Int, node::AbstractDict, stored_ids::Set{Int})
+    for (k, v) in node
+        collect_dangling!(found, entity_id, String(k), v, stored_ids)
+    end
+    return found
+end
+function collect_dangling!(
+    found,
+    entity_id::Int,
+    node::AbstractVector,
+    stored_ids::Set{Int},
+)
+    for v in node
+        collect_dangling!(found, entity_id, v, stored_ids)
+    end
+    return found
+end
+collect_dangling!(found, ::Int, _, ::Set{Int}) = found
+
+function collect_dangling!(found, entity_id::Int, key::String, v, stored_ids::Set{Int})
+    if is_reference(key) && is_int_value(v)
+        if !(Int(v) in stored_ids)
+            push!(found, (entity_id, key, Int(v)))
+        end
+        return found
+    end
+    return collect_dangling!(found, entity_id, v, stored_ids)
+end
+
+function pointed_at_source(key::AbstractString, v, sources::Dict{Int, Int})
+    if is_reference(key) && is_int_value(v) && haskey(sources, Int(v))
+        return sources[Int(v)]
+    end
+    return point_at_sources(v, sources)
+end
+pointed_at_source(_, v, sources::Dict{Int, Int}) = point_at_sources(v, sources)
+
+"""
+    export_values(f, sidecar, rows, prefix)
+
+Write the rows' arrays from the HDF5 `sidecar`, which is only ever read, as infrastore's
+SQLite export under `prefix` to a temporary file, and call `f` with its path. Defined
+by the InfraStore extension.
+"""
+function export_values end
+
+infrastore_loaded() =
+    !isnothing(Base.get_extension(@__MODULE__, :SiennaGridDBToolsInfraStoreExt))
+
+"""
+Whether this session can store the values from `sidecar`; `values_missing_reason` says
+why not.
+"""
+values_storable(::Nothing) = false
+values_storable(sidecar::AbstractString) = isfile(sidecar) && infrastore_loaded()
+
+values_missing_reason(::Nothing) = "no time series sidecar given"
+function values_missing_reason(sidecar::AbstractString)
+    isfile(sidecar) || return "time series sidecar $sidecar not found"
+    return "load InfraStore.jl to read the time series sidecar"
+end
+
+"""
+infrastore's export, written into `db` inside the caller's transaction: its tables with
+their rows, then their indexes and views, then GridDB's views over it.
+"""
+function copy_export!(db::SQLite.DB, path::AbstractString, views_sql::Vector{String})
+    src = SQLite.DB(path)
+    try
+        sql = "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
+        objects = [(r.type, r.name, r.sql) for r in DBInterface.execute(src, sql)]
+        for (kind, name, ddl) in objects
+            kind == "table" || continue
+            DBInterface.execute(db, ddl)
+            info =
+                DBInterface.execute(src, "SELECT name FROM pragma_table_info(?)", (name,))
+            columns = [Symbol(r.name) for r in info]
+            rows = DBInterface.execute(src, "SELECT * FROM \"$name\"")
+            marks = join(fill("?", length(columns)), ", ")
+            stmt = SQLite.Stmt(db, "INSERT INTO \"$name\" VALUES ($marks)")
+            try
+                for row in rows
+                    DBInterface.execute(stmt, Any[getproperty(row, c) for c in columns])
+                end
+            finally
+                DBInterface.close!(stmt)
+            end
+        end
+        for (kind, _, ddl) in objects
+            kind == "table" || DBInterface.execute(db, ddl)
+        end
+        foreach(sql -> DBInterface.execute(db, sql), views_sql)
+    finally
+        close(src)
+    end
+    return nothing
+end
+
+# InfraStore exports through its own connection, so it cannot join the document's open
+# savepoint. It writes a temporary file that copy_export! brings in, which keeps the
+# document atomic (infrastore #106 item 1 would let it write into `db` directly).
+is_sqlite_error(::SQLite.SQLiteException) = true
+is_sqlite_error(_) = false
+
+function store_values!(db::SQLite.DB, plan::TimeSeriesPlan, rows::Vector{Any}, sidecar)
+    export_values(sidecar, rows, plan.table_prefix) do path
+        try
+            copy_export!(db, path, plan.views_sql)
+        catch e
+            is_sqlite_error(e) || rethrow()
+            throw(InsertError("time series values: $(sprint(showerror, e))"))
+        end
+    end
+    return nothing
+end

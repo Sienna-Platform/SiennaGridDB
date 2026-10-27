@@ -20,7 +20,8 @@ canonical_json(value) = JSON.json(value)
 """
 What the int encoder accepts: an integer or integral float, not a `Bool`, in Int64.
 """
-is_int_value(v::Real) = !(v isa Bool) && isinteger(v) && typemin(Int) <= v <= typemax(Int)
+is_int_value(v::Real) = isinteger(v) && typemin(Int) <= v <= typemax(Int)
+is_int_value(::Bool) = false
 is_int_value(_) = false
 
 function encode(::IntEncoding, v)
@@ -96,7 +97,11 @@ function write_feature(io::IO, v::Integer)
 end
 # Any NaN hashes as Rust's f64::NAN, which is Julia's NaN.
 function write_feature(io::IO, v::AbstractFloat)
-    bits = isnan(v) ? reinterpret(UInt64, NaN) : reinterpret(UInt64, Float64(v))
+    if isnan(v)
+        bits = reinterpret(UInt64, NaN)
+    else
+        bits = reinterpret(UInt64, Float64(v))
+    end
     return write(io, UInt8('f'), htol(bits))
 end
 function write_feature(io::IO, v::AbstractString)

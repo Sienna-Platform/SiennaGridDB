@@ -13,9 +13,15 @@ function SiennaGridDBTools.insert_document!(
     db::SQLite.DB,
     doc::PowerCore.SystemDocument;
     strict::Bool=false,
+    time_series::Union{Nothing, AbstractString}=nothing,
 )
     tree = PowerCore.document_tree(doc)
-    return SiennaGridDBTools.insert_document!(db, tree; strict=strict)
+    return SiennaGridDBTools.insert_document!(
+        db,
+        tree;
+        strict=strict,
+        time_series=time_series,
+    )
 end
 
 function SiennaGridDBTools.insert_component!(

@@ -178,6 +178,23 @@ if HAS_GOLDEN
         end
     end
 
+    @testset "a reference no stored series has is reported, and strict raises" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                gen = fuel_cost_series!(doc)
+                # The payload names 8, but the document holds no series.
+                doc["time_series_associations"] = Any[]
+                report = insert_document!(db, doc)
+                @test report.unsupported["dangling_time_series_references"] == 1
+                sql = "SELECT association_id FROM dangling_time_series_references"
+                @test query_rows(db, sql) == [(8,)]
+                first = "first: entity $(gen["id"]) fuel_cost_time_series=8"
+                @test_throws Regex(first) insert_document!(db, doc; strict=true)
+            end
+        end
+    end
+
     @testset "point_at_sources copies only what changes" begin
         untouched = Dict{String, Any}("curve" => Any[1, 2], "association_id" => 3)
         node = Dict{String, Any}(

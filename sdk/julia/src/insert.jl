@@ -235,14 +235,42 @@ function write_supplemental!(cache, table::AbstractString, attr_type, attr, what
     return nothing
 end
 
+# A foreign key cannot reach into JSON, so the insert is the only place that sees a payload
+# reference to an association it does not store.
+function report_dangling!(report::InsertReport, strict::Bool, plans, attrs, series)
+    stored_ids = Set{Int}(
+        Int(r["association_id"]) for
+        r in series if is_int_value(get(r, "association_id", nothing))
+    )
+    payloads = Tuple{Int, Any}[]
+    for o in Iterators.flatten((Iterators.flatten(objs for (_, objs) in plans), attrs))
+        if is_object(o) && is_int_value(get(o, "id", nothing))
+            push!(payloads, (Int(o["id"]), o))
+        end
+    end
+    dangling = dangling_references(payloads, stored_ids)
+    isempty(dangling) && return nothing
+    entity_id, key, ref = minimum(dangling)
+    reason = "no stored time series association has the id (first: entity $entity_id $key=$ref)"
+    key_name = "dangling_time_series_references"
+    mark_unsupported!(report, strict, key_name, length(dangling), reason)
+    return nothing
+end
+
 """
-    insert_document!(db, doc; strict=false) -> InsertReport
+    insert_document!(db, doc; strict=false, time_series=nothing) -> InsertReport
 
 Insert a whole `SystemDocument` (as parsed JSON) in one savepoint: vocabulary, every
-entity row, typed rows in foreign-key rank order, supplemental attributes, associations.
-Any failure rolls back the whole document.
+entity row, typed rows in foreign-key rank order, supplemental attributes, associations,
+time series. Any failure rolls back the whole document. `time_series` is the HDF5 sidecar
+holding the arrays (`time_series_storage_file`); it is only read, and needs InfraStore.jl.
 """
-function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
+function insert_document!(
+    db::SQLite.DB,
+    doc::AbstractDict;
+    strict::Bool=false,
+    time_series::Union{Nothing, AbstractString}=nothing,
+)
     m = manifest()
     report = InsertReport()
     components = something(get(doc, "components", nothing), Dict{String, Any}())
@@ -283,6 +311,12 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
         end
     end
     series = storable_time_series(doc, report, strict, unsupported_ids, owners)
+    store_series = !isempty(series) && values_storable(time_series)
+    if !isempty(series) && !store_series
+        reason = values_missing_reason(time_series)
+        mark_unsupported!(report, strict, "time_series_values", length(series), reason)
+    end
+    report_dangling!(report, strict, plans, attrs, series)
     with_statements(db) do cache
         seed_vocabulary!(db)
         for (plan, objs) in plans
@@ -338,6 +372,9 @@ function insert_document!(db::SQLite.DB, doc::AbstractDict; strict::Bool=false)
             end
         end
         insert_associations!(cache, m.time_series, series, report)
+        if store_series
+            store_values!(db, m.time_series, series, time_series)
+        end
     end
     return report
 end
