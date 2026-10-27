@@ -15,6 +15,10 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 - A cost payload without its `cost_type` key fails the discriminator CHECK. Before, the missing
   key read as NULL, and a CHECK that evaluates to NULL passes. The `sources.operation_cost`
   default now carries `"cost_type": "IMPORTEXPORT"`.
+- An update of `arcs.from_id` or `arcs.to_id` re-checks the AC/DC domain of every branch on that
+  arc. Before, only an insert or update of the branch row was checked.
+- The `id` of a generated table cannot change. Before, an update could re-parent the row onto
+  an entities row of another subtype.
 
 ## [0.3.0] - 2026-10-27
 

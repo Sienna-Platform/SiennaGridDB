@@ -154,6 +154,47 @@ WHERE
 END;
 """
 
+ID_UPDATE_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS prevent_{table}_id_update BEFORE
+UPDATE
+    OF id ON {table}
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        '{table}.id cannot change; delete the row and insert it again'
+    );
+
+END;
+"""
+
+ARC_ENDPOINT_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS enforce_{table}_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            {table} t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.{column} = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> {is_dc}
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the {table}.{column} of a branch, so its endpoints must connect {message}'
+    );
+
+END;
+"""
+
 ARC_DOMAIN_TRIGGER = """\
 CREATE TRIGGER IF NOT EXISTS enforce_{table}_arc_domain_{event} BEFORE
 {event_clause}
@@ -694,11 +735,13 @@ def triggers_region(tables, codegen):
     """
     problems = []
     entity = []
+    identity = []
     delete = []
     arc = []
     references = []
     for table in tables:
         entity.append(ENTITY_EXISTS_TRIGGER.format(table=table))
+        identity.append(ID_UPDATE_TRIGGER.format(table=table))
         delete.append(DELETE_ENTITY_TRIGGER.format(table=table))
         cfg = codegen.get(table, {})
         types = ", ".join(sql_literal(c["component"]) for c in tables[table])
@@ -727,13 +770,19 @@ def triggers_region(tables, codegen):
                 table=table, event=event, event_clause=clause, column=column,
                 is_dc=is_dc, message=message,
             ))
+        arc.append(ARC_ENDPOINT_TRIGGER.format(
+            table=table, column=column, is_dc=is_dc, message=message,
+        ))
     blocks = [
         TRIGGERS_BEGIN + "\n", REGION_HEADER,
         "\n-- A row's id must already be in entities, under this table.\n\n",
         "\n".join(entity),
+        "\n-- A row's id is its entities row: changing it would move the row to another entity.\n\n",
+        "\n".join(identity),
         "\n-- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.\n",
         "\n".join(delete),
-        "\n-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc).\n"
+        "\n-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc),\n"
+        "-- on an insert or update of the branch and on an update of the arc's endpoints.\n"
         "-- A foreign key can't express this, since arcs reference entities generically\n"
         "-- and the domain lives on entity_types.\n",
         "\n".join(arc),

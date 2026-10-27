@@ -698,6 +698,437 @@ SELECT
 
 END;
 
+-- A row's id is its entities row: changing it would move the row to another entity.
+
+CREATE TRIGGER IF NOT EXISTS prevent_planning_regions_id_update BEFORE
+UPDATE
+    OF id ON planning_regions
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'planning_regions.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_arcs_id_update BEFORE
+UPDATE
+    OF id ON arcs
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_thermal_generators_id_update BEFORE
+UPDATE
+    OF id ON thermal_generators
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'thermal_generators.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_renewable_generators_id_update BEFORE
+UPDATE
+    OF id ON renewable_generators
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'renewable_generators.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_hydro_generators_id_update BEFORE
+UPDATE
+    OF id ON hydro_generators
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_generators.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_storage_units_id_update BEFORE
+UPDATE
+    OF id ON storage_units
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'storage_units.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_hydro_reservoirs_id_update BEFORE
+UPDATE
+    OF id ON hydro_reservoirs
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_loads_id_update BEFORE
+UPDATE
+    OF id ON loads
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'loads.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_transmission_lines_id_update BEFORE
+UPDATE
+    OF id ON transmission_lines
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_lines.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_transmission_interchanges_id_update BEFORE
+UPDATE
+    OF id ON transmission_interchanges
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interchanges.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_reserves_id_update BEFORE
+UPDATE
+    OF id ON reserves
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'reserves.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_transmission_interfaces_id_update BEFORE
+UPDATE
+    OF id ON transmission_interfaces
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transmission_interfaces.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_discrete_controlled_ac_branches_id_update BEFORE
+UPDATE
+    OF id ON discrete_controlled_ac_branches
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'discrete_controlled_ac_branches.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_series_compensators_id_update BEFORE
+UPDATE
+    OF id ON series_compensators
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'series_compensators.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_transformer_circuits_id_update BEFORE
+UPDATE
+    OF id ON transformer_circuits
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transformer_circuits.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_two_winding_transformers_id_update BEFORE
+UPDATE
+    OF id ON two_winding_transformers
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_winding_transformers.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_three_winding_transformers_id_update BEFORE
+UPDATE
+    OF id ON three_winding_transformers
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'three_winding_transformers.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_two_terminal_hvdc_lines_id_update BEFORE
+UPDATE
+    OF id ON two_terminal_hvdc_lines
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_tmodel_hvdc_lines_id_update BEFORE
+UPDATE
+    OF id ON tmodel_hvdc_lines
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'tmodel_hvdc_lines.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_synchronous_condensers_id_update BEFORE
+UPDATE
+    OF id ON synchronous_condensers
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'synchronous_condensers.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_fixed_admittance_id_update BEFORE
+UPDATE
+    OF id ON fixed_admittance
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'fixed_admittance.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_switched_admittance_id_update BEFORE
+UPDATE
+    OF id ON switched_admittance
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'switched_admittance.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_sources_id_update BEFORE
+UPDATE
+    OF id ON sources
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'sources.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_interconnecting_converters_id_update BEFORE
+UPDATE
+    OF id ON interconnecting_converters
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'interconnecting_converters.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_facts_control_devices_id_update BEFORE
+UPDATE
+    OF id ON facts_control_devices
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'facts_control_devices.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_balancing_topologies_id_update BEFORE
+UPDATE
+    OF id ON balancing_topologies
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'balancing_topologies.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_supply_technologies_id_update BEFORE
+UPDATE
+    OF id ON supply_technologies
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supply_technologies.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_storage_technologies_id_update BEFORE
+UPDATE
+    OF id ON storage_technologies
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'storage_technologies.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_transport_technologies_id_update BEFORE
+UPDATE
+    OF id ON transport_technologies
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'transport_technologies.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_demand_technologies_id_update BEFORE
+UPDATE
+    OF id ON demand_technologies
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'demand_technologies.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_trading_hubs_id_update BEFORE
+UPDATE
+    OF id ON trading_hubs
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'trading_hubs.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_virtual_participants_id_update BEFORE
+UPDATE
+    OF id ON virtual_participants
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'virtual_participants.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_point_to_point_bids_id_update BEFORE
+UPDATE
+    OF id ON point_to_point_bids
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'point_to_point_bids.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
 -- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.
 CREATE TRIGGER IF NOT EXISTS delete_planning_regions_entity
 AFTER
@@ -1062,7 +1493,8 @@ WHERE
 
 END;
 
--- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc).
+-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc),
+-- on an insert or update of the branch and on an update of the arc's endpoints.
 -- A foreign key can't express this, since arcs reference entities generically
 -- and the domain lives on entity_types.
 CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_insert BEFORE
@@ -1107,6 +1539,30 @@ SELECT
     RAISE(
         ABORT,
         'transmission_lines.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_transmission_lines_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_lines t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the transmission_lines.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
     );
 
 END;
@@ -1157,6 +1613,30 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS enforce_discrete_controlled_ac_branches_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            discrete_controlled_ac_branches t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the discrete_controlled_ac_branches.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS enforce_series_compensators_arc_domain_insert BEFORE
 INSERT
     ON series_compensators
@@ -1199,6 +1679,30 @@ SELECT
     RAISE(
         ABORT,
         'series_compensators.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_series_compensators_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            series_compensators t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the series_compensators.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
     );
 
 END;
@@ -1249,6 +1753,30 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transformer_circuits t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the transformer_circuits.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_insert BEFORE
 INSERT
     ON two_terminal_hvdc_lines
@@ -1295,6 +1823,30 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS enforce_two_terminal_hvdc_lines_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            two_terminal_hvdc_lines t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the two_terminal_hvdc_lines.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_insert BEFORE
 INSERT
     ON tmodel_hvdc_lines
@@ -1337,6 +1889,30 @@ SELECT
     RAISE(
         ABORT,
         'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_tmodel_hvdc_lines_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            tmodel_hvdc_lines t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 1
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the tmodel_hvdc_lines.arc_id of a branch, so its endpoints must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
     );
 
 END;

@@ -163,6 +163,18 @@ def test_delete_cleans_entity(fresh_db, table, entity_type, insert_row):
     assert count == 0
 
 
+@pytest.mark.parametrize(
+    "table, entity_type, insert_row", _ENTITY_TABLE_CASES, ids=_ENTITY_TABLE_IDS
+)
+def test_a_child_id_cannot_change(fresh_db, table, entity_type, insert_row):
+    """The new id would point the row at an entities row of another subtype."""
+    make_entity(fresh_db, 99, table, entity_type)
+    insert_row(fresh_db, 99)
+    make_entity(fresh_db, 98, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match=f"{table}.id cannot change"):
+        fresh_db.execute(f"UPDATE {table} SET id = 98 WHERE id = 99")
+
+
 def test_every_entity_table_has_supertype_triggers(db):
     """Every table whose id references entities must carry both boilerplate
     triggers."""
@@ -506,6 +518,23 @@ def test_arc_domain_trigger_fires_on_update(fresh_db):
         fresh_db.execute(
             "UPDATE tmodel_hvdc_lines SET arc_id = ? WHERE id = 99", (_ac_arc(fresh_db),)
         )
+
+
+def test_arc_endpoint_update_keeps_the_branch_domain(fresh_db):
+    """Moving the arc under an AC line onto a DC bus is checked on arcs too."""
+    make_entity(fresh_db, 99, "transmission_lines", "Line")
+    arc = _ac_arc(fresh_db)
+    fresh_db.execute(
+        "INSERT INTO transmission_lines(id, name, arc_id, continuous_rating, r, x, base_power, "
+        "power_units, angle_limits) VALUES (99, 'l', ?, 100.0, 0.01, 0.1, 100.0, "
+        "'COMPONENT_BASE', '{\"min\": -1.0, \"max\": 1.0}')",
+        (arc,),
+    )
+    dc = make_dc_bus(fresh_db, 50, "dc")
+    with pytest.raises(sqlite3.IntegrityError, match="endpoints must connect AC topologies"):
+        fresh_db.execute("UPDATE arcs SET from_id = ? WHERE id = ?", (dc, arc))
+    other_ac = make_bus(fresh_db, 51, "ac3")
+    fresh_db.execute("UPDATE arcs SET from_id = ? WHERE id = ?", (other_ac, arc))
 
 
 def test_interconnecting_converter_bridges_ac_and_dc(fresh_db):
