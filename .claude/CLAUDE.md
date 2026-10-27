@@ -47,7 +47,7 @@ Cross-repo paths are **flags with `../` defaults, not a required layout**: `gene
 ## Generated / sealed artifacts — never hand-edit
 
 - `schema/unit_registry.sql` is checksum-sealed: the canonical byte representation (with `\x1f/\x1e/\x1d` separators) must hash-match the seal. The generator refuses `(quantity_kind, unit)` pairs absent from `units.json`.
-- Cost fields are registered as JSON-path "columns" (`operation_cost.fixed`, …) and five `attributes.*` rows are attribute-name conventions rather than physical columns — the registry covers more than literal columns.
+- Cost fields are registered as JSON-path "columns" (`operation_cost.fixed`, …) and the `attributes` rows are attribute-name conventions rather than physical columns — the registry covers more than literal columns.
 - Bump `PRAGMA user_version` on any schema or registry change.
 
 ## Commands
@@ -67,7 +67,7 @@ python3 scripts/generate_unit_registry.py --units-json ../SiennaSchemas/Core/uni
 python3 scripts/verify_unit_registry.py griddb-example.sqlite
 ```
 
-Tests need `pytest` (in `pyproject.toml`'s `dev` extras) plus `pydantic>=2`, which the extras do **not** declare — CI installs it explicitly. Run them the way CI does: `pip install pytest "pydantic>=2"` then `python3 -m pytest test/ -v`.
+Tests need `pytest` and `pydantic>=2`, both in `pyproject.toml`'s `dev` extras. Run them the way CI does: `pip install pytest "pydantic>=2"` then `python3 -m pytest test/ -v`.
 
 ## Keeping in lockstep with SiennaSchemas
 

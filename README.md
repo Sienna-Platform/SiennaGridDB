@@ -112,7 +112,7 @@ them:
 | `quantity_kinds` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
 | `allowed_units` | The units permitted for each quantity kind (e.g. `MW` for `ActivePower`). |
 | `unit_conventions` | The column→(quantity_kind, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
-| `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
+| `unit_basis_rules` | For each of the 9 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
 **Columns vs. `attributes`.** `schema/sql_codegen_map.json` places every property of every
@@ -125,7 +125,8 @@ insert trigger accepts any registered arm. A unitless structured attribute (a re
 list, a loss curve) gets an `attribute_identifiers` row instead. An `attributes` name means
 one quantity kind everywhere; generation fails otherwise.
 
-Current registry: **42 quantity kinds, 67 allowed units, 534 conventions.**
+The registry sizes change with each SiennaSchemas release; count them on a built database
+(`SELECT count(*) FROM unit_conventions`) instead of relying on a number written here.
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
@@ -388,6 +389,10 @@ builds from `schema_map.json`, `sql_codegen_map.json`, `schema/insert_config.jso
 SiennaSchemas components, and the DDL itself. Every INSERT a runtime can issue is written
 out in that file.
 
+The release tarball holds the schema only. Use the SDKs from a clone at the release tag: each
+one reads the manifest of its own checkout and opens only a database whose `user_version`
+equals the manifest's `schema_user_version`.
+
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
 - **Every field has a home.** `sql_codegen_map.json` places every property of a supported
   component, or manifest generation fails. A decomposed property maps each of its columns
@@ -451,13 +456,13 @@ above — and always before opening a PR that touches any of them:
 python3 scripts/verify_unit_registry.py $DB_NAME                                        # registry content matches its own seal
 python3 scripts/generate_sql_schema.py --schemas-path ../SiennaSchemas --check         # generated tables + closed-world gate
 python3 scripts/check_units_sync.py --schemas-path ../SiennaSchemas --db $DB_NAME        # 3-layer unit consistency: schemas <-> registry <-> DB (add --psy-path for the PSY layer)
+python3 scripts/generate_unit_registry.py --units-json ../SiennaSchemas/Core/units.json --check  # registry is not stale
 ```
 
-`generate_unit_registry.py` has no built-in `--check`; CI proves registry staleness the blunt
-way instead — regenerate, then `git diff --exit-code schema/unit_registry.sql`. All of the
+All of the
 above run in CI
 ([`.github/workflows/sqlite-schema-tests.yml`](.github/workflows/sqlite-schema-tests.yml))
-on every push and pull request.
+on every pull request and every push to `main`.
 
 ### Never hand-edit generated output
 
@@ -474,13 +479,13 @@ then regenerate.
 Install a virtual environment
 
 ```console
-python -m venv .venv
+python3 -m venv .venv
 ```
 
 Setup the python environment
 
 ```console
-python -m pip install -r requirements.txt
+python3 -m pip install -e ".[dev]"
 ```
 
 Setup pre-commit to run automatically on each commit.
