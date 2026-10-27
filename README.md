@@ -28,7 +28,8 @@ Read this before building on it:
 
 - **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
-  `PRAGMA user_version` is bumped on every schema change but nothing reads it.
+  `PRAGMA user_version` is bumped on every schema change. The insert SDKs read it: they open
+  only a database whose `user_version` matches the schema they write, and refuse any other.
 - **Roughly half the data model is typed.**
   Dynamics and the investment policy layer have no tables; see the open coverage issue.
 - **The unit registry is the load-bearing deliverable.**
@@ -224,7 +225,8 @@ mapped in `schema/schema_map.json` into the marked region at the end of `schema/
 and writes the unit conventions of the generated columns into
 `schema/column_conventions.json` (entries marked `"source": "schemas"`). It also writes a
 marked region at the start of `schema/triggers.sql`, with each table's entity-existence and
-delete triggers and the arc-domain triggers of the tables with `arc_domain`. A marked
+delete triggers, the arc-domain triggers of the tables with `arc_domain`, and the delete
+guards of `attribute_references` id arrays. A marked
 region at the start of `schema/views.sql` holds `interface_member_tables` and
 `branch_names`, over the tables with `interface_member`. Everything else in those files
 is hand-written.

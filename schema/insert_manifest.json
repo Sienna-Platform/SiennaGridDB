@@ -244,7 +244,29 @@
       "table": "arcs"
     },
     "Area": {
-      "attributes": [],
+      "attributes": [
+        {
+          "arms": {},
+          "exempt": true,
+          "field": "out_of_area_load_ids",
+          "unit_field": null
+        },
+        {
+          "arms": {
+            "COMPONENT_BASE": {
+              "quantity_kind": "ActivePower",
+              "unit": "pu"
+            },
+            "NATURAL_UNITS": {
+              "quantity_kind": "ActivePower",
+              "unit": "MW"
+            }
+          },
+          "exempt": false,
+          "field": "scheduled_net_interchange",
+          "unit_field": "power_units"
+        }
+      ],
       "bindings": [
         {
           "encode": "int",
@@ -987,7 +1009,7 @@
         {
           "arms": {
             "": {
-              "quantity_kind": "Dimensionless",
+              "quantity_kind": "Fraction",
               "unit": "1"
             }
           },
@@ -1210,7 +1232,7 @@
         {
           "arms": {
             "": {
-              "quantity_kind": "Dimensionless",
+              "quantity_kind": "Fraction",
               "unit": "1"
             }
           },
@@ -1329,7 +1351,7 @@
           "arms": {
             "": {
               "quantity_kind": "CurrentFlow",
-              "unit": "A"
+              "unit": "kA"
             }
           },
           "exempt": false,
@@ -1357,11 +1379,33 @@
           "arms": {
             "": {
               "quantity_kind": "CurrentFlow",
-              "unit": "A"
+              "unit": "kA"
             }
           },
           "exempt": false,
           "field": "max_dc_current",
+          "unit_field": null
+        },
+        {
+          "arms": {
+            "": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "exempt": false,
+          "field": "rated_ac_voltage",
+          "unit_field": null
+        },
+        {
+          "arms": {
+            "": {
+              "quantity_kind": "Voltage",
+              "unit": "kV"
+            }
+          },
+          "exempt": false,
+          "field": "rated_dc_voltage",
           "unit_field": null
         }
       ],
@@ -2437,6 +2481,88 @@
         "dynamic_injector"
       ],
       "table": "renewable_generators"
+    },
+    "SeriesCompensator": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "real",
+          "path": "rating"
+        },
+        {
+          "encode": "real",
+          "path": "r"
+        },
+        {
+          "encode": "real",
+          "path": "x"
+        },
+        {
+          "encode": "text",
+          "path": "control_mode"
+        },
+        {
+          "encode": "json",
+          "path": "reactance_limits"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_flow_setpoint"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_flow"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power_flow"
+        },
+        {
+          "encode": "real",
+          "path": "rating_b"
+        },
+        {
+          "encode": "real",
+          "path": "rating_c"
+        },
+        {
+          "encode": "json",
+          "path": "operational_flow_limit"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'series_compensators', 'SeriesCompensator')",
+      "rank": 1,
+      "row_sql": "INSERT INTO series_compensators (id, name, arc_id, continuous_rating, r, x, control_mode, reactance_limits, active_power_flow_setpoint, parameter_units, base_power, power_units, available, active_power_flow, reactive_power_flow, rating_b, rating_c, operational_flow_limit) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 'FIXED'), ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?)",
+      "skip": [],
+      "table": "series_compensators"
     },
     "ShiftablePowerLoad": {
       "attributes": [
@@ -3758,7 +3884,7 @@
           "arms": {
             "": {
               "quantity_kind": "CurrentFlow",
-              "unit": "A"
+              "unit": "kA"
             }
           },
           "exempt": false,
@@ -4197,7 +4323,7 @@
           "arms": {
             "": {
               "quantity_kind": "CurrentFlow",
-              "unit": "A"
+              "unit": "kA"
             }
           },
           "exempt": false,
@@ -4293,7 +4419,7 @@
           "arms": {
             "": {
               "quantity_kind": "CurrentFlow",
-              "unit": "A"
+              "unit": "kA"
             }
           },
           "exempt": false,
@@ -4304,7 +4430,7 @@
           "arms": {
             "": {
               "quantity_kind": "CurrentFlow",
-              "unit": "A"
+              "unit": "kA"
             }
           },
           "exempt": false,
@@ -4594,7 +4720,7 @@
       "table": "virtual_participants"
     }
   },
-  "schema_user_version": 4,
+  "schema_user_version": 5,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",
@@ -4827,6 +4953,11 @@
         "is_dc": false,
         "is_topology": false,
         "name": "RenewablePowerPlant"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "SeriesCompensator"
       },
       {
         "is_dc": false,

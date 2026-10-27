@@ -278,6 +278,27 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_series_compensators_entity_exists BEFORE
+INSERT
+    ON series_compensators
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'series_compensators'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'series_compensators.id must exist in entities with entity_table series_compensators before insert'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_transformer_circuits_entity_exists BEFORE
 INSERT
     ON transformer_circuits
@@ -821,6 +842,17 @@ WHERE
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS delete_series_compensators_entity
+AFTER
+    DELETE ON series_compensators FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS delete_transformer_circuits_entity
 AFTER
     DELETE ON transformer_circuits FOR EACH ROW
@@ -1125,6 +1157,52 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS enforce_series_compensators_arc_domain_insert BEFORE
+INSERT
+    ON series_compensators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'series_compensators.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_series_compensators_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON series_compensators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'series_compensators.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS enforce_transformer_circuits_arc_domain_insert BEFORE
 INSERT
     ON transformer_circuits
@@ -1259,6 +1337,30 @@ SELECT
     RAISE(
         ABORT,
         'tmodel_hvdc_lines.arc_id must connect DC buses (entity_types.is_dc = 1); use two_terminal_hvdc_lines for point-to-point HVDC instead.'
+    );
+
+END;
+
+-- A row listed in an attribute_references id array cannot be deleted: the array
+-- lives in attributes, where a foreign key cannot reach it.
+CREATE TRIGGER IF NOT EXISTS restrict_loads_delete_planning_regions_out_of_area_load_ids BEFORE
+DELETE ON loads
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('Area')
+            AND a.name = 'out_of_area_load_ids'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'loads row is listed in planning_regions.out_of_area_load_ids; remove it from the list first'
     );
 
 END;

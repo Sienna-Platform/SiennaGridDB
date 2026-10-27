@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 4; -- bump on every schema or registry change
+PRAGMA user_version = 5; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -327,6 +327,7 @@ CREATE TABLE feature_sets (
         'application_data', 'array_shape', 'association_id', 'component_field',
         'count', 'data', 'data_hash', 'dtype', 'element_shape', 'element_type',
         'ext', 'features', 'horizon', 'id', 'initial_timestamp', 'interval',
+        'interval_alignment',
         'length', 'name', 'owner_category', 'owner_id', 'owner_type',
         'percentiles', 'quantity_kind', 'resolution', 'scenario_count',
         'time_reference', 'time_series_type', 'timestamps', 'timestamps_uri',
@@ -478,6 +479,7 @@ CREATE TABLE unit_basis_rules (
 
 -- Control or planning areas (PSY Area).
 -- Components: Area
+-- Attributes: scheduled_net_interchange, out_of_area_load_ids
 DROP TABLE IF EXISTS planning_regions;
 CREATE TABLE planning_regions (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -784,6 +786,36 @@ CREATE TABLE discrete_controlled_ac_branches (
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
 
+-- Series compensator (PSY SeriesCompensator): a series capacitor or reactor, a
+-- TCSC, or an SSSC on one AC arc. x is negative for a capacitor. r/x/reactance_limits
+-- follow parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);
+-- power_units governs the power-family columns. DISPATCHABLE and ACTIVE_POWER_FLOW
+-- require reactance_limits; ACTIVE_POWER_FLOW also requires active_power_flow_setpoint.
+-- Components: SeriesCompensator
+DROP TABLE IF EXISTS series_compensators;
+CREATE TABLE series_compensators (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    continuous_rating REAL NOT NULL CHECK (continuous_rating >= 0),
+    r REAL NOT NULL CHECK (r >= 0),
+    x REAL NOT NULL,
+    control_mode TEXT NOT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('FIXED', 'BYPASSED', 'DISPATCHABLE', 'ACTIVE_POWER_FLOW')),
+    reactance_limits TEXT NULL CHECK (json_valid(reactance_limits)),
+    active_power_flow_setpoint REAL NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    base_power REAL NOT NULL CHECK (base_power > 0),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    active_power_flow REAL NOT NULL DEFAULT 0.0,
+    reactive_power_flow REAL NOT NULL DEFAULT 0.0,
+    rating_b REAL NULL,
+    rating_c REAL NULL,
+    operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit)),
+    CHECK (control_mode NOT IN ('DISPATCHABLE', 'ACTIVE_POWER_FLOW') OR reactance_limits IS NOT NULL),
+    CHECK (control_mode <> 'ACTIVE_POWER_FLOW' OR active_power_flow_setpoint IS NOT NULL)
+) STRICT;
+
 -- One modeled arc of a transformer (PSY TransformerCircuit); unnamed
 -- subcomponents, so no name column. r/x follow parameter_units (COMPONENT_BASE ->
 -- pu on base_power/base_voltage_primary; NATURAL_UNITS -> ohm). r/x have no sign
@@ -1015,7 +1047,7 @@ CREATE TABLE sources (
 -- enforced by enforce_interconnecting_converters_bus_domain, since a plain FK
 -- cannot see the entity_types.is_dc flag. Each setpoint has one fixed unit.
 -- Components: InterconnectingConverter
--- Attributes: dc_current, max_dc_current, loss_function, dc_voltage_droop
+-- Attributes: dc_current, max_dc_current, loss_function, dc_voltage_droop, rated_dc_voltage, rated_ac_voltage
 -- Not stored: dynamic_injector
 DROP TABLE IF EXISTS interconnecting_converters;
 CREATE TABLE interconnecting_converters (
@@ -1226,6 +1258,7 @@ CREATE TABLE point_to_point_bids (
 -- (references, curves): exempt from the attributes unit rule.
 INSERT INTO attribute_identifiers (TYPE, name)
 VALUES
+    ('Area', 'out_of_area_load_ids'),
     ('HydroReservoir', 'downstream_turbines'),
     ('HydroReservoir', 'upstream_reservoirs'),
     ('HydroReservoir', 'upstream_turbines'),
