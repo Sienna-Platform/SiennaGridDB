@@ -101,6 +101,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_SCHEMAS_PATH = os.path.normpath(os.path.join(REPO_ROOT, "..", "SiennaSchemas"))
 SCHEMA_MAP = os.path.join(REPO_ROOT, "schema", "schema_map.json")
 CODEGEN_MAP = os.path.join(REPO_ROOT, "schema", "sql_codegen_map.json")
+INSERT_CONFIG = os.path.join(REPO_ROOT, "schema", "insert_config.json")
 SCHEMA_SQL = os.path.join(REPO_ROOT, "schema", "schema.sql")
 CONVENTIONS = os.path.join(REPO_ROOT, "schema", "column_conventions.json")
 TRIGGERS_SQL = os.path.join(REPO_ROOT, "schema", "triggers.sql")
@@ -728,6 +729,51 @@ def identifiers_sql(identifiers):
     )
 
 
+def vocabulary(config, component_names, schemas_path):
+    """The lookup rows: every entity type with its topology flags, and each enum table."""
+    flags = config["entity_type_flags"]
+    entity_types = set(component_names)
+    for rel_dir in config["supplemental_attribute_dirs"]:
+        directory = os.path.join(schemas_path, rel_dir)
+        for file_name in os.listdir(directory):
+            if file_name.endswith(".json"):
+                entity_types.add(file_name[: -len(".json")])
+    vocab = {
+        "entity_types": [
+            {
+                "name": n,
+                "is_topology": flags.get(n, {}).get("is_topology", False),
+                "is_dc": flags.get(n, {}).get("is_dc", False),
+            }
+            for n in sorted(entity_types)
+        ]
+    }
+    for table, ref in sorted(config["vocabulary_enums"].items()):
+        rel_file, _, frag = ref.partition("#")
+        node, _ = resolve_ref(schemas_path, "#" + frag, rel_file)
+        vocab[table] = sorted(node["enum"])
+    return vocab
+
+
+def vocabulary_sql(vocab):
+    """The lookup rows as INSERTs, so a database built from the SQL alone accepts a
+    component row; the insert SDKs seed the same rows with INSERT OR IGNORE."""
+    rows = ",\n".join(
+        f"    ({sql_literal(t['name'])}, {int(t['is_topology'])}, {int(t['is_dc'])})"
+        for t in vocab["entity_types"]
+    )
+    parts = [
+        "-- Lookup vocabularies: entity types from schema_map.json and insert_config.json,\n"
+        "-- and the enum tables from their SiennaSchemas enums.\n"
+        f"INSERT INTO entity_types (name, is_topology, is_dc)\nVALUES\n{rows};\n"
+    ]
+    for table, names in vocab.items():
+        if table != "entity_types":
+            values = ",\n".join(f"    ({sql_literal(n)})" for n in names)
+            parts.append(f"INSERT INTO {table} (name)\nVALUES\n{values};\n")
+    return "\n".join(parts)
+
+
 def triggers_region(tables, codegen):
     """The per-table entity and arc-domain triggers, as the triggers.sql region.
 
@@ -845,6 +891,9 @@ def generate(schemas_path):
         raise GenerationError(problems)
     conventions.extend(attr_conventions)
     blocks.append("\n" + identifiers_sql(identifiers))
+    component_names = [c["component"] for comps in schema_map["tables"].values() for c in comps]
+    vocab = vocabulary(load_json(INSERT_CONFIG), component_names, schemas_path)
+    blocks.append("\n" + vocabulary_sql(vocab))
     blocks.append("\n" + END_MARKER)
     regions = {
         SCHEMA_SQL: ("".join(blocks), BEGIN_MARKER, END_MARKER),

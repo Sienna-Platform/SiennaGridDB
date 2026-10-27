@@ -19,6 +19,9 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
   arc. Before, only an insert or update of the branch row was checked.
 - The `id` of a generated table cannot change. Before, an update could re-parent the row onto
   an entities row of another subtype.
+- The lookup tables `entity_types`, `prime_mover_types`, `fuels` and `storage_technology_types`
+  are seeded in the generated region of `schema.sql`. Before, a database built from the SQL
+  alone rejected every generator insert on its foreign keys until an insert SDK seeded them.
 
 ## [0.3.0] - 2026-10-27
 

@@ -742,8 +742,8 @@ def _setup_topology(conn, topo_id=1):
 
 
 def _insert_thermal(conn, gen_id, topo_id, production_cost):
-    conn.execute("INSERT INTO prime_mover_types(name) VALUES ('CT')")
-    conn.execute("INSERT INTO fuels(name) VALUES ('OTHER')")
+    conn.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES ('CT')")
+    conn.execute("INSERT OR IGNORE INTO fuels(name) VALUES ('OTHER')")
     make_entity(conn, gen_id, entity_table="thermal_generators")
     conn.execute(
         "INSERT INTO thermal_generators("
@@ -801,7 +801,7 @@ def test_renewable_curtailment_cost_relative_base_rejected(fresh_db):
     """curtailment_cost stays inside operation_cost, so it keeps its own guard."""
     topo = _setup_topology(fresh_db)
     make_entity(fresh_db, 2, entity_table="renewable_generators")
-    fresh_db.execute("INSERT INTO prime_mover_types(name) VALUES ('PV')")
+    fresh_db.execute("INSERT OR IGNORE INTO prime_mover_types(name) VALUES ('PV')")
     curtailment_cost = (
         '{"cost_type":"RENEWABLE","fixed":0,'
         '"curtailment_cost":{"variable_cost_type":"COST","power_units":"COMPONENT_BASE",'

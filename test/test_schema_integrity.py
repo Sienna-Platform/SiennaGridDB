@@ -3,12 +3,13 @@ triggers on discrete_controlled_ac_branches and the transformer tables, the
 transformer enum/pairwise CHECK constraints, and the static_time_series
 (uuid, timestep) uniqueness contract."""
 
+import json
 import re
 import sqlite3
 
 import pytest
 
-from conftest import SCHEMAS_PATH, load_schemas_json, make_entity
+from conftest import SCHEMA_DIR, SCHEMAS_PATH, load_schemas_json, make_entity
 
 
 def make_bus(conn, bus_id, name):
@@ -653,3 +654,16 @@ def test_every_foreign_key_column_leads_an_index(db):
             if fk[2] not in UNINDEXED_FK_PARENTS and fk[3] not in leading:
                 missing.append(f"{table}.{fk[3]}")
     assert missing == []
+
+
+def test_lookup_vocabularies_are_seeded(db):
+    """A database built from the SQL alone holds the rows the insert SDKs would seed."""
+    vocab = json.loads((SCHEMA_DIR / "insert_manifest.json").read_text(encoding="utf-8"))["vocabulary"]
+    entity_types = {
+        (name, bool(top), bool(dc))
+        for name, top, dc in db.execute("SELECT name, is_topology, is_dc FROM entity_types")
+    }
+    assert entity_types == {(t["name"], t["is_topology"], t["is_dc"]) for t in vocab["entity_types"]}
+    for table, names in vocab.items():
+        if table != "entity_types":
+            assert sorted(r[0] for r in db.execute(f"SELECT name FROM {table}")) == names
