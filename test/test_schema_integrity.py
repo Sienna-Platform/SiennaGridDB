@@ -604,3 +604,23 @@ def test_dc_flag_requires_topology_type(fresh_db):
         )
 
 
+
+
+# Parents that are never deleted: the sealed registry and the type vocabulary.
+UNINDEXED_FK_PARENTS = {"quantity_kinds", "entity_types"}
+
+
+def test_every_foreign_key_column_leads_an_index(db):
+    """A delete of a parent row scans each child table without an index on the FK column."""
+    missing = []
+    tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+    for table in tables:
+        leading = {
+            next(db.execute(f"PRAGMA index_info('{idx[1]}')"))[2]
+            for idx in db.execute(f"PRAGMA index_list('{table}')")
+        }
+        leading |= {r[1] for r in db.execute(f"PRAGMA table_info('{table}')") if r[5] == 1}
+        for fk in db.execute(f"PRAGMA foreign_key_list('{table}')"):
+            if fk[2] not in UNINDEXED_FK_PARENTS and fk[3] not in leading:
+                missing.append(f"{table}.{fk[3]}")
+    assert missing == []

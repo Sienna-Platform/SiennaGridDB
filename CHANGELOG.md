@@ -6,6 +6,13 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
+### Schema
+
+- `PRAGMA user_version = 6`.
+- Every foreign-key column has an index. `scripts/generate_sql_schema.py` emits one for each
+  generated column with `references`, and `schema.sql` adds the four hand-written ones that
+  reference `entities`. Before, a bus delete scanned every device table for its cascade.
+
 ## [0.3.0] - 2026-10-27
 
 Built from SiennaSchemas v0.3.0. `PRAGMA user_version = 5`.

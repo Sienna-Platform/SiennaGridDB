@@ -77,6 +77,7 @@ Derived rules:
               default on each, and its type does not admit null
   CHECK       enum values, minimum/maximum bounds, and a oneOf discriminator
   DEFAULT     the schema default, never for base_power
+  INDEX       every foreign-key column, unless an `indexes` entry leads with it
   tables      STRICT
   attributes  a unitless number is Dimensionless; a unitless object or array
               gets an attribute_identifiers row per owning component
@@ -208,6 +209,7 @@ ARC_DOMAINS = {
 }
 
 # Top-level SiennaSchemas directories that hold no component schemas.
+LEADING_INDEX_COLUMN = re.compile(r"\(\s*(\w+)")
 NON_SCHEMA_DIRS = {"docs", "scripts", "tests", "node_modules"}
 
 DISPOSITIONS = ("columns", "attribute_channel", "decomposed", "skip")
@@ -570,14 +572,19 @@ def emit_table(table, components, cfg, schemas_root, units_index):
     body = []
     present = set()
     conventions = []
+    fk_columns = []
     for prop, override in columns.items():
         if "sql" in override:
             body.append((f"{prop} {override['sql']}", override.get("comment")))
             present.add(prop)
+            if "REFERENCES" in override["sql"].upper():
+                fk_columns.append(prop)
             continue
         column, decl = column_decl(prop, merged[prop], override, schemas_root, renames)
         present.add(column)
         body.append((decl, override.get("comment")))
+        if "references" in override:
+            fk_columns.append(column)
     for prop, override in columns.items():
         if "sql" not in override:
             derived, conv_problems = column_conventions(
@@ -608,6 +615,13 @@ def emit_table(table, components, cfg, schemas_root, units_index):
         lines.append(f"    {decl}{sep}" + (f" -- {comment}" if comment else ""))
     lines.append(") STRICT;")
     lines.extend(f"{index};" for index in cfg.get("indexes", []))
+    # Without an index, deleting a parent row scans this table for its ON DELETE action.
+    indexed = {m.group(1) for m in map(LEADING_INDEX_COLUMN.search, cfg.get("indexes", [])) if m}
+    lines.extend(
+        f"CREATE INDEX idx_{table}_{column} ON {table} ({column});"
+        for column in fk_columns
+        if column not in indexed
+    )
     return "\n".join(lines) + "\n", conventions, attributes, present, problems
 
 
