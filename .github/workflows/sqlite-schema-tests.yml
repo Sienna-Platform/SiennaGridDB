@@ -75,9 +75,7 @@ jobs:
         run: python3 scripts/verify_unit_registry.py griddb-example.sqlite
 
       - name: Check registry staleness
-        run: |
-          python3 scripts/generate_unit_registry.py --units-json SiennaSchemas/Core/units.json
-          git diff --exit-code schema/unit_registry.sql
+        run: python3 scripts/generate_unit_registry.py --units-json SiennaSchemas/Core/units.json --check
 
       # Fails on any schema file or property with no decision in schema_map.json /
       # sql_codegen_map.json, and on generated tables or conventions that are stale.
