@@ -277,12 +277,17 @@ def bound_checks(column, prop):
     return checks
 
 
-def discriminator_check(column, prop):
+def discriminator_check(column, prop, nullable):
+    # ifnull: a payload with no discriminator key reads as NULL, and a CHECK that
+    # evaluates to NULL passes.
     disc = prop.get("discriminator")
     if not disc or "mapping" not in disc:
         return None
     values = ", ".join(sql_literal(v) for v in sorted(disc["mapping"]))
-    return f"json_extract({column}, '$.{disc['propertyName']}') IN ({values})"
+    check = f"ifnull(json_extract({column}, '$.{disc['propertyName']}'), '') IN ({values})"
+    if nullable:
+        return f"{column} IS NULL OR {check}"
+    return check
 
 
 # --------------------------------------------------------------------------- inventory
@@ -418,7 +423,7 @@ def column_decl(prop, entry, override, schemas_root, renames):
     if enum_values is not None:
         checks.append(f"{column} IN ({', '.join(sql_literal(v) for v in enum_values)})")
     checks.extend(bound_checks(column, node))
-    disc = discriminator_check(column, node)
+    disc = discriminator_check(column, node, not not_null)
     if disc:
         checks.append(disc)
     checks.extend(override.get("checks", []))

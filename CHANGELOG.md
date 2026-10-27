@@ -12,6 +12,9 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 - Every foreign-key column has an index. `scripts/generate_sql_schema.py` emits one for each
   generated column with `references`, and `schema.sql` adds the four hand-written ones that
   reference `entities`. Before, a bus delete scanned every device table for its cascade.
+- A cost payload without its `cost_type` key fails the discriminator CHECK. Before, the missing
+  key read as NULL, and a CHECK that evaluates to NULL passes. The `sources.operation_cost`
+  default now carries `"cost_type": "IMPORTEXPORT"`.
 
 ## [0.3.0] - 2026-10-27
 
