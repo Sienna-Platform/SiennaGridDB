@@ -11,6 +11,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# The jobs only read the repository; dependency installs run with a read-only token.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
