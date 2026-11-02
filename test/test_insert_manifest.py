@@ -178,7 +178,13 @@ def test_vocabulary(manifest):
 
 
 def test_unsupported_sections(manifest):
-    assert set(manifest["unsupported_sections"]) == {"ext", "voltage_control_associations"}
+    assert set(manifest["unsupported_sections"]) == {
+        "ext",
+        "financial_data",
+        "investment_schedule",
+        "requirements_associations",
+        "voltage_control_associations",
+    }
 
 
 def test_time_series_entry(manifest):

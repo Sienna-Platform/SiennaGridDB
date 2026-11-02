@@ -4731,6 +4731,9 @@
   },
   "unsupported_sections": {
     "ext": "no table in schema.sql",
+    "financial_data": "no table in schema.sql",
+    "investment_schedule": "no table in schema.sql",
+    "requirements_associations": "no table in schema.sql",
     "voltage_control_associations": "no table in schema.sql"
   },
   "vocabulary": {
@@ -4799,6 +4802,11 @@
         "is_dc": false,
         "is_topology": false,
         "name": "EnergyReservoirStorage"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "ExistingDevices"
       },
       {
         "is_dc": false,
@@ -4949,6 +4957,16 @@
         "is_dc": false,
         "is_topology": false,
         "name": "RenewablePowerPlant"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "RetirementPotential"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "RetrofitPotential"
       },
       {
         "is_dc": false,
