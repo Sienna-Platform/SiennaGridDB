@@ -6,6 +6,10 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-02
+
+Built from SiennaSchemas v0.4.0. `PRAGMA user_version = 7`.
+
 ### Schema
 
 - `PRAGMA user_version = 6`.
@@ -179,7 +183,8 @@ consumer. Every later schema or registry change bumps it from here.
 - 14 of 52 tables are not `STRICT`, so declared numeric columns on those tables accept
   text.
 
-[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Sienna-Platform/SiennaGridDB/releases/tag/v0.1.0
