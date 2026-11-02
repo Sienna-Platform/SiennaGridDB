@@ -379,18 +379,19 @@ def _insert_association(
     owner_category="Component",
     name="load",
     assoc_id=None,
+    unit_system=None,
 ):
     # id is the store-minted id (AUTOINCREMENT); left to auto-assign unless a
     # test needs a specific value (e.g. to force a collision).
     columns = [
         "owner_id", "owner_type", "owner_category", "time_series_type", "name",
         "initial_timestamp", "resolution", "length", "units", "quantity_kind",
-        "uri", "data_hash", "features_hash",
+        "unit_system", "uri", "data_hash", "features_hash",
     ]
     values = [
         owner_id, "thing", owner_category, "SingleTimeSeries", name,
         "2020-01-01T00:00:00", "PT1H", 24, units, quantity_kind,
-        uri, "01" * 32, "02" * 32,
+        unit_system, uri, "01" * 32, "02" * 32,
     ]
     if assoc_id is not None:
         columns.insert(0, "id")
@@ -437,6 +438,27 @@ def test_association_registered_quantity_kind_missing_unit_rejected(fresh_db):
         match="registered .quantity_kind, unit. pair",
     ):
         _insert_association(fresh_db, 1, units=None, quantity_kind="ActivePower")
+
+
+def test_association_per_unit_missing_unit_accepted(fresh_db):
+    """A COMPONENT_BASE series is per-unit: quantity_kind alone says what it
+    measures, as PSY writes max_active_power."""
+    make_entity(fresh_db, 1)
+    _insert_association(
+        fresh_db, 1, quantity_kind="ActivePower", unit_system="component_base"
+    )
+
+
+def test_association_per_unit_bad_unit_rejected(fresh_db):
+    make_entity(fresh_db, 1)
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="registered .quantity_kind, unit. pair",
+    ):
+        _insert_association(
+            fresh_db, 1, units="bananas", quantity_kind="ActivePower",
+            unit_system="component_base",
+        )
 
 
 def test_association_registered_pair_accepted(fresh_db):

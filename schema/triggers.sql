@@ -1584,7 +1584,8 @@ END;
 -- composite economic quantities ($/MWh, MMBtu/MWh) must not require a schema
 -- migration. But a row that uses a REGISTERED quantity-type name must pair it
 -- with a registered unit -- a typo'd or contradictory unit on a known quantity
--- is a defect, not a new vocabulary.
+-- is a defect, not a new vocabulary. A COMPONENT_BASE series is per-unit, so
+-- quantity_kind alone says what it measures and units may be omitted.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
 INSERT
@@ -1599,15 +1600,21 @@ INSERT
             name = NEW.quantity_kind
     )
     AND (
-        NEW.units IS NULL
-        OR NOT EXISTS (
-            SELECT
-                1
-            FROM
-                allowed_units au
-            WHERE
-                au.quantity_kind = NEW.quantity_kind
-                AND au.unit = NEW.units
+        (
+            NEW.units IS NULL
+            AND NEW.unit_system IS NOT 'component_base'
+        )
+        OR (
+            NEW.units IS NOT NULL
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_kind = NEW.quantity_kind
+                    AND au.unit = NEW.units
+            )
         )
     )
 BEGIN
@@ -1632,15 +1639,21 @@ UPDATE
             name = NEW.quantity_kind
     )
     AND (
-        NEW.units IS NULL
-        OR NOT EXISTS (
-            SELECT
-                1
-            FROM
-                allowed_units au
-            WHERE
-                au.quantity_kind = NEW.quantity_kind
-                AND au.unit = NEW.units
+        (
+            NEW.units IS NULL
+            AND NEW.unit_system IS NOT 'component_base'
+        )
+        OR (
+            NEW.units IS NOT NULL
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_kind = NEW.quantity_kind
+                    AND au.unit = NEW.units
+            )
         )
     )
 BEGIN
