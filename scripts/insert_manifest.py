@@ -16,6 +16,7 @@ from check_units_sync import build_db
 from generate_sql_schema import (
     attribute_rows,
     load_units_index,
+    resolve_ref,
     schema_doc,
     sql_type_for,
     vocabulary,
@@ -211,6 +212,58 @@ def association_entry(conn, schemas_root, section, rel_file):
     return {"section": section, "row_sql": row_sql, "bindings": bindings, "references": references}
 
 
+def resolved_encoding(prop, schemas_root, rel_file):
+    """A wire property's encoding, following $refs down to plain string types."""
+    while "$ref" in prop:
+        prop, rel_file = resolve_ref(schemas_root, prop["$ref"], rel_file)
+    return ENCODING_BY_KIND[sql_type_for(prop, schemas_root, rel_file)[0]]
+
+
+def time_series_entry(conn, schemas_root, spec):
+    """Association INSERT over the union of the storable series types' wire
+    properties, plus the feature-set INSERT the SDKs pair with it."""
+    section = spec["section"]
+    columns = table_columns(conn, section)
+    props = {}
+    defaults = {}
+    for branch in schema_doc(schemas_root, spec["file"])["oneOf"]:
+        node, rel_file = resolve_ref(schemas_root, branch["$ref"], spec["file"])
+        if node["properties"]["time_series_type"]["const"] in spec["unsupported_types"]:
+            continue
+        for name, prop in node["properties"].items():
+            props.setdefault(name, (prop, rel_file))
+            defaults.setdefault(name, set()).add(json.dumps(prop.get("default")))
+    by_column = {}
+    for name, (prop, rel_file) in props.items():
+        column = spec["columns"].get(name, name)
+        if column not in columns:
+            raise ManifestError(f"{section}: wire property {name} has no column")
+        encoding = spec["encodings"].get(name) or resolved_encoding(prop, schemas_root, rel_file)
+        value = spec["placeholders"].get(name, "?")
+        # A default the series types disagree on, like time_series_type's, is none.
+        default = default_literal(prop if len(defaults[name]) == 1 else {}, columns[column])
+        if default is not None:
+            value = f"COALESCE({value}, {default})"
+        by_column[column] = ({"path": name, "encode": encoding}, value)
+    names = [c for c in columns if c in by_column]
+    values = [by_column[c][1] for c in names]
+    bindings = [by_column[c][0] for c in names]
+    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
+    return {
+        "section": section,
+        "row_sql": f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join(values)})",
+        "bindings": bindings,
+        "references": [b["path"] for b, c in zip(bindings, names) if c in fk_columns],
+        # DO NOTHING on the key only: OR IGNORE would also swallow the reserved-key CHECK.
+        "feature_sql": (
+            "INSERT INTO feature_sets (features_hash, key, value_kind, value_int, "
+            "value_float, value_bool, value_str) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (features_hash, key) DO NOTHING"
+        ),
+        "unsupported_types": spec["unsupported_types"],
+    }
+
+
 def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
     inputs = load_inputs(schema_dir)
     config = inputs["config"]
@@ -231,6 +284,9 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
         association_entry(conn, schemas_path, section, rel_file)
         for section, rel_file in config["association_sections"]
     ]
+    time_series = time_series_entry(conn, schemas_path, config["time_series"])
+    for sql in (time_series["row_sql"], time_series["feature_sql"]):
+        conn.execute("EXPLAIN " + sql, [None] * sql.count("?"))
     return {
         "schema_user_version": conn.execute("PRAGMA user_version").fetchone()[0],
         "vocabulary": vocabulary(inputs["config"], components, schemas_path),
@@ -247,6 +303,7 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
             ),
         },
         "associations": associations,
+        "time_series": time_series,
         "unsupported_sections": config["unsupported_sections"],
     }
 

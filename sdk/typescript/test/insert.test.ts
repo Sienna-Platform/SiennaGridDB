@@ -138,6 +138,14 @@ test.skipIf(!hasGolden)("non-object entries of an unsupported type are counted",
   expect(insertDocument(fresh(), doc).unsupported.AGC).toBe(3);
 });
 
+test.skipIf(!hasGolden)("time series rows are reported, not written", () => {
+  const doc = golden();
+  doc.time_series_associations = [{ association_id: 7 }, { association_id: 8 }];
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.time_series_associations).toBe(2);
+  expect(count(db, "time_series_associations")).toBe(0);
+});
+
 const ENTRY_LISTS = [
   "ThermalStandard",
   "supplemental_attributes",

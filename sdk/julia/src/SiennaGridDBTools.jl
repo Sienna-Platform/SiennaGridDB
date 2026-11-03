@@ -9,6 +9,7 @@ module SiennaGridDBTools
 
 import DBInterface
 import JSON
+import SHA
 import SQLite
 
 export create_database,
@@ -30,5 +31,6 @@ include("encode.jl")
 include("manifest.jl")
 include("db.jl")
 include("insert.jl")
+include("time_series.jl")
 
 end
