@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 # The release artifact is the tarball built by .github/workflows/release.yml.
 [project]
 name = "sienna-griddb"
-version = "0.1.0"
+version = "0.4.0"
 description = "The canonical SQLite schema and sealed unit registry for Sienna applications."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -41,7 +41,6 @@ Issues = "https://github.com/Sienna-Platform/SiennaGridDB/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.2.1", "pytest-cov", "ruff", "pre-commit", "pydantic>=2"]
-docs = ["sphinx>=7", "myst-parser", "sphinx_math_dollar", "nbsphinx"]
 
 [tool.setuptools]
 packages = []
@@ -78,11 +77,3 @@ select = [
 # Applies once D is enabled; harmless until then.
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
-
-[tool.sqlfluff.core]
-dialect = "sqlite"
-
-[dependency-groups]
-dev = [
-    "pre-commit>=3.5.0",
-]

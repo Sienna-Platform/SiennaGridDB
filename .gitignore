@@ -166,6 +166,9 @@ cython_debug/
 
 griddb-example.sqlite
 
+# CI checks SiennaSchemas out into the repository root; never commit it
+/SiennaSchemas/
+
 # Design plans and agent scratch stay local
 .claude/plans/
 .superpowers/

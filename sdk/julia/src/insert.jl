@@ -1,6 +1,18 @@
 const SAVEPOINT = "sienna_griddb_tools_insert"
 
+# The caller's connection may have foreign keys off. The PRAGMA does nothing inside an
+# open transaction, so read it back.
+function require_foreign_keys(db::SQLite.DB)
+    DBInterface.execute(db, "PRAGMA foreign_keys = ON")
+    if scalar(db, "PRAGMA foreign_keys") != 1
+        msg = "foreign keys are off and cannot be turned on inside an open transaction"
+        throw(InsertError(msg))
+    end
+    return nothing
+end
+
 function with_savepoint(f::Function, db::SQLite.DB)
+    require_foreign_keys(db)
     DBInterface.execute(db, "SAVEPOINT $SAVEPOINT")
     try
         f()
@@ -197,16 +209,45 @@ function section_rows(doc::AbstractDict, key::AbstractString)
     return rows
 end
 
+# An id the insert needs before it writes a row, by the int encoder's rule.
+function required_id(row::AbstractDict, key::String, what::String)
+    value = get(row, key, nothing)
+    if isnothing(value)
+        throw(InsertError("$what: no $key"))
+    end
+    if !is_int_value(value)
+        throw(InsertError("$what: $key: expected an integer, got $(repr(value))"))
+    end
+    return Int(value)
+end
+
+entry_list(objs::AbstractVector, ::AbstractString) = objs
+function entry_list(_, type_name::AbstractString)
+    throw(InsertError("components.$type_name: not a list"))
+end
+
 function attribute_types(doc::AbstractDict)
     types = Dict{Int, String}()
     for assoc in section_rows(doc, "supplemental_attribute_associations")
-        types[Int(assoc["attribute_id"])] = assoc["attribute_type"]
+        id = required_id(assoc, "attribute_id", "supplemental_attribute_associations row")
+        types[id] = assoc["attribute_type"]
     end
     return types
 end
 
 section_size(rows) = length(rows)
 section_size(::Nothing) = 0
+
+# An entry's id, by the int encoder's rule; any other value is never skipped, it
+# reaches the encoder and fails there.
+function push_id!(ids::Set{Int}, id)
+    if is_int_value(id)
+        push!(ids, Int(id))
+    end
+    return ids
+end
+push_entry_id!(ids::Set{Int}, obj::AbstractDict) = push_id!(ids, get(obj, "id", nothing))
+push_entry_id!(ids::Set{Int}, _) = ids
 
 names_unsupported(row::AbstractDict, references::Vector{String}, ids::Set{Int}) =
     any(references) do r
@@ -280,13 +321,11 @@ function insert_document!(
     unsupported_ids = Set{Int}()
     owners = Dict{Int, Tuple{String, String}}()
     for type_name in sort!(collect(keys(components)))
-        objs = Any[point_at_sources(o, sources) for o in components[type_name]]
-        # Ids follow the int encoder's rule, so any other value is never skipped:
-        # it reaches the encoder and fails there.
-        ids = Set{Int}(
-            Int(o["id"]) for
-            o in objs if is_object(o) && is_int_value(get(o, "id", nothing))
-        )
+        objs = Any[
+            point_at_sources(o, sources) for o in entry_list(components[type_name], type_name)
+        ]
+        ids = Set{Int}()
+        foreach(o -> push_entry_id!(ids, o), objs)
         foreach(id -> owners[id] = (type_name, "Component"), ids)
         if haskey(m.components, type_name)
             push!(plans, (m.components[type_name], objs))
@@ -326,7 +365,7 @@ function insert_document!(
         end
         routed = Tuple{String, String, Any, String}[]
         for attr in attrs
-            id = Int(attr["id"])
+            id = required_id(attr, "id", "supplemental attribute")
             if !haskey(attr_types, id)
                 throw(
                     InsertError(
