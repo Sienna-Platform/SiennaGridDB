@@ -23,7 +23,7 @@
     "RenewablePowerPlant",
     "ThermalPowerPlant"
   ],
-  "supplemental_attribute_dirs": ["Core/SupplementalAttributes", "Operations/SupplementalAttributes"],
+  "supplemental_attribute_dirs": ["Core/SupplementalAttributes", "Investments/SupplementalAttributes", "Operations/SupplementalAttributes"],
   "time_series": {
     "section": "time_series_associations",
     "file": "TimeSeries/TimeSeriesAssociation.json",
@@ -37,6 +37,9 @@
   },
   "unsupported_sections": {
     "ext": "no table in schema.sql",
+    "financial_data": "no table in schema.sql",
+    "investment_schedule": "no table in schema.sql",
+    "requirements_associations": "no table in schema.sql",
     "voltage_control_associations": "no table in schema.sql"
   },
   "vocabulary_enums": {

@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 9; -- bump on every schema or registry change
+PRAGMA user_version = 10; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -1308,6 +1308,7 @@ VALUES
     ('DiscreteControlledACBranch', 0, 0),
     ('EmissionsData', 0, 0),
     ('EnergyReservoirStorage', 0, 0),
+    ('ExistingDevices', 0, 0),
     ('ExponentialLoad', 0, 0),
     ('FACTSControlDevice', 0, 0),
     ('FixedAdmittance', 0, 0),
@@ -1338,6 +1339,8 @@ VALUES
     ('RenewableDispatch', 0, 0),
     ('RenewableNonDispatch', 0, 0),
     ('RenewablePowerPlant', 0, 0),
+    ('RetirementPotential', 0, 0),
+    ('RetrofitPotential', 0, 0),
     ('SeriesCompensator', 0, 0),
     ('ShiftablePowerLoad', 0, 0),
     ('Source', 0, 0),
