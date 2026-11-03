@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import {
   insertComponent,
   insertComponents,
   insertDocument,
+  insertFile,
   InsertError,
   type Connection,
   type JsonObject,
@@ -507,4 +508,33 @@ test("misspelled field", () => {
     /numbr/,
   );
   expect(insertComponent(db, "Area", area(902, "c", { numbr: null })).skipped_fields).toEqual({});
+});
+
+test.skipIf(!hasGolden)("a portfolio file brings its base system first", () => {
+  const dir = mkdtempSync(join(tmpdir(), "b-"));
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 7)];
+  mkdirSync(join(dir, "base_system"));
+  writeFileSync(join(dir, "base_system", "system.json"), JSON.stringify(doc));
+  const portfolio = {
+    base_system_file: "base_system",
+    aggregation: "PowerSystems.Area",
+    financial_data: { id: 9000000, base_year: 2025 },
+    components: {},
+    time_series_associations: [series(gen, 7, { name: "fuel_price" })],
+  };
+  writeFileSync(join(dir, "portfolio.json"), JSON.stringify(portfolio));
+  const db = fresh();
+  const report = insertFile(db, dir);
+  expect(report.inserted.time_series_associations).toBe(2);
+  expect(report.unsupported.aggregation).toBe(1);
+  expect(report.unsupported.financial_data).toBe(1);
+  expect(db.prepare("SELECT id FROM time_series_associations ORDER BY id").pluck().all()).toEqual([7, 14]);
+});
+
+test.skipIf(!hasGolden)("ids already stored are named", () => {
+  const db = fresh();
+  insertDocument(db, golden());
+  expect(() => insertDocument(db, golden())).toThrow(/ids are already in the database/);
 });

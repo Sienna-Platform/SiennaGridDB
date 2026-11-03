@@ -235,8 +235,11 @@ function attribute_types(doc::AbstractDict)
     return types
 end
 
-section_size(rows) = length(rows)
+# Rows in a list section; a non-empty object or scalar is one.
+section_size(rows::AbstractVector) = length(rows)
+section_size(value::Union{AbstractDict, AbstractString}) = isempty(value) ? 0 : 1
 section_size(::Nothing) = 0
+section_size(value::Number) = iszero(value) ? 0 : 1
 
 # An entry's id, by the int encoder's rule; any other value is never skipped, it
 # reaches the encoder and fails there.
@@ -296,6 +299,24 @@ function report_dangling!(report::InsertReport, strict::Bool, plans, attrs, seri
     key_name = "dangling_time_series_references"
     mark_unsupported!(report, strict, key_name, length(dangling), reason)
     return nothing
+end
+
+# The insert's entity ids must miss the ones stored, so a portfolio numbers its own above
+# its base system's; the UNIQUE failure alone would not say why.
+function require_new_ids(db::SQLite.DB, plans, attrs)
+    ids = Set{Int}()
+    foreach(o -> push_entry_id!(ids, o), Iterators.flatten(objs for (_, objs) in plans))
+    foreach(o -> push_entry_id!(ids, o), attrs)
+    sql = "SELECT id FROM entities WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id"
+    taken = [r.id for r in DBInterface.execute(db, sql, (JSON.json(collect(ids)),))]
+    isempty(taken) && return nothing
+    throw(
+        InsertError(
+            "$(length(taken)) ids are already in the database (first: $(first(taken))): " *
+            "a document's ids must miss the stored ones, so a portfolio numbers its own " *
+            "above its base system's",
+        ),
+    )
 end
 
 """
@@ -362,6 +383,7 @@ function insert_document!(
         mark_unsupported!(report, strict, "time_series_values", length(series), reason)
     end
     report_dangling!(report, strict, plans, attrs, series)
+    require_new_ids(db, plans, attrs)
     with_statements(db) do cache
         seed_vocabulary!(db)
         for (plan, objs) in plans
@@ -426,6 +448,58 @@ function insert_document!(
                 store_values!(db, ts, series, time_series, store_id)
             end
         end
+    end
+    return report
+end
+
+# A document file, or the one .json document in a bundle directory (PSIP writes a
+# portfolio's base system as base_system/system.json).
+function document_path(path::AbstractString)
+    isdir(path) || return path
+    docs = sort!(filter(f -> endswith(f, ".json"), readdir(path)))
+    if length(docs) != 1
+        throw(InsertError("$path: expected one .json document, found $(length(docs))"))
+    end
+    return joinpath(path, only(docs))
+end
+
+# A sidecar a document names by basename, resolved next to it; nothing when unnamed.
+beside(path::AbstractString, name::AbstractString) =
+    isempty(name) ? nothing : joinpath(dirname(abspath(path)), name)
+beside(::AbstractString, ::Nothing) = nothing
+
+read_document(path::AbstractString) = JSON.parsefile(path; dicttype=Dict{String, Any})
+
+"""
+    insert_file!(db, path; strict=false, time_series=nothing) -> InsertReport
+
+Insert the document at `path` (a file or bundle directory) with its sidecar: `time_series`,
+else its `time_series_storage_file`. A portfolio's `base_system_file` goes in first, with
+its own sidecar; both in one savepoint.
+"""
+function insert_file!(
+    db::SQLite.DB,
+    path::AbstractString;
+    strict::Bool=false,
+    time_series::Union{Nothing, AbstractString}=nothing,
+)
+    path = document_path(path)
+    doc = read_document(path)
+    report = InsertReport()
+    with_savepoint(db) do
+        base = beside(path, get(doc, "base_system_file", nothing))
+        if !isnothing(base)
+            base = document_path(base)
+            system = read_document(base)
+            sidecar = beside(base, get(system, "time_series_storage_file", nothing))
+            merge_report!(
+                report,
+                insert_document!(db, system; strict=strict, time_series=sidecar),
+            )
+        end
+        stored = beside(path, get(doc, "time_series_storage_file", nothing))
+        sidecar = isnothing(time_series) ? stored : time_series
+        merge_report!(report, insert_document!(db, doc; strict=strict, time_series=sidecar))
     end
     return report
 end

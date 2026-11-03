@@ -16,3 +16,4 @@ print(report.to_json())   # inserted / skipped_fields / unsupported
   written. Pass `strict=True` to raise instead.
 - Cost payloads must be in `NATURAL_UNITS`; the database rejects anything else.
 - CLI: `python3 -m sienna_griddb_tools build system.json system.sqlite`.
+- A portfolio, its base system first, each with its time series: `griddb.insert_file(conn, "portfolio_dir")`, or `build portfolio_dir out.sqlite`.

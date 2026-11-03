@@ -393,7 +393,11 @@ The release tarball holds the schema only. Use the SDKs from a clone at the rele
 one reads the manifest of its own checkout and opens only a database whose `user_version`
 equals the manifest's `schema_user_version`.
 
+- **Files and portfolios.** `insert_file` (Julia `insert_file!`, TypeScript `insertFile`) and the CLIs' `build` take a document file or a bundle directory holding one `.json` document.
+  A portfolio's `base_system_file` goes in first, then the portfolio, in one transaction; each document's sidecar is its own `time_series_storage_file`, resolved next to it.
+  The same code inserts a system and a portfolio: the manifest maps every component type, and a portfolio's sections with no table (`financial_data`, `requirements_associations`, `investment_schedule`, `aggregation`) are reported, one per object.
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
+  A document whose ids are already stored fails, naming how many: a portfolio must number its own components above its base system's.
 - **Every field has a home.** `sql_codegen_map.json` places every property of a supported
   component, or manifest generation fails. A decomposed property maps each of its columns
   to a JSON path in the same file. A field the schemas do not define is counted in the
@@ -418,7 +422,7 @@ equals the manifest's `schema_user_version`.
   `views.sql` leaves them out, because a view over a missing table makes `ALTER TABLE ... RENAME COLUMN` fail.
   Without a sidecar, with a sidecar file that does not exist, or without infrastore 0.16.0 or later, the values are reported under `time_series_values`.
   The TypeScript runtime has no infrastore binding, so it reports the values under `time_series_values`.
-- **Not supported yet.** `voltage_control_associations`, `ext`, and the component types `schema_map.json` excludes are reported, not written.
+- **Not supported yet.** `voltage_control_associations`, `ext`, the portfolio sections above, and the component types `schema_map.json` excludes are reported, not written.
   So is an association or time series row that names a component of such a type.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never

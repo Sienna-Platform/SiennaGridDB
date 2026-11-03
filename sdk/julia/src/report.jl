@@ -36,6 +36,15 @@ function add_unsupported!(report::InsertReport, key::AbstractString, n::Int)
     return report
 end
 
+function merge_report!(report::InsertReport, other::InsertReport)
+    mergewith!(+, report.inserted, other.inserted)
+    for (type_name, fields) in other.skipped_fields
+        mergewith!(+, get!(report.skipped_fields, type_name, Dict{String, Int}()), fields)
+    end
+    mergewith!(+, report.unsupported, other.unsupported)
+    return report
+end
+
 function report_dict(report::InsertReport)
     return Dict(
         "inserted" => report.inserted,

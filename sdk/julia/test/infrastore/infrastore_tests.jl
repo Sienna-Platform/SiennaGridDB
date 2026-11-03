@@ -64,6 +64,35 @@ if HAS_GOLDEN
         end
     end
 
+    @testset "a portfolio file brings its base system first" begin
+        mktempdir() do dir
+            doc, sidecar = sidecar_document(dir)
+            bundle = joinpath(dir, "bundle")
+            mkpath(joinpath(bundle, "base_system"))
+            cp(sidecar, joinpath(bundle, "time_series.h5"))
+            cp(sidecar, joinpath(bundle, "base_system", "time_series.h5"))
+            doc["time_series_storage_file"] = "time_series.h5"
+            write(joinpath(bundle, "base_system", "system.json"), JSON.json(doc))
+            rows = [
+                merge(r, Dict("name" => r["name"] * "_2")) for
+                r in doc["time_series_associations"]
+            ]
+            portfolio = Dict(
+                "base_system_file" => "base_system",
+                "time_series_storage_file" => "time_series.h5",
+                "components" => Dict(),
+                "time_series_associations" => rows,
+            )
+            write(joinpath(bundle, "portfolio.json"), JSON.json(portfolio))
+            db = create_database(joinpath(dir, "a.sqlite"))
+            report = insert_file!(db, bundle)
+            @test report.inserted["time_series_associations"] == 4
+            sql = "SELECT store_id, count(*) FROM time_series_values GROUP BY 1 ORDER BY 1"
+            @test query_rows(db, sql) == [(1, 6), (2, 6)]
+            close(db)
+        end
+    end
+
     @testset "a second store minting the same ids lands past the first" begin
         mktempdir() do dir
             doc, sidecar = sidecar_document(dir)

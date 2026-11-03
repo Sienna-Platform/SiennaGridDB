@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { Connection } from "./db.js";
 import { seedVocabulary } from "./db.js";
 import { canonicalJson, encode, isInt, isNull, isObject, valueAt, type SqlValue } from "./encode.js";
@@ -278,10 +280,31 @@ function compareDangling(a: Dangling, b: Dangling): number {
   return a[2] - b[2];
 }
 
+/** Rows in a list section; a non-empty object or scalar is one. */
 function sectionSize(value: unknown): number {
   if (Array.isArray(value)) return value.length;
-  if (value !== null && typeof value === "object") return Object.keys(value).length;
-  return 0;
+  if (value !== null && typeof value === "object") return Object.keys(value).length > 0 ? 1 : 0;
+  return value ? 1 : 0;
+}
+
+/**
+ * The insert's entity ids must miss the ones stored, so a portfolio numbers its own above
+ * its base system's; the UNIQUE failure alone would not say why.
+ */
+function requireNewIds(db: Connection, plans: [ComponentPlan, JsonObject[]][], attrs: JsonObject[]): void {
+  const ids = [...plans.flatMap(([, objs]) => objs), ...attrs]
+    .map((o) => (isObject(o) ? o.id : undefined))
+    .filter(isInt);
+  const taken = db
+    .prepare("SELECT id FROM entities WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id")
+    .pluck()
+    .all(JSON.stringify(ids)) as number[];
+  if (taken.length > 0) {
+    throw new InsertError(
+      `${taken.length} ids are already in the database (first: ${taken[0]}): a document's ids ` +
+        "must miss the stored ones, so a portfolio numbers its own above its base system's",
+    );
+  }
 }
 
 export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOptions = {}): InsertReport {
@@ -329,6 +352,7 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     unsupported(report, strict, "time_series_values", series.length, reason);
   }
   reportDangling(report, strict, plans, attrs, series);
+  requireNewIds(db, plans, attrs);
   const supp = m.supplemental_attributes;
   withSavepoint(db, () => {
     seedVocabulary(db);
@@ -380,6 +404,35 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
       insertAssociations(db, ts, series, report);
       prepared(db, ts.store_rows_sql).run(storeId, BigInt(offset));
     }
+  });
+  return report;
+}
+
+/** A document file, or the one .json document in a bundle directory (PSIP writes a portfolio's base system as base_system/system.json). */
+function documentPath(path: string): string {
+  if (!statSync(path).isDirectory()) return path;
+  const docs = readdirSync(path).filter((f) => f.endsWith(".json")).sort();
+  if (docs.length !== 1) throw new InsertError(`${path}: expected one .json document, found ${docs.length}`);
+  return join(path, docs[0]);
+}
+
+const readDocument = (path: string): JsonObject => JSON.parse(readFileSync(path, "utf-8")) as JsonObject;
+
+/**
+ * Insert the document at path (a file or bundle directory). A portfolio's base_system_file,
+ * resolved next to it, goes in first; both in one savepoint. The sidecars are not read: this
+ * runtime has no infrastore binding.
+ */
+export function insertFile(db: Connection, path: string, opts: InsertOptions = {}): InsertReport {
+  const docPath = documentPath(path);
+  const doc = readDocument(docPath);
+  const report = new InsertReport();
+  withSavepoint(db, () => {
+    if (typeof doc.base_system_file === "string" && doc.base_system_file !== "") {
+      const base = documentPath(resolve(dirname(docPath), doc.base_system_file));
+      report.merge(insertDocument(db, readDocument(base), opts));
+    }
+    report.merge(insertDocument(db, doc, opts));
   });
   return report;
 }
