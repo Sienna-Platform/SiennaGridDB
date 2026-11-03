@@ -89,6 +89,9 @@ jobs:
           version=$(python3 .github/scripts/bump_version.py \
             "${{ steps.schema.outputs.current }}" "${{ steps.schema.outputs.latest }}")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          # The manifest records PRAGMA user_version, which the bump above
+          # increments, so regenerate it after the bump.
+          python3 scripts/generate_insert_manifest.py --schemas-path SiennaSchemas
 
       # The PR must not be opened with GITHUB_TOKEN: a PR it opens triggers no
       # workflows, so the schema tests would never run on it.
