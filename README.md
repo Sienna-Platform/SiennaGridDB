@@ -414,7 +414,7 @@ equals the manifest's `schema_user_version`.
   Their values come from the document's HDF5 sidecar (`time_series_storage_file`, or `time_series=` / `--time-series`): the Python or Julia SDK has infrastore export them as its SQLite tables under the `ts_` prefix, in the same transaction as the rest of the document.
   After the export, the SDK creates the views in `schema/time_series_views.sql`: `time_series_values` joins the values to the associations by id; `orphaned_time_series` lists exported series no association names.
   `views.sql` leaves them out, because a view over a missing table makes `ALTER TABLE ... RENAME COLUMN` fail.
-  Without a sidecar, with a sidecar file that does not exist, or without infrastore 0.15.0 or later, the values are reported under `time_series_values`.
+  Without a sidecar, with a sidecar file that does not exist, or without infrastore 0.16.0 or later, the values are reported under `time_series_values`.
   A database holds one export: a second document with series fails on the existing `ts_` tables.
   The TypeScript runtime has no infrastore binding, so it reports the values under `time_series_values`.
 - **Not supported yet.** `voltage_control_associations`, `ext`, and the component types `schema_map.json` excludes are reported, not written.
