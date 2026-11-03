@@ -52,6 +52,17 @@ def test_dangling_view_lists_unresolved_references(fresh_db):
     assert fresh_db.execute(VIEW).fetchall() == []
 
 
+def test_dangling_view_reads_a_reference_spelled_as_a_real(fresh_db):
+    """The SDKs read 9.0 as the id 9, so the view must too."""
+    make_entity(fresh_db, 1, "supplemental_attributes", "Payload")
+    fresh_db.execute(
+        "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (1, 'Payload', ?)",
+        (json.dumps({"fuel_cost_time_series": 9.0}),),
+    )
+    view = "SELECT source_column, path, association_id FROM dangling_time_series_references"
+    assert fresh_db.execute(view).fetchall() == [("value", '$."fuel_cost_time_series"', 9.0)]
+
+
 def test_dangling_view_reads_a_bare_integer_reference(fresh_db):
     """A scalar reference (here an attribute) is named by its column, not a key."""
     make_entity(fresh_db, 1, "thermal_generators", "Payload")

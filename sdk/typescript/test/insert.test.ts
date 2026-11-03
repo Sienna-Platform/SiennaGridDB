@@ -12,6 +12,8 @@ import {
   type Connection,
   type JsonObject,
 } from "../src/index.js";
+import { featuresHash } from "../src/encode.js";
+import { pointAtSources } from "../src/time_series.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../test/fixtures/insert/", import.meta.url));
 const CASES = ["NATURAL_UNITS", "COMPONENT_BASE"];
@@ -138,12 +140,161 @@ test.skipIf(!hasGolden)("non-object entries of an unsupported type are counted",
   expect(insertDocument(fresh(), doc).unsupported.AGC).toBe(3);
 });
 
-test.skipIf(!hasGolden)("time series rows are reported, not written", () => {
+const thermal = (doc: JsonObject): JsonObject => (doc.components as Record<string, JsonObject[]>).ThermalStandard[0];
+const series = (owner: JsonObject, associationId: number, fields: JsonObject = {}): JsonObject => ({
+  association_id: associationId,
+  owner_id: owner.id,
+  owner_type: "ThermalStandard",
+  owner_category: "Component",
+  time_series_type: "SingleTimeSeries",
+  name: "max_active_power",
+  features: { scenario: "base", year: 2030 },
+  uri: "/arrays/a",
+  element_type: "f64",
+  element_shape: [],
+  initial_timestamp: "2030-01-01T00:00:00",
+  resolution: "PT1H",
+  length: 24,
+  ...fields,
+});
+
+test.skipIf(!hasGolden)("time series associations and feature sets are stored; values are reported", () => {
   const doc = golden();
-  doc.time_series_associations = [{ association_id: 7 }, { association_id: 8 }];
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 7), series(gen, 8, { name: "min_active_power" })];
   const db = fresh();
-  expect(insertDocument(db, doc).unsupported.time_series_associations).toBe(2);
+  const report = insertDocument(db, doc);
+  expect(report.inserted.time_series_associations).toBe(2);
+  expect(report.unsupported.time_series_values).toBe(2);
+  const row = db.prepare("SELECT owner_id, name, features_hash FROM time_series_associations WHERE id = 7").get();
+  expect(row).toEqual({
+    owner_id: gen.id,
+    name: "max_active_power",
+    features_hash: featuresHash({ scenario: "base", year: 2030 }),
+  });
+  // Both rows share one feature set, stored once.
+  const features = db.prepare("SELECT key, value_kind, value_int, value_str FROM feature_sets ORDER BY key").all();
+  expect(features).toEqual([
+    { key: "scenario", value_kind: "str", value_int: null, value_str: "base" },
+    { key: "year", value_kind: "int", value_int: 2030, value_str: null },
+  ]);
+  delete doc.ext;
+  expect(() => insertDocument(fresh(), doc, { strict: true })).toThrow(/time_series_values/);
+});
+
+test.skipIf(!hasGolden)("a mislabelled time series owner raises", () => {
+  const doc = golden();
+  doc.time_series_associations = [series(thermal(doc), 7, { owner_type: "RenewableDispatch" })];
+  const db = fresh();
+  expect(() => insertDocument(db, doc)).toThrow(/is ThermalStandard/);
+  expect(count(db, "entities")).toBe(0);
+});
+
+test.skipIf(!hasGolden)("a series of an unsupported owner is reported", () => {
+  const doc = golden();
+  (doc.components as Record<string, JsonObject[]>).AGC = [{ id: 9001, name: "agc" }];
+  doc.time_series_associations = [series({ id: 9001 }, 7, { owner_type: "AGC" }), series(thermal(doc), 8)];
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.time_series_associations).toBe(1);
+  expect(count(db, "time_series_associations")).toBe(1);
+});
+
+test.skipIf(!hasGolden)("an unsupported series type is reported and strict raises", () => {
+  const doc = golden();
+  const row = series(thermal(doc), 7, { time_series_type: "NonSequentialTimeSeries" });
+  delete row.initial_timestamp;
+  delete row.resolution;
+  doc.time_series_associations = [row];
+  delete doc.ext;
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.NonSequentialTimeSeries).toBe(1);
   expect(count(db, "time_series_associations")).toBe(0);
+  expect(() => insertDocument(db, doc, { strict: true })).toThrow(/timestamps_uri/);
+});
+
+test.skipIf(!hasGolden)("a plant owns series as a supplemental attribute", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  const plant = { id: 9100, name: "plant1" };
+  (doc.supplemental_attributes as JsonObject[]).push(plant);
+  (doc.supplemental_attribute_associations as JsonObject[]).push({
+    component_id: gen.id,
+    component_type: "ThermalStandard",
+    attribute_id: plant.id,
+    attribute_type: "ThermalPowerPlant",
+  });
+  const owner = { owner_type: "ThermalPowerPlant", owner_category: "SupplementalAttribute" };
+  doc.time_series_associations = [series(plant, 7, owner)];
+  const db = fresh();
+  insertDocument(db, doc);
+  expect(count(db, "time_series_associations")).toBe(1);
+});
+
+// A golden thermal whose fuel cost is the series 7, with a DeterministicSingleTimeSeries 8
+// derived from it: same array, owner, name and features, plus forecast windows.
+function fuelCostSeries(doc: JsonObject): JsonObject {
+  const gen = thermal(doc);
+  const cost = (gen.operation_cost as JsonObject).variable_operation_cost as JsonObject;
+  Object.assign(cost, { variable_cost_type: "FUEL", fuel_cost: null, fuel_cost_time_series: 8 });
+  const derived = series(gen, 8, {
+    time_series_type: "DeterministicSingleTimeSeries",
+    name: "fuel_cost",
+    horizon: "PT24H",
+    interval: "PT24H",
+    count: 1,
+  });
+  doc.time_series_associations = [series(gen, 7, { name: "fuel_cost" }), derived];
+  delete doc.ext;
+  return gen;
+}
+
+test.skipIf(!hasGolden)("a DeterministicSingleTimeSeries is reported and strict raises", () => {
+  const doc = golden();
+  fuelCostSeries(doc);
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.DeterministicSingleTimeSeries).toBe(1);
+  expect(db.prepare("SELECT id FROM time_series_associations").all()).toEqual([{ id: 7 }]);
+  expect(() => insertDocument(fresh(), doc, { strict: true })).toThrow(/transform_single_time_series/);
+});
+
+test.skipIf(!hasGolden)("a reference to a derived series points at its source", () => {
+  const doc = golden();
+  const gen = fuelCostSeries(doc);
+  const db = fresh();
+  insertDocument(db, doc);
+  const stored = db.prepare("SELECT operation_cost FROM thermal_generators WHERE id = ?").get(gen.id) as {
+    operation_cost: string;
+  };
+  expect(stored.operation_cost).toContain('"fuel_cost_time_series":7');
+  expect(db.prepare("SELECT * FROM dangling_time_series_references").all()).toEqual([]);
+  // The caller's document is left as it was.
+  const cost = (gen.operation_cost as JsonObject).variable_operation_cost as JsonObject;
+  expect(cost.fuel_cost_time_series).toBe(8);
+});
+
+test.skipIf(!hasGolden)("a reference no stored series has is reported and strict raises", () => {
+  const doc = golden();
+  const gen = fuelCostSeries(doc);
+  // The payload names 8, but the document holds no series.
+  doc.time_series_associations = [];
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.dangling_time_series_references).toBe(1);
+  expect(db.prepare("SELECT association_id FROM dangling_time_series_references").all()).toEqual([
+    { association_id: 8 },
+  ]);
+  expect(() => insertDocument(fresh(), doc, { strict: true })).toThrow(
+    `first: entity ${String(gen.id)} fuel_cost_time_series=8`,
+  );
+});
+
+test("pointAtSources copies only what changes", () => {
+  const untouched = { curve: [1, 2], association_id: 3 };
+  const node = { a: untouched, b: [{ fuel_cost_time_series: 8 }], c: 8 };
+  const out = pointAtSources(node, new Map([[8, 7]]));
+  expect(out).toEqual({ a: untouched, b: [{ fuel_cost_time_series: 7 }], c: 8 });
+  expect(out.a).toBe(untouched);
+  expect(node.b[0].fuel_cost_time_series).toBe(8);
+  expect(pointAtSources(untouched, new Map([[8, 7]]))).toBe(untouched);
 });
 
 const ENTRY_LISTS = [
