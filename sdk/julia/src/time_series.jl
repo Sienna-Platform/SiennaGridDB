@@ -261,9 +261,9 @@ function copy_export!(db::SQLite.DB, path::AbstractString, views_sql::Vector{Str
     return nothing
 end
 
-# InfraStore exports through its own connection, so it cannot join the document's open
-# savepoint. It writes a temporary file that copy_export! brings in, which keeps the
-# document atomic (infrastore #106 item 1 would let it write into `db` directly).
+# InfraStore exports through its own connection and bundled SQLite, so it can neither join
+# the document's savepoint nor safely write to `db`'s file. It writes a temporary file that
+# copy_export! brings in, keeping the document atomic (see infrastore #106 item 1).
 is_sqlite_error(::SQLite.SQLiteException) = true
 is_sqlite_error(_) = false
 

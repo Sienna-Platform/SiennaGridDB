@@ -183,7 +183,9 @@ The SDK creates both views from `schema/time_series_views.sql` after it copies t
 A `DeterministicSingleTimeSeries` is not stored: it is a view over its `SingleTimeSeries`' array, which a consumer derives again.
 
 The SDKs write the export through a private file.
-infrastore's `export_sqlite` opens its own connection to the database it writes, so it cannot join the savepoint the SDK holds open for the document, and its IMMEDIATE transaction would be blocked by that savepoint.
+infrastore's `export_sqlite` opens its own connection to the database it writes, so it cannot join the savepoint the SDK holds open for the document.
+Nor can it safely write to a file the SDK has open: infrastore bundles its own SQLite, and two SQLite copies in one process do not see each other's locks (sqlite.org, "How To Corrupt An SQLite Database File", 2.2.1).
+An export into the GridDB file during an open savepoint is not blocked; it commits its tables outside the savepoint and can leave the SDK's connection failing with `disk I/O error`.
 So the SDK opens a copy of the sidecar with an in-memory catalog, has infrastore export to a temporary file, and copies that file's tables, rows, indexes and views into the GridDB file inside the document's savepoint.
 A failure anywhere then rolls back the whole document, values included, at the cost of the copy: about 1.3 s for an ERCOT DAM document with 345,671 series.
 Writing through the caller's transaction (infrastore #106, item 1) would remove the copy.

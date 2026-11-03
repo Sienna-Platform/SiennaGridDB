@@ -189,9 +189,9 @@ def export_values(conn, plan, rows, sidecar):
     """Store the rows' arrays as infrastore's SQLite export under plan's prefix. The
     sidecar is only read: infrastore opens a private copy with an in-memory catalog.
 
-    infrastore exports through its own connection, so it cannot join conn's open
-    savepoint. It writes a temporary file that _copy_export brings in, which keeps the
-    document atomic (infrastore #106 item 1 would let it write here directly)."""
+    infrastore exports through its own connection and bundled SQLite, so it can neither
+    join conn's savepoint nor safely write to conn's file. It writes a temporary file that
+    _copy_export brings in, keeping the document atomic (see infrastore #106 item 1)."""
     import infrastore
 
     # infrastore rejects null for an optional field, which a model dump spells for
