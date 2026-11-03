@@ -44,7 +44,8 @@ erDiagram
     allowed_units }o..o{ time_series_associations : "validates registered kinds"
     unit_basis_rules }o..o{ unit_conventions : "quantity_kind match, not FK"
     entities ||--o{ attributes : has
-    time_series_associations ||--o| ts_all_series : "values for (by id)"
+    time_series_stores ||--o{ time_series_associations : "origin of"
+    time_series_associations ||--o| time_series_export_series : "values for (by id)"
     entities ||--o{ time_series_associations : owns
 
     quantity_kinds {
@@ -95,7 +96,13 @@ erDiagram
         text data_hash
         text features_hash
     }
-    ts_all_series {
+    time_series_stores {
+        int id
+        int id_offset
+        text values_prefix
+    }
+    time_series_export_series {
+        int store_id
         text partition_name
         int id
         int array_id
@@ -150,35 +157,37 @@ sequenceDiagram
     participant App as Writer
     participant Assoc as time_series_associations
     participant Reg as allowed_units
-    participant Data as infrastore export (ts_ tables)
+    participant Data as infrastore export (ts_<store>_ tables)
 
     App->>Assoc: INSERT (id, owner, name, units, quantity_kind, uri, ...)
     Assoc->>Reg: trigger checks units against allowed_units when quantity_kind is registered
     Reg-->>Assoc: OK or ABORT
-    App->>Data: export_sqlite(store, db, table_prefix="ts_")
-    Note over Assoc,Data: ts_all_series.id is the association id; time_series_values joins them
+    App->>Data: export_sqlite(store, db, table_prefix="ts_<store id>_")
+    Note over Assoc,Data: the exported series id is the association id; time_series_values joins them
 ```
 
 Alongside those, `id` — the table's `INTEGER PRIMARY KEY AUTOINCREMENT` — carries the store-minted
-id, mirroring infrastore's own declaration verbatim. It is not decoration: a time-series-backed
+id plus its store's `id_offset`, mirroring infrastore's own declaration. It is not decoration: a time-series-backed
 cost payload names its series by this number, spelled `association_id` on the wire — a
 `TIME_SERIES_*` function data's `association_id`, `FuelCurve.fuel_cost_time_series`,
 `MarketBidTimeSeriesCost.start_up_association_id`, and the two `*_association_id` fields on the
 incremental and average-rate curves. `association_id` is not a second column, only this one's wire
 spelling. `AUTOINCREMENT` is what makes it safe to carry: SQLite never reissues an id a delete
 freed, so a stored reference either still resolves to the same row or fails outright — never
-silently landing on a different series that later reused the same number. The id is meaningful
-only against its origin store; aggregating rows from more than one store means re-minting ids on
-import, exactly as infrastore's own `merge` does.
+silently landing on a different series that later reused the same number. A store-minted id is
+meaningful only against its origin store, so the SDKs re-mint on import, as infrastore's own `merge`
+does: each sidecar is a `time_series_stores` row, and its ids and every payload reference to them
+move past every id the table ever held. The first document keeps its ids.
 
 `quantity_kind` is deliberately free-form, mirroring infrastore: composite economic quantities
 ($/MWh, MMBtu/MWh) must not require a vocabulary migration. The guard fires only when a row uses a
 REGISTERED quantity-type name with an unregistered (or missing) unit — a typo on a known quantity
 is a defect, not new vocabulary.
 
-The values are infrastore's SQLite export, written into the GridDB file under the `ts_` prefix: per partition an `_arrays`, `_values` and `_series` table, and the views `ts_all_values`, `ts_all_series` and `ts_all_arrays`.
-Each distinct array is stored once, and `ts_all_series.id` is the store's association id, so it joins `time_series_associations.id`.
-`time_series_values` is that join, with UTC timestamps; `orphaned_time_series` lists exported series no association names any more, since the export's tables have no foreign key into GridDB.
+The values are one infrastore SQLite export per store, written into the GridDB file under the prefix `ts_<store id>_` (`time_series_stores.values_prefix`): per partition an `_arrays`, `_values` and `_series` table, and the views `ts_<store id>_all_values`, `_all_series` and `_all_arrays`.
+Each distinct array is stored once per store. The SDK exports the rows with their re-minted ids, so an exported series id is the association id and joins `time_series_associations.id`.
+After each export the SDK rebuilds `time_series_export_series` and `time_series_export_values` as a `UNION ALL` over every exported store, the way infrastore's own `all_` views unite its partitions.
+`time_series_values` joins them, with UTC timestamps; `orphaned_time_series` lists exported series no association names any more, since the export's tables have no foreign key into GridDB.
 The SDK creates both views from `schema/time_series_views.sql` after it copies the export in, so a database without an export has no view over a missing table.
 A `DeterministicSingleTimeSeries` is not stored: it is a view over its `SingleTimeSeries`' array, which a consumer derives again.
 

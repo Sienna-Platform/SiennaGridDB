@@ -36,6 +36,7 @@
     }
   },
   "unsupported_sections": {
+    "aggregation": "no column for a portfolio's aggregation type",
     "ext": "no table in schema.sql",
     "financial_data": "no table in schema.sql",
     "investment_schedule": "no table in schema.sql",

@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 10; -- bump on every schema or registry change
+PRAGMA user_version = 11; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -11,6 +11,8 @@ DROP TABLE IF EXISTS service_associations;
 DROP TABLE IF EXISTS entities;
 
 DROP TABLE IF EXISTS time_series_associations;
+
+DROP TABLE IF EXISTS time_series_stores;
 
 DROP TABLE IF EXISTS feature_sets;
 
@@ -217,6 +219,16 @@ CREATE TABLE combined_cycle_associations (
 ) strict;
 CREATE INDEX idx_combined_cycle_associations_entity ON combined_cycle_associations (entity_id);
 
+-- One row per origin store (a document's time series sidecar). Its series ids are
+-- stored as store id + id_offset. values_prefix names the tables of its values'
+-- export, NULL when they were not stored.
+CREATE TABLE time_series_stores (
+    id INTEGER PRIMARY KEY,
+    id_offset INTEGER NOT NULL CHECK (id_offset >= 0),
+    sidecar TEXT,
+    values_prefix TEXT UNIQUE
+) strict;
+
 -- Mirrors infrastore's catalog table column-for-column so a row deserializes
 -- straight into a store, and projects onto the SiennaSchemas wire form.
 -- owner_category / time_series_type hold the wire string spelling directly
@@ -234,7 +246,7 @@ CREATE INDEX idx_combined_cycle_associations_entity ON combined_cycle_associatio
 -- durations so calendar periods stay distinguishable from fixed ones.
 -- time_reference NULL means unspecified, not UTC.
 CREATE TABLE time_series_associations (
-    -- The store-minted id, carried verbatim from the origin infrastore catalog;
+    -- The store-minted id, moved past the ids already stored (see below);
     -- `association_id` is its spelling on the wire (SiennaSchemas cost-payload
     -- fields such as TimeSeriesLinearFunctionData.association_id and its
     -- siblings), not a second stored column. AUTOINCREMENT mirrors infrastore's
@@ -243,11 +255,12 @@ CREATE TABLE time_series_associations (
     -- outright, never silently landing on a different series that later reused
     -- the same number.
     --
-    -- Meaningful only against its origin store: two rows from different stores
-    -- can carry the same id by coincidence, so aggregating rows from more than
-    -- one store means re-minting ids on import, exactly as infrastore's own
-    -- `merge` does when copying series between stores.
+    -- Two stores can mint the same id, so the SDKs move each store's ids past every
+    -- id already used: id = store id + time_series_stores.id_offset, as infrastore's
+    -- own `merge` re-mints ids when copying series between stores.
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- The store the row came from; NULL for a row written outside the SDKs.
+    store_id INTEGER REFERENCES time_series_stores (id),
     owner_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     owner_type TEXT NOT NULL,
     owner_category TEXT NOT NULL CHECK (owner_category IN ('Component', 'SupplementalAttribute')),
@@ -361,6 +374,8 @@ CREATE TABLE feature_sets (
 -- COALESCE: SQLite treats NULLs as distinct, so a NULL resolution or interval
 -- would escape a plain unique index. The empty string is never a valid
 -- ISO-8601 period.
+CREATE INDEX idx_time_series_associations_store ON time_series_associations (store_id);
+
 CREATE UNIQUE INDEX uq_ts_assoc_coalesced ON time_series_associations
     (owner_id, owner_category, time_series_type, name,
      COALESCE(resolution, ''), COALESCE(interval, ''), features_hash);

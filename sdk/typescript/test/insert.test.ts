@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,12 +8,13 @@ import {
   insertComponent,
   insertComponents,
   insertDocument,
+  insertFile,
   InsertError,
   type Connection,
   type JsonObject,
 } from "../src/index.js";
 import { featuresHash } from "../src/encode.js";
-import { pointAtSources } from "../src/time_series.js";
+import { remapReferences } from "../src/time_series.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../test/fixtures/insert/", import.meta.url));
 const CASES = ["NATURAL_UNITS", "COMPONENT_BASE"];
@@ -158,6 +159,28 @@ const series = (owner: JsonObject, associationId: number, fields: JsonObject = {
   ...fields,
 });
 
+test.skipIf(!hasGolden)("a second store minting the same ids lands past the first", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 7), series(gen, 8, { name: "min_active_power" })];
+  const db = fresh();
+  insertDocument(db, doc);
+  const rows = (doc.time_series_associations as JsonObject[]).map((r) => ({ ...r, name: `${String(r.name)}_2` }));
+  insertDocument(db, { components: {}, time_series_associations: rows });
+  const stores = db.prepare("SELECT id, id_offset, values_prefix FROM time_series_stores ORDER BY id").all();
+  expect(stores).toEqual([
+    { id: 1, id_offset: 0, values_prefix: null },
+    { id: 2, id_offset: 8, values_prefix: null },
+  ]);
+  const ids = db.prepare("SELECT store_id, id FROM time_series_associations ORDER BY id").all();
+  expect(ids).toEqual([
+    { store_id: 1, id: 7 },
+    { store_id: 1, id: 8 },
+    { store_id: 2, id: 15 },
+    { store_id: 2, id: 16 },
+  ]);
+});
+
 test.skipIf(!hasGolden)("time series associations and feature sets are stored; values are reported", () => {
   const doc = golden();
   const gen = thermal(doc);
@@ -287,14 +310,16 @@ test.skipIf(!hasGolden)("a reference no stored series has is reported and strict
   );
 });
 
-test("pointAtSources copies only what changes", () => {
+test("remapReferences copies only what changes", () => {
   const untouched = { curve: [1, 2], association_id: 3 };
   const node = { a: untouched, b: [{ fuel_cost_time_series: 8 }], c: 8 };
-  const out = pointAtSources(node, new Map([[8, 7]]));
+  const remap = (ref: number) => (ref === 8 ? 7 : ref);
+  const out = remapReferences(node, remap);
   expect(out).toEqual({ a: untouched, b: [{ fuel_cost_time_series: 7 }], c: 8 });
   expect(out.a).toBe(untouched);
   expect(node.b[0].fuel_cost_time_series).toBe(8);
-  expect(pointAtSources(untouched, new Map([[8, 7]]))).toBe(untouched);
+  expect(remapReferences(untouched, remap)).toBe(untouched);
+  expect(remapReferences(node, undefined)).toBe(node);
 });
 
 const ENTRY_LISTS = [
@@ -483,4 +508,33 @@ test("misspelled field", () => {
     /numbr/,
   );
   expect(insertComponent(db, "Area", area(902, "c", { numbr: null })).skipped_fields).toEqual({});
+});
+
+test.skipIf(!hasGolden)("a portfolio file brings its base system first", () => {
+  const dir = mkdtempSync(join(tmpdir(), "b-"));
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 7)];
+  mkdirSync(join(dir, "base_system"));
+  writeFileSync(join(dir, "base_system", "system.json"), JSON.stringify(doc));
+  const portfolio = {
+    base_system_file: "base_system",
+    aggregation: "PowerSystems.Area",
+    financial_data: { id: 9000000, base_year: 2025 },
+    components: {},
+    time_series_associations: [series(gen, 7, { name: "fuel_price" })],
+  };
+  writeFileSync(join(dir, "portfolio.json"), JSON.stringify(portfolio));
+  const db = fresh();
+  const report = insertFile(db, dir);
+  expect(report.inserted.time_series_associations).toBe(2);
+  expect(report.unsupported.aggregation).toBe(1);
+  expect(report.unsupported.financial_data).toBe(1);
+  expect(db.prepare("SELECT id FROM time_series_associations ORDER BY id").pluck().all()).toEqual([7, 14]);
+});
+
+test.skipIf(!hasGolden)("ids already stored are named", () => {
+  const db = fresh();
+  insertDocument(db, golden());
+  expect(() => insertDocument(db, golden())).toThrow(/ids are already in the database/);
 });

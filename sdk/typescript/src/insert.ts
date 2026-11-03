@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { Connection } from "./db.js";
 import { seedVocabulary } from "./db.js";
 import { canonicalJson, encode, isInt, isNull, isObject, valueAt, type SqlValue } from "./encode.js";
@@ -14,7 +16,9 @@ import {
   danglingReferences,
   derivedSources,
   featureRows,
-  pointAtSources,
+  remapReferences,
+  seriesRemap,
+  shiftIds,
   requireOwnerLabel,
   type Dangling,
 } from "./time_series.js";
@@ -276,10 +280,31 @@ function compareDangling(a: Dangling, b: Dangling): number {
   return a[2] - b[2];
 }
 
+/** Rows in a list section; a non-empty object or scalar is one. */
 function sectionSize(value: unknown): number {
   if (Array.isArray(value)) return value.length;
-  if (value !== null && typeof value === "object") return Object.keys(value).length;
-  return 0;
+  if (value !== null && typeof value === "object") return Object.keys(value).length > 0 ? 1 : 0;
+  return value ? 1 : 0;
+}
+
+/**
+ * The insert's entity ids must miss the ones stored, so a portfolio numbers its own above
+ * its base system's; the UNIQUE failure alone would not say why.
+ */
+function requireNewIds(db: Connection, plans: [ComponentPlan, JsonObject[]][], attrs: JsonObject[]): void {
+  const ids = [...plans.flatMap(([, objs]) => objs), ...attrs]
+    .map((o) => (isObject(o) ? o.id : undefined))
+    .filter(isInt);
+  const taken = db
+    .prepare("SELECT id FROM entities WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id")
+    .pluck()
+    .all(JSON.stringify(ids)) as number[];
+  if (taken.length > 0) {
+    throw new InsertError(
+      `${taken.length} ids are already in the database (first: ${taken[0]}): a document's ids ` +
+        "must miss the stored ones, so a portfolio numbers its own above its base system's",
+    );
+  }
 }
 
 export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOptions = {}): InsertReport {
@@ -290,15 +315,17 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   for (const [typeName, objs] of Object.entries(components)) {
     if (!Array.isArray(objs)) throw new InsertError(`components.${typeName}: not a list`);
   }
-  // References to a derived series name its source, which GridDB stores instead.
-  const sources = derivedSources(sectionRows(doc, m.time_series.section));
+  // Series ids move past every id stored, and references to a derived series name its
+  // source, which GridDB stores instead.
+  const offset = Number(db.prepare(m.time_series.id_offset_sql).pluck().get());
+  const remap = seriesRemap(derivedSources(sectionRows(doc, m.time_series.section)), offset);
   const plans: [ComponentPlan, JsonObject[]][] = [];
   // Ids follow the int encoder's rule, so any other value reaches the encoder and fails there.
   // A non-object entry (schema-invalid) has no id and is only counted.
   const unsupportedIds = new Set<number>();
   const owners = new Map<number, [string, string]>();
   for (const typeName of Object.keys(components).sort()) {
-    const objs = components[typeName].map((o) => pointAtSources(o, sources));
+    const objs = components[typeName].map((o) => remapReferences(o, remap));
     const ids = objs.map((o) => o?.id).filter(isInt);
     for (const id of ids) owners.set(id, [typeName, "Component"]);
     const plan = planFor(typeName, objs.length, report, strict);
@@ -314,17 +341,18 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   for (const a of sectionRows(doc, "supplemental_attribute_associations")) {
     attrTypes.set(requiredId(a, "attribute_id", "supplemental_attribute_associations row"), a.attribute_type as string);
   }
-  const attrs = pointAtSources(sectionRows(doc, "supplemental_attributes"), sources);
+  const attrs = remapReferences(sectionRows(doc, "supplemental_attributes"), remap);
   for (const attr of attrs) {
     const attrType = attrTypes.get(attr.id as number);
     if (attrType !== undefined) owners.set(attr.id as number, [attrType, "SupplementalAttribute"]);
   }
-  const series = timeSeriesRows(doc, report, strict, unsupportedIds, owners);
+  const series = shiftIds(timeSeriesRows(doc, report, strict, unsupportedIds, owners), offset);
   if (series.length > 0) {
     const reason = "the TypeScript SDK has no infrastore binding to read the time series sidecar";
     unsupported(report, strict, "time_series_values", series.length, reason);
   }
   reportDangling(report, strict, plans, attrs, series);
+  requireNewIds(db, plans, attrs);
   const supp = m.supplemental_attributes;
   withSavepoint(db, () => {
     seedVocabulary(db);
@@ -370,7 +398,41 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
         report.addInserted(section.section);
       }
     }
-    insertAssociations(db, m.time_series, series, report);
+    if (series.length > 0) {
+      const ts = m.time_series;
+      const storeId = BigInt(prepared(db, ts.store_sql).run(BigInt(offset), null).lastInsertRowid);
+      insertAssociations(db, ts, series, report);
+      prepared(db, ts.store_rows_sql).run(storeId, BigInt(offset));
+    }
+  });
+  return report;
+}
+
+/** A document file, or the one .json document in a bundle directory (PSIP writes a portfolio's base system as base_system/system.json). */
+function documentPath(path: string): string {
+  if (!statSync(path).isDirectory()) return path;
+  const docs = readdirSync(path).filter((f) => f.endsWith(".json")).sort();
+  if (docs.length !== 1) throw new InsertError(`${path}: expected one .json document, found ${docs.length}`);
+  return join(path, docs[0]);
+}
+
+const readDocument = (path: string): JsonObject => JSON.parse(readFileSync(path, "utf-8")) as JsonObject;
+
+/**
+ * Insert the document at path (a file or bundle directory). A portfolio's base_system_file,
+ * resolved next to it, goes in first; both in one savepoint. The sidecars are not read: this
+ * runtime has no infrastore binding.
+ */
+export function insertFile(db: Connection, path: string, opts: InsertOptions = {}): InsertReport {
+  const docPath = documentPath(path);
+  const doc = readDocument(docPath);
+  const report = new InsertReport();
+  withSavepoint(db, () => {
+    if (typeof doc.base_system_file === "string" && doc.base_system_file !== "") {
+      const base = documentPath(resolve(dirname(docPath), doc.base_system_file));
+      report.merge(insertDocument(db, readDocument(base), opts));
+    }
+    report.merge(insertDocument(db, doc, opts));
   });
   return report;
 }

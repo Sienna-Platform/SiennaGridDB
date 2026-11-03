@@ -1,5 +1,7 @@
 """Insert SDK objects (as JSON-shaped dicts) using the manifest's SQL."""
 
+import json
+import os
 import sqlite3
 from contextlib import contextmanager
 
@@ -13,7 +15,9 @@ from .time_series import (
     derived_sources,
     export_values,
     insert_associations,
-    point_at_sources,
+    remap_references,
+    series_remap,
+    shift_ids,
     require_owner_label,
     values_missing,
 )
@@ -234,20 +238,47 @@ def _report_dangling(report, strict, plans, attrs, series):
         _unsupported(report, strict, "dangling_time_series_references", len(dangling), reason)
 
 
+def _section_size(value):
+    """Rows in a list section; a non-empty object or scalar is one."""
+    if isinstance(value, list):
+        return len(value)
+    return 1 if value else 0
+
+
+def _require_new_ids(conn, plans, attrs):
+    """The insert's entity ids must miss the ones stored, so a portfolio numbers its own
+    above its base system's; the UNIQUE failure alone would not say why."""
+    ids = [o["id"] for _, objs in plans for o in objs if isinstance(o, dict) and is_int(o.get("id"))]
+    ids += [a["id"] for a in attrs if is_int(a.get("id"))]
+    taken = conn.execute(
+        "SELECT id FROM entities WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id",
+        [json.dumps(ids)],
+    ).fetchall()
+    if taken:
+        raise InsertError(
+            f"{len(taken)} ids are already in the database (first: {taken[0][0]}): a document's "
+            "ids must miss the stored ones, so a portfolio numbers its own above its base system's"
+        )
+
+
 def insert_document(conn, doc, *, strict=False, time_series=None):
     """Insert a whole SystemDocument in one savepoint. time_series is the HDF5
-    sidecar holding its arrays (time_series_storage_file); it is only read."""
+    sidecar holding its arrays (time_series_storage_file); it is only read. The
+    sidecar is a time_series_stores row, and its series ids move past every id stored."""
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
     components = _components(doc)
-    # References to a derived series name its source, which GridDB stores instead.
-    sources = derived_sources(_section_rows(doc, manifest["time_series"]["section"]))
+    ts = manifest["time_series"]
+    # Series ids move past every id stored, and references to a derived series name
+    # its source, which GridDB stores instead.
+    offset = conn.execute(ts["id_offset_sql"]).fetchone()[0]
+    remap = series_remap(derived_sources(_section_rows(doc, ts["section"])), offset)
     plans = []
     unsupported_ids = set()
     owners = {}
     for type_name in sorted(components):
-        objs = [point_at_sources(as_json_data(o), sources) for o in components[type_name]]
+        objs = [remap_references(as_json_data(o), remap) for o in components[type_name]]
         ids = [o.get("id") for o in objs if isinstance(o, dict)]
         ids = [i for i in ids if is_int(i)]
         owners.update(dict.fromkeys(ids, (type_name, "Component")))
@@ -258,20 +289,21 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
             unsupported_ids.update(ids)
     plans.sort(key=lambda p: (p[0]["rank"], p[0]["type_name"]))
     for section, reason in sorted(manifest["unsupported_sections"].items()):
-        rows = doc.get(section) or []
-        if len(rows) > 0:
-            _unsupported(report, strict, section, len(rows), reason)
+        n = _section_size(doc.get(section))
+        if n > 0:
+            _unsupported(report, strict, section, n, reason)
 
     attr_types = _attribute_types(doc)
-    attrs = point_at_sources(_section_rows(doc, "supplemental_attributes"), sources)
+    attrs = remap_references(_section_rows(doc, "supplemental_attributes"), remap)
     for attr in attrs:
         if attr.get("id") in attr_types:
             owners[attr["id"]] = (attr_types[attr["id"]], "SupplementalAttribute")
-    series = _time_series_rows(doc, report, strict, unsupported_ids, owners)
+    series = shift_ids(_time_series_rows(doc, report, strict, unsupported_ids, owners), offset)
     missing = values_missing(time_series) if series else None
     if missing is not None:
         _unsupported(report, strict, "time_series_values", len(series), missing)
     _report_dangling(report, strict, plans, attrs, series)
+    _require_new_ids(conn, plans, attrs)
     supplemental = manifest["supplemental_attributes"]
     with _savepoint(conn):
         seed_vocabulary(conn)
@@ -322,7 +354,49 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
                     conn, section["row_sql"], _params(section["bindings"], row, what), what
                 )
                 report.add_inserted(name)
-        insert_associations(conn, manifest["time_series"], series, report)
-        if series and missing is None:
-            export_values(conn, manifest["time_series"], series, time_series)
+        if series:
+            sidecar = None if time_series is None else str(time_series)
+            store_id = conn.execute(ts["store_sql"], [offset, sidecar]).lastrowid
+            insert_associations(conn, ts, series, report)
+            conn.execute(ts["store_rows_sql"], [store_id, offset])
+            if missing is None:
+                export_values(conn, ts, series, time_series, store_id)
+    return report
+
+
+def _document_path(path):
+    """A document file, or the one .json document in a bundle directory (PSIP writes a
+    portfolio's base system as base_system/system.json)."""
+    path = os.fspath(path)
+    if not os.path.isdir(path):
+        return path
+    docs = sorted(f for f in os.listdir(path) if f.endswith(".json"))
+    if len(docs) != 1:
+        raise InsertError(f"{path}: expected one .json document, found {len(docs)}")
+    return os.path.join(path, docs[0])
+
+
+def _beside(path, name):
+    """A sidecar a document names by basename, resolved next to it; None when unnamed."""
+    return os.path.join(os.path.dirname(os.path.abspath(path)), name) if name else None
+
+
+def insert_file(conn, path, *, strict=False, time_series=None):
+    """Insert the document at path (a file or bundle directory) with its sidecar:
+    time_series, else its time_series_storage_file. A portfolio's base_system_file
+    goes in first, with its own sidecar; both in one savepoint."""
+    path = _document_path(path)
+    with open(path, encoding="utf-8") as handle:
+        doc = json.load(handle)
+    report = InsertReport()
+    with _savepoint(conn):
+        base = _beside(path, doc.get("base_system_file"))
+        if base is not None:
+            base = _document_path(base)
+            with open(base, encoding="utf-8") as handle:
+                system = json.load(handle)
+            sidecar = _beside(base, system.get("time_series_storage_file"))
+            report.merge(insert_document(conn, system, strict=strict, time_series=sidecar))
+        sidecar = time_series or _beside(path, doc.get("time_series_storage_file"))
+        report.merge(insert_document(conn, doc, strict=strict, time_series=sidecar))
     return report

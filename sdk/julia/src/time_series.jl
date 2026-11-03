@@ -126,18 +126,41 @@ is_reference(key::AbstractString) =
     key in ("association_id", "fuel_cost_time_series") || endswith(key, "_association_id")
 
 """
-`node` with its time series references to a derived series naming the source instead
-(the keys `dangling_time_series_references` reads). A dict or vector is copied only
-when something inside it changes; the caller's stays as it was.
+A document's series id to the one GridDB stores: a derived series' names its source, and
+every id moves past `offset`.
 """
-function point_at_sources(
-    node::Union{AbstractDict, AbstractVector},
-    sources::Dict{Int, Int},
-)
+struct SeriesRemap
+    sources::Dict{Int, Int}
+    offset::Int
+end
+(r::SeriesRemap)(ref::Int) = get(r.sources, ref, ref) + r.offset
+is_identity(r::SeriesRemap) = isempty(r.sources) && r.offset == 0
+
+"""
+The association rows with their ids moved past `offset`; any other id reaches the
+encoder and fails there.
+"""
+shift_ids(rows::Vector{Any}, offset::Int) =
+    offset == 0 ? rows : Any[shifted_row(r, offset) for r in rows]
+
+function shifted_row(row::AbstractDict, offset::Int)
+    id = get(row, "association_id", nothing)
+    is_int_value(id) || return row
+    out = Dict{String, Any}(row)
+    out["association_id"] = Int(id) + offset
+    return out
+end
+
+"""
+`node` with each time series reference (the keys `dangling_time_series_references` reads)
+replaced by `remap(id)`. A dict or vector is copied only when something inside it
+changes; the caller's stays as it was.
+"""
+function remap_references(node::Union{AbstractDict, AbstractVector}, remap::SeriesRemap)
     out = node
-    isempty(sources) && return out
+    is_identity(remap) && return out
     for (k, v) in pairs(node)
-        new = pointed_at_source(k, v, sources)
+        new = remapped(k, v, remap)
         new === v && continue
         if out === node
             out = widened_copy(node)
@@ -146,7 +169,7 @@ function point_at_sources(
     end
     return out
 end
-point_at_sources(node, ::Dict{Int, Int}) = node
+remap_references(node, ::SeriesRemap) = node
 
 widened_copy(node::AbstractDict) = Dict{String, Any}(node)
 widened_copy(node::AbstractVector) = Vector{Any}(node)
@@ -192,13 +215,14 @@ function collect_dangling!(found, entity_id::Int, key::String, v, stored_ids::Se
     return collect_dangling!(found, entity_id, v, stored_ids)
 end
 
-function pointed_at_source(key::AbstractString, v, sources::Dict{Int, Int})
-    if is_reference(key) && is_int_value(v) && haskey(sources, Int(v))
-        return sources[Int(v)]
+function remapped(key::AbstractString, v, remap::SeriesRemap)
+    if is_reference(key) && is_int_value(v)
+        new = remap(Int(v))
+        return new == v ? v : new
     end
-    return point_at_sources(v, sources)
+    return remap_references(v, remap)
 end
-pointed_at_source(_, v, sources::Dict{Int, Int}) = point_at_sources(v, sources)
+remapped(_, v, remap::SeriesRemap) = remap_references(v, remap)
 
 """
     export_values(f, sidecar, rows, prefix)
@@ -226,10 +250,36 @@ function values_missing_reason(sidecar::AbstractString)
 end
 
 """
+Rebuild the views uniting every exported store, one UNION ALL arm per store.
+"""
+function unite_exports!(db::SQLite.DB, plan::TimeSeriesPlan)
+    stores =
+        [(r.id, r.values_prefix) for r in DBInterface.execute(db, plan.exported_stores_sql)]
+    for (name, arm) in plan.export_views
+        arms = join(
+            (
+                replace(arm, "{store_id}" => string(id), "{prefix}" => p) for
+                (id, p) in stores
+            ),
+            " UNION ALL ",
+        )
+        DBInterface.execute(db, "DROP VIEW IF EXISTS \"$name\"")
+        DBInterface.execute(db, "CREATE VIEW \"$name\" AS $arms")
+    end
+    return nothing
+end
+
+"""
 infrastore's export, written into `db` inside the caller's transaction: its tables with
 their rows, then their indexes and views, then GridDB's views over it.
 """
-function copy_export!(db::SQLite.DB, path::AbstractString, views_sql::Vector{String})
+function copy_export!(
+    db::SQLite.DB,
+    path::AbstractString,
+    plan::TimeSeriesPlan,
+    store_id::Int,
+    prefix::String,
+)
     src = SQLite.DB(path)
     try
         sql = "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
@@ -254,7 +304,9 @@ function copy_export!(db::SQLite.DB, path::AbstractString, views_sql::Vector{Str
         for (kind, _, ddl) in objects
             kind == "table" || DBInterface.execute(db, ddl)
         end
-        foreach(sql -> DBInterface.execute(db, sql), views_sql)
+        DBInterface.execute(db, plan.values_prefix_sql, (prefix, store_id))
+        unite_exports!(db, plan)
+        foreach(sql -> DBInterface.execute(db, sql), plan.views_sql)
     finally
         close(src)
     end
@@ -267,10 +319,17 @@ end
 is_sqlite_error(::SQLite.SQLiteException) = true
 is_sqlite_error(_) = false
 
-function store_values!(db::SQLite.DB, plan::TimeSeriesPlan, rows::Vector{Any}, sidecar)
-    export_values(sidecar, rows, plan.table_prefix) do path
+function store_values!(
+    db::SQLite.DB,
+    plan::TimeSeriesPlan,
+    rows::Vector{Any},
+    sidecar,
+    store_id::Int,
+)
+    prefix = "$(plan.table_prefix)$(store_id)_"
+    export_values(sidecar, rows, prefix) do path
         try
-            copy_export!(db, path, plan.views_sql)
+            copy_export!(db, path, plan, store_id, prefix)
         catch e
             is_sqlite_error(e) || rethrow()
             throw(InsertError("time series values: $(sprint(showerror, e))"))

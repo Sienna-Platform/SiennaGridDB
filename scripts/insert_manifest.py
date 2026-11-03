@@ -25,8 +25,26 @@ from generate_sql_schema import (
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
-# infrastore's SQLite export writes its tables under this prefix; time_series_views.sql reads it.
+# Each store's values are infrastore's SQLite export under this prefix plus "<store id>_".
 TIME_SERIES_TABLE_PREFIX = "ts_"
+# One arm per exported store; the SDKs rebuild each view as the UNION ALL of the arms,
+# which time_series_views.sql reads.
+TIME_SERIES_EXPORT_VIEWS = {
+    "time_series_export_series": (
+        "SELECT {store_id} AS store_id, partition_name, array_id, id, owner_id, name, "
+        'time_reference FROM "{prefix}all_series"'
+    ),
+    "time_series_export_values": (
+        "SELECT {store_id} AS store_id, partition_name, array_id, timestamp, issue_time, "
+        'percentile, scenario, value FROM "{prefix}all_values"'
+    ),
+}
+# The SDKs move a document's series ids past this, every id the table ever held.
+TIME_SERIES_ID_OFFSET_SQL = (
+    "SELECT max(coalesce((SELECT seq FROM sqlite_sequence "
+    "WHERE name = 'time_series_associations'), 0), "
+    "coalesce((SELECT max(id) FROM time_series_associations), 0))"
+)
 
 ENCODING_BY_KIND = {
     "integer": "int",
@@ -281,7 +299,17 @@ def time_series_entry(conn, schemas_root, spec, schema_dir):
             "ON CONFLICT (features_hash, key) DO NOTHING"
         ),
         "unsupported_types": spec["unsupported_types"],
+        "id_offset_sql": TIME_SERIES_ID_OFFSET_SQL,
+        "store_sql": "INSERT INTO time_series_stores (id_offset, sidecar) VALUES (?, ?)",
+        # The rows past the offset are the ones this document's insert just wrote.
+        "store_rows_sql": "UPDATE time_series_associations SET store_id = ? WHERE id > ?",
+        "values_prefix_sql": "UPDATE time_series_stores SET values_prefix = ? WHERE id = ?",
+        "exported_stores_sql": (
+            "SELECT id, values_prefix FROM time_series_stores "
+            "WHERE values_prefix IS NOT NULL ORDER BY id"
+        ),
         "table_prefix": TIME_SERIES_TABLE_PREFIX,
+        "export_views": TIME_SERIES_EXPORT_VIEWS,
         "views_sql": time_series_views(schema_dir),
     }
 

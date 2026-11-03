@@ -79,6 +79,34 @@ if HAS_GOLDEN
         end
     end
 
+    @testset "ids already stored are named" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                insert_document!(db, golden())
+                err = try
+                    insert_document!(db, golden())
+                catch e
+                    e
+                end
+                @test err isa InsertError
+                @test occursin("ids are already in the database", sprint(showerror, err))
+            end
+        end
+    end
+
+    @testset "portfolio sections count one object each" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                doc["financial_data"] = Dict("id" => 9_000_000, "base_year" => 2025)
+                doc["aggregation"] = "PowerSystems.Area"
+                report = insert_document!(db, doc)
+                @test report.unsupported["financial_data"] == 1
+                @test report.unsupported["aggregation"] == 1
+            end
+        end
+    end
+
     @testset "strict gap rolls back" begin
         mktempdir() do dir
             fresh(dir) do db

@@ -45,7 +45,13 @@ struct TimeSeriesPlan
     references::Vector{String}
     feature_sql::String
     unsupported_types::Dict{String, String}
+    id_offset_sql::String
+    store_sql::String
+    store_rows_sql::String
+    values_prefix_sql::String
+    exported_stores_sql::String
     table_prefix::String
+    export_views::Dict{String, String}
     views_sql::Vector{String}
 end
 
@@ -124,7 +130,13 @@ function parse_manifest(raw::AbstractDict)
         String.(ts["references"]),
         ts["feature_sql"],
         Dict{String, String}(ts["unsupported_types"]),
+        ts["id_offset_sql"],
+        ts["store_sql"],
+        ts["store_rows_sql"],
+        ts["values_prefix_sql"],
+        ts["exported_stores_sql"],
         ts["table_prefix"],
+        Dict{String, String}(ts["export_views"]),
         String.(ts["views_sql"]),
     )
     return Manifest(
