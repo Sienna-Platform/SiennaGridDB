@@ -49,17 +49,6 @@ generate-registry:
 verify-registry db=db-name:
     @{{python-command}} scripts/verify_unit_registry.py {{db}}
 
-format sql-schema:
-    #!/usr/bin/env bash
-    set -euxo pipefail
-    echo "Formatting code {{sql-schema}}"
-    if command -v sleek &> /dev/null; then
-        sleek {{sql-schema}}
-    else
-        echo "SQL formatter does not exist. Installed it using `cargo install sleek`"
-        exit 1
-    fi
-
 # Regenerate the insert manifest (SiennaSchemas at the CI-pinned tag).
 generate-insert-manifest schemas="../SiennaSchemas":
     {{python-command}} scripts/generate_insert_manifest.py --schemas-path {{schemas}}

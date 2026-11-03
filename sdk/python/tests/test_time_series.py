@@ -58,6 +58,20 @@ def test_associations_and_feature_sets_are_stored(conn):
     assert features == [("scenario", "str", None, "base"), ("year", "int", 2030, None)]
 
 
+def test_interval_alignment_defaults_to_period_ending(conn):
+    doc = golden()
+    gen = thermal(doc)
+    doc["time_series_associations"] = [
+        series(gen, 7),
+        series(gen, 8, name="b", interval_alignment="PERIOD_BEGINNING"),
+    ]
+    griddb.insert_document(conn, doc)
+    rows = conn.execute(
+        "SELECT interval_alignment FROM time_series_associations ORDER BY id"
+    ).fetchall()
+    assert rows == [("PERIOD_ENDING",), ("PERIOD_BEGINNING",)]
+
+
 def test_mislabelled_owner_raises(conn):
     doc = golden()
     doc["time_series_associations"] = [

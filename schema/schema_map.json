@@ -52,6 +52,9 @@
     "discrete_controlled_ac_branches": [
       {"component": "DiscreteControlledACBranch", "file": "Operations/Branch/DiscreteControlledACBranch.json", "is_psy": true}
     ],
+    "series_compensators": [
+      {"component": "SeriesCompensator", "file": "Operations/Branch/SeriesCompensator.json", "is_psy": true}
+    ],
     "transformer_circuits": [
       {"component": "TransformerCircuit", "file": "Operations/Branch/TransformerCircuit.json", "is_psy": true}
     ],

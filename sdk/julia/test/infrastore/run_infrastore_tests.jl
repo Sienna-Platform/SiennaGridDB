@@ -12,7 +12,7 @@ Pkg.develop(; path=PKG_ROOT)
 if haskey(ENV, "INFRASTORE_PATH")
     Pkg.develop(; path=joinpath(ENV["INFRASTORE_PATH"], "julia", "InfraStore.jl"))
 else
-    Pkg.add(; name="InfraStore", version="0.15")
+    Pkg.add(; name="InfraStore", version="0.16")
 end
 Pkg.add(["Test", "DBInterface", "JSON", "SQLite", "Dates"])
 include(joinpath(HERE, "infrastore_tests.jl"))
