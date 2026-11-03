@@ -127,18 +127,41 @@ def dangling_references(payloads, stored_ids):
     ]
 
 
-def point_at_sources(node, sources):
-    """node with its time series references to a derived series naming the source
-    instead (the keys dangling_time_series_references reads). A dict or list is
-    copied only when something inside it changes; the caller's stays as it was."""
-    if not sources or not isinstance(node, (dict, list)):
+def series_remap(sources, offset):
+    """A document's series id to the one GridDB stores: a derived series' names its
+    source, and every id moves past offset. None when no id changes."""
+    if not sources and not offset:
+        return None
+    return lambda ref: sources.get(ref, ref) + offset
+
+
+def shift_ids(rows, offset):
+    """The association rows with their ids moved past offset; any other id reaches
+    the encoder and fails there."""
+    if not offset:
+        return rows
+    return [
+        {**r, "association_id": int(r["association_id"]) + offset}
+        if is_int(r.get("association_id"))
+        else r
+        for r in rows
+    ]
+
+
+def remap_references(node, remap):
+    """node with each time series reference (the keys dangling_time_series_references
+    reads) replaced by remap(id). A dict or list is copied only when something inside
+    it changes; the caller's stays as it was."""
+    if remap is None or not isinstance(node, (dict, list)):
         return node
     changed = {}
     for k, v in node.items() if isinstance(node, dict) else enumerate(node):
-        if isinstance(k, str) and _is_reference(k) and is_int(v) and v in sources:
-            changed[k] = sources[v]
+        if isinstance(k, str) and _is_reference(k) and is_int(v):
+            new = remap(int(v))
+            if new != v:
+                changed[k] = new
         else:
-            new = point_at_sources(v, sources)
+            new = remap_references(v, remap)
             if new is not v:
                 changed[k] = new
     if not changed:
@@ -162,7 +185,16 @@ def values_missing(sidecar):
     return None
 
 
-def _copy_export(conn, path, views_sql):
+def _unite_exports(conn, plan):
+    """Rebuild the views uniting every exported store, one UNION ALL arm per store."""
+    stores = conn.execute(plan["exported_stores_sql"]).fetchall()
+    for name, arm in plan["export_views"].items():
+        arms = " UNION ALL ".join(arm.format(store_id=i, prefix=p) for i, p in stores)
+        conn.execute(f'DROP VIEW IF EXISTS "{name}"')
+        conn.execute(f'CREATE VIEW "{name}" AS {arms}')
+
+
+def _copy_export(conn, path, plan, store_id, prefix):
     """infrastore's export, written into conn inside the caller's transaction: its
     tables with their rows, then their indexes and views, then GridDB's views over it."""
     src = sqlite3.connect(path)
@@ -179,15 +211,18 @@ def _copy_export(conn, path, views_sql):
         for kind, _, sql in objects:
             if kind != "table":
                 conn.execute(sql)
-        for sql in views_sql:
+        conn.execute(plan["values_prefix_sql"], [prefix, store_id])
+        _unite_exports(conn, plan)
+        for sql in plan["views_sql"]:
             conn.execute(sql)
     finally:
         src.close()
 
 
-def export_values(conn, plan, rows, sidecar):
-    """Store the rows' arrays as infrastore's SQLite export under plan's prefix. The
-    sidecar is only read: infrastore opens a private copy with an in-memory catalog.
+def export_values(conn, plan, rows, sidecar, store_id):
+    """Store the rows' arrays as infrastore's SQLite export under the store's own
+    prefix. The sidecar is only read: infrastore opens a private copy with an
+    in-memory catalog, which takes the rows' ids as GridDB stores them.
 
     infrastore exports through its own connection and bundled SQLite, so it can neither
     join conn's savepoint nor safely write to conn's file. It writes a temporary file that
@@ -197,6 +232,7 @@ def export_values(conn, plan, rows, sidecar):
     # infrastore rejects null for an optional field, which a model dump spells for
     # every unset one; GridDB's own rows treat null as absent
     wire = [{k: v for k, v in row.items() if v is not None} for row in rows]
+    prefix = f"{plan['table_prefix']}{store_id}_"
     with tempfile.TemporaryDirectory() as tmp:
         copy = os.path.join(tmp, "time_series.h5")
         out = os.path.join(tmp, "export.sqlite")
@@ -205,12 +241,12 @@ def export_values(conn, plan, rows, sidecar):
             store = infrastore.Store.open_without_catalog(copy, catalog="memory")
             try:
                 store.import_time_series_associations_openapi(json.dumps(wire))
-                store.export_sqlite(out, table_prefix=plan["table_prefix"])
+                store.export_sqlite(out, table_prefix=prefix)
             finally:
                 store.close()
         except (infrastore.TimeSeriesError, OSError) as exc:
             raise InsertError(f"time series sidecar {sidecar}: {exc}") from exc
         try:
-            _copy_export(conn, out, plan["views_sql"])
+            _copy_export(conn, out, plan, store_id, prefix)
         except sqlite3.Error as exc:
             raise InsertError(f"time series values: {exc}") from exc

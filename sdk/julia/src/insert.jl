@@ -305,6 +305,7 @@ Insert a whole `SystemDocument` (as parsed JSON) in one savepoint: vocabulary, e
 entity row, typed rows in foreign-key rank order, supplemental attributes, associations,
 time series. Any failure rolls back the whole document. `time_series` is the HDF5 sidecar
 holding the arrays (`time_series_storage_file`); it is only read, and needs InfraStore.jl.
+The sidecar is a `time_series_stores` row, and its series ids move past every id stored.
 """
 function insert_document!(
     db::SQLite.DB,
@@ -316,13 +317,15 @@ function insert_document!(
     report = InsertReport()
     components = something(get(doc, "components", nothing), Dict{String, Any}())
     plans = Tuple{ComponentPlan, Vector{Any}}[]
-    # References to a derived series name its source, which GridDB stores instead.
-    sources = derived_sources(section_rows(doc, m.time_series.section))
+    # Series ids move past every id stored, and references to a derived series name its
+    # source, which GridDB stores instead.
+    offset = Int(scalar(db, m.time_series.id_offset_sql))
+    remap = SeriesRemap(derived_sources(section_rows(doc, m.time_series.section)), offset)
     unsupported_ids = Set{Int}()
     owners = Dict{Int, Tuple{String, String}}()
     for type_name in sort!(collect(keys(components)))
         objs = Any[
-            point_at_sources(o, sources) for o in entry_list(components[type_name], type_name)
+            remap_references(o, remap) for o in entry_list(components[type_name], type_name)
         ]
         ids = Set{Int}()
         foreach(o -> push_entry_id!(ids, o), objs)
@@ -342,14 +345,17 @@ function insert_document!(
         end
     end
     attr_types = attribute_types(doc)
-    attrs = point_at_sources(section_rows(doc, "supplemental_attributes"), sources)
+    attrs = remap_references(section_rows(doc, "supplemental_attributes"), remap)
     for attr in attrs
         id = get(attr, "id", nothing)
         if is_int_value(id) && haskey(attr_types, Int(id))
             owners[Int(id)] = (attr_types[Int(id)], "SupplementalAttribute")
         end
     end
-    series = storable_time_series(doc, report, strict, unsupported_ids, owners)
+    series = shift_ids(
+        storable_time_series(doc, report, strict, unsupported_ids, owners),
+        offset,
+    )
     store_series = !isempty(series) && values_storable(time_series)
     if !isempty(series) && !store_series
         reason = values_missing_reason(time_series)
@@ -410,9 +416,15 @@ function insert_document!(
                 add_inserted!(report, section.section)
             end
         end
-        insert_associations!(cache, m.time_series, series, report)
-        if store_series
-            store_values!(db, m.time_series, series, time_series)
+        if !isempty(series)
+            ts = m.time_series
+            DBInterface.execute(db, ts.store_sql, (offset, something(time_series, missing)))
+            store_id = Int(SQLite.last_insert_rowid(db))
+            insert_associations!(cache, ts, series, report)
+            DBInterface.execute(db, ts.store_rows_sql, (store_id, offset))
+            if store_series
+                store_values!(db, ts, series, time_series, store_id)
+            end
         end
     end
     return report

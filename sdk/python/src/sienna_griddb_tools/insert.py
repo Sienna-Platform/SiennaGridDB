@@ -13,7 +13,9 @@ from .time_series import (
     derived_sources,
     export_values,
     insert_associations,
-    point_at_sources,
+    remap_references,
+    series_remap,
+    shift_ids,
     require_owner_label,
     values_missing,
 )
@@ -236,18 +238,22 @@ def _report_dangling(report, strict, plans, attrs, series):
 
 def insert_document(conn, doc, *, strict=False, time_series=None):
     """Insert a whole SystemDocument in one savepoint. time_series is the HDF5
-    sidecar holding its arrays (time_series_storage_file); it is only read."""
+    sidecar holding its arrays (time_series_storage_file); it is only read. The
+    sidecar is a time_series_stores row, and its series ids move past every id stored."""
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
     components = _components(doc)
-    # References to a derived series name its source, which GridDB stores instead.
-    sources = derived_sources(_section_rows(doc, manifest["time_series"]["section"]))
+    ts = manifest["time_series"]
+    # Series ids move past every id stored, and references to a derived series name
+    # its source, which GridDB stores instead.
+    offset = conn.execute(ts["id_offset_sql"]).fetchone()[0]
+    remap = series_remap(derived_sources(_section_rows(doc, ts["section"])), offset)
     plans = []
     unsupported_ids = set()
     owners = {}
     for type_name in sorted(components):
-        objs = [point_at_sources(as_json_data(o), sources) for o in components[type_name]]
+        objs = [remap_references(as_json_data(o), remap) for o in components[type_name]]
         ids = [o.get("id") for o in objs if isinstance(o, dict)]
         ids = [i for i in ids if is_int(i)]
         owners.update(dict.fromkeys(ids, (type_name, "Component")))
@@ -263,11 +269,11 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
             _unsupported(report, strict, section, len(rows), reason)
 
     attr_types = _attribute_types(doc)
-    attrs = point_at_sources(_section_rows(doc, "supplemental_attributes"), sources)
+    attrs = remap_references(_section_rows(doc, "supplemental_attributes"), remap)
     for attr in attrs:
         if attr.get("id") in attr_types:
             owners[attr["id"]] = (attr_types[attr["id"]], "SupplementalAttribute")
-    series = _time_series_rows(doc, report, strict, unsupported_ids, owners)
+    series = shift_ids(_time_series_rows(doc, report, strict, unsupported_ids, owners), offset)
     missing = values_missing(time_series) if series else None
     if missing is not None:
         _unsupported(report, strict, "time_series_values", len(series), missing)
@@ -322,7 +328,11 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
                     conn, section["row_sql"], _params(section["bindings"], row, what), what
                 )
                 report.add_inserted(name)
-        insert_associations(conn, manifest["time_series"], series, report)
-        if series and missing is None:
-            export_values(conn, manifest["time_series"], series, time_series)
+        if series:
+            sidecar = None if time_series is None else str(time_series)
+            store_id = conn.execute(ts["store_sql"], [offset, sidecar]).lastrowid
+            insert_associations(conn, ts, series, report)
+            conn.execute(ts["store_rows_sql"], [store_id, offset])
+            if missing is None:
+                export_values(conn, ts, series, time_series, store_id)
     return report

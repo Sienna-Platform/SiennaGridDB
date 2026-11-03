@@ -195,7 +195,9 @@ def test_time_series_entry(manifest):
     assert paths["association_id"] == ("id", "int")
     assert paths["features"] == ("features_hash", "features_hash")
     assert ts["references"] == ["owner_id"]
-    assert all(f"{ts['table_prefix']}all_series" in sql for sql in ts["views_sql"])
+    # Each export view unites infrastore's per-store views, which GridDB's views read.
+    assert all('"{prefix}all_' in arm for arm in ts["export_views"].values())
+    assert all("time_series_export_series" in sql for sql in ts["views_sql"])
     assert set(ts["unsupported_types"]) == {
         "DeterministicSingleTimeSeries",
         "NonSequentialTimeSeries",

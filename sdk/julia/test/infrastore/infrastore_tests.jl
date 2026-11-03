@@ -64,6 +64,30 @@ if HAS_GOLDEN
         end
     end
 
+    @testset "a second store minting the same ids lands past the first" begin
+        mktempdir() do dir
+            doc, sidecar = sidecar_document(dir)
+            db = create_database(joinpath(dir, "a.sqlite"))
+            insert_document!(db, doc; time_series=sidecar)
+            rows = [
+                merge(r, Dict("name" => r["name"] * "_2")) for
+                r in doc["time_series_associations"]
+            ]
+            second = Dict{String, Any}(
+                "components" => Dict(),
+                "time_series_associations" => rows,
+            )
+            insert_document!(db, second; time_series=sidecar)
+            sql = "SELECT id, id_offset, values_prefix FROM time_series_stores ORDER BY id"
+            @test query_rows(db, sql) == [(1, 0, "ts_1_"), (2, 3, "ts_2_")]
+            sql =
+                "SELECT association_id, store_id, count(*) FROM time_series_values " *
+                "GROUP BY 1, 2 ORDER BY 1"
+            @test query_rows(db, sql) == [(2, 1, 3), (3, 1, 3), (5, 2, 3), (6, 2, 3)]
+            close(db)
+        end
+    end
+
     @testset "values without a sidecar are reported, and strict raises" begin
         mktempdir() do dir
             doc, _ = sidecar_document(dir)

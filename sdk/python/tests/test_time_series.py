@@ -185,16 +185,18 @@ def test_a_reference_no_stored_series_has_is_reported_and_strict_raises(conn):
         griddb.insert_document(conn, doc, strict=True)
 
 
-def test_point_at_sources_copies_only_what_changes():
-    from sienna_griddb_tools.time_series import point_at_sources
+def test_remap_references_copies_only_what_changes():
+    from sienna_griddb_tools.time_series import remap_references
 
     untouched = {"curve": [1, 2], "association_id": 3}
     node = {"a": untouched, "b": [{"fuel_cost_time_series": 8}], "c": 8}
-    out = point_at_sources(node, {8: 7})
+    remap = {8: 7}.get
+    out = remap_references(node, lambda ref: remap(ref, ref))
     assert out == {"a": untouched, "b": [{"fuel_cost_time_series": 7}], "c": 8}
     assert out["a"] is untouched
     assert node["b"][0]["fuel_cost_time_series"] == 8
-    assert point_at_sources(untouched, {8: 7}) is untouched
+    assert remap_references(untouched, lambda ref: remap(ref, ref)) is untouched
+    assert remap_references(node, None) is node
 
 
 def sidecar_document(tmp_path):
@@ -287,15 +289,34 @@ def test_deleting_an_owner_leaves_its_values_orphaned(conn, tmp_path):
     assert len(conn.execute("SELECT * FROM orphaned_time_series").fetchall()) == 2
 
 
-def test_a_second_export_into_one_database_raises(conn, tmp_path):
+def test_a_second_store_minting_the_same_ids_lands_past_the_first(conn, tmp_path):
     doc, sidecar = sidecar_document(tmp_path)
     griddb.insert_document(conn, doc, time_series=sidecar)
-    # A second document's series (new ids and names) land in the same export tables.
-    rows = [
-        {**r, "association_id": r["association_id"] + 100, "name": r["name"] + "_2"}
-        for r in doc["time_series_associations"]
-    ]
-    second = {"components": {}, "time_series_associations": rows}
-    with pytest.raises(griddb.InsertError, match="already exists"):
-        griddb.insert_document(conn, second, time_series=sidecar)
-    assert count(conn, "time_series_associations") == 2
+    gen = thermal(doc)
+    # A second store minted the same ids (2 and 3); its plant references series 2.
+    rows = [{**r, "name": r["name"] + "_2"} for r in doc["time_series_associations"]]
+    second = {
+        "components": {},
+        "supplemental_attributes": [{"id": 9200, "name": "p", "fuel_cost_time_series": 2}],
+        "supplemental_attribute_associations": [
+            {
+                "component_id": gen["id"],
+                "component_type": "ThermalStandard",
+                "attribute_id": 9200,
+                "attribute_type": "ThermalPowerPlant",
+            }
+        ],
+        "time_series_associations": rows,
+    }
+    griddb.insert_document(conn, second, time_series=sidecar)
+    stores = conn.execute(
+        "SELECT id, id_offset, values_prefix FROM time_series_stores ORDER BY id"
+    ).fetchall()
+    assert stores == [(1, 0, "ts_1_"), (2, 3, "ts_2_")]
+    values = conn.execute(
+        "SELECT association_id, store_id, count(*) FROM time_series_values GROUP BY 1, 2"
+    ).fetchall()
+    assert values == [(2, 1, 3), (3, 1, 3), (5, 2, 3), (6, 2, 3)]
+    plant = conn.execute("SELECT value FROM plants WHERE id = 9200").fetchone()[0]
+    assert json.loads(plant)["fuel_cost_time_series"] == 5
+    assert conn.execute("SELECT count(*) FROM orphaned_time_series").fetchone()[0] == 0
