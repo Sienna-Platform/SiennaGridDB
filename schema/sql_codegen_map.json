@@ -12,6 +12,8 @@
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {}
       },
+      "attribute_channel": ["scheduled_net_interchange", "out_of_area_load_ids"],
+      "attribute_references": {"out_of_area_load_ids": "loads"},
       "comment": [
         "Control or planning areas (PSY Area)."
       ]
@@ -189,7 +191,7 @@
         "id": {},
         "name": {},
         "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
-        "base_power": {},
+        "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
         "available": {"default": 1},
         "active_power": {},
@@ -206,6 +208,8 @@
       ]
     },
     "transmission_lines": {
+      "interface_member": true,
+      "arc_domain": "AC",
       "comment": [
         "r/x/b/g follow parameter_units: COMPONENT_BASE is per-unit on base_power;",
         "NATURAL_UNITS is ohm (r/x) or siemens (b/g). All four share one row's basis",
@@ -241,6 +245,7 @@
       }
     },
     "transmission_interchanges": {
+      "interface_member": true,
       "comment": [
         "Physical flow limits between areas or balancing topologies, distinct from",
         "transmission_lines: these enforce market-level interchange limits."
@@ -299,7 +304,44 @@
         "power_units": {}
       }
     },
+    "series_compensators": {
+      "arc_domain": "AC",
+      "interface_member": true,
+      "comment": [
+        "Series compensator (PSY SeriesCompensator): a series capacitor or reactor, a",
+        "TCSC, or an SSSC on one AC arc. x is negative for a capacitor. r/x/reactance_limits",
+        "follow parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);",
+        "power_units governs the power-family columns. DISPATCHABLE and ACTIVE_POWER_FLOW",
+        "require reactance_limits; ACTIVE_POWER_FLOW also requires active_power_flow_setpoint."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "rating": {"column": "continuous_rating", "checks": ["continuous_rating >= 0"]},
+        "r": {"checks": ["r >= 0"], "unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "x": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "control_mode": {},
+        "reactance_limits": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "active_power_flow_setpoint": {},
+        "parameter_units": {},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "available": {"default": 1},
+        "active_power_flow": {"default": 0.0},
+        "reactive_power_flow": {"default": 0.0},
+        "rating_b": {},
+        "rating_c": {},
+        "operational_flow_limit": {}
+      },
+      "constraints": [
+        "CHECK (control_mode NOT IN ('DISPATCHABLE', 'ACTIVE_POWER_FLOW') OR reactance_limits IS NOT NULL)",
+        "CHECK (control_mode <> 'ACTIVE_POWER_FLOW' OR active_power_flow_setpoint IS NOT NULL)"
+      ]
+    },
     "discrete_controlled_ac_branches": {
+      "interface_member": true,
+      "arc_domain": "AC",
       "comment": [
         "Switches and breakers connecting AC buses (PSY DiscreteControlledACBranch).",
         "r/x are always per-unit on base_power -- this component has no",
@@ -323,6 +365,7 @@
       "skip": ["available", "active_power_flow", "reactive_power_flow"]
     },
     "transformer_circuits": {
+      "arc_domain": "AC",
       "comment": [
         "One modeled arc of a transformer (PSY TransformerCircuit); unnamed",
         "subcomponents, so no name column. r/x follow parameter_units (COMPONENT_BASE ->",
@@ -360,6 +403,7 @@
       }
     },
     "two_winding_transformers": {
+      "interface_member": true,
       "comment": [
         "Two-winding transformer (PSY TwoWindingTransformer); series data lives on",
         "the referenced circuit. magnetizing_shunt is a complex admittance as JSON",
@@ -378,6 +422,7 @@
       "indexes": ["CREATE UNIQUE INDEX idx_two_winding_transformers_circuit ON two_winding_transformers (circuit)"]
     },
     "three_winding_transformers": {
+      "interface_member": true,
       "comment": [
         "Three-winding transformer (PSY ThreeWindingTransformer), star model: each",
         "circuit connects a terminal bus to the star bus. The pairwise measured-impedance",
@@ -409,6 +454,8 @@
       "indexes": ["CREATE UNIQUE INDEX idx_three_winding_transformers_primary_circuit ON three_winding_transformers (primary_circuit)", "CREATE UNIQUE INDEX idx_three_winding_transformers_secondary_circuit ON three_winding_transformers (secondary_circuit)", "CREATE UNIQUE INDEX idx_three_winding_transformers_tertiary_circuit ON three_winding_transformers (tertiary_circuit)", "CREATE INDEX idx_three_winding_transformers_star_bus ON three_winding_transformers (star_bus)"]
     },
     "two_terminal_hvdc_lines": {
+      "interface_member": true,
+      "arc_domain": "AC",
       "comment": [
         "Point-to-point (two-terminal) HVDC line, one table for all three PSY variants",
         "(Generic/LCC/VSC), discriminated by converter_type. Only fields common to",
@@ -436,6 +483,8 @@
       "attribute_channel": ["loss", "r", "power_transfer_setpoint", "current_transfer_setpoint", "scheduled_dc_voltage", "rectifier_bridges", "rectifier_delay_angle_limits", "rectifier_rc", "rectifier_xc", "rectifier_base_voltage", "inverter_bridges", "inverter_extinction_angle_limits", "inverter_rc", "inverter_xc", "inverter_base_voltage", "control_mode", "switch_mode_voltage", "compounding_resistance", "min_compounding_voltage", "rectifier_transformer_ratio", "rectifier_tap_setting", "rectifier_tap_limits", "rectifier_tap_step", "rectifier_delay_angle", "rectifier_capacitor_reactance", "inverter_transformer_ratio", "inverter_tap_setting", "inverter_tap_limits", "inverter_tap_step", "inverter_extinction_angle", "inverter_capacitor_reactance", "g", "dc_current", "reactive_power_from", "dc_control_from", "ac_control_from", "dc_power_setpoint_from", "dc_voltage_setpoint_from", "power_factor_setpoint_from", "ac_voltage_setpoint_from", "rated_ac_voltage_from", "converter_loss_from", "max_dc_current_from", "power_factor_weighting_fraction_from", "voltage_limits_from", "dc_voltage_droop_from", "reactive_power_to", "dc_control_to", "ac_control_to", "dc_power_setpoint_to", "dc_voltage_setpoint_to", "power_factor_setpoint_to", "ac_voltage_setpoint_to", "rated_ac_voltage_to", "converter_loss_to", "max_dc_current_to", "power_factor_weighting_fraction_to", "voltage_limits_to", "dc_voltage_droop_to", "rated_dc_voltage", "remote_bus_control_from", "remote_bus_control_to"]
     },
     "tmodel_hvdc_lines": {
+      "interface_member": true,
+      "arc_domain": "DC",
       "comment": [
         "T-model HVDC line (PSY TModelHVDCLine): a DC-network element whose arc",
         "endpoints must both be DC buses (entity_types.is_dc = 1), enforced by",
@@ -549,7 +598,7 @@
         "R_th": {"column": "r_th"},
         "X_th": {"column": "x_th"},
         "parameter_units": {},
-        "operation_cost": {"default": {"import_offer_curves": null, "export_offer_curves": null, "energy_import_weekly_limit": 1000000.0, "energy_export_weekly_limit": 1000000.0, "ancillary_service_offers": []}}
+        "operation_cost": {"default": {"cost_type": "IMPORTEXPORT", "import_offer_curves": null, "export_offer_curves": null, "energy_import_weekly_limit": 1000000.0, "energy_export_weekly_limit": 1000000.0, "ancillary_service_offers": []}}
       },
       "skip": ["dynamic_injector"]
     },
@@ -582,7 +631,7 @@
         "power_factor_setpoint": {},
         "ac_voltage_setpoint": {}
       },
-      "attribute_channel": ["dc_current", "max_dc_current", "loss_function", "dc_voltage_droop"],
+      "attribute_channel": ["dc_current", "max_dc_current", "loss_function", "dc_voltage_droop", "rated_dc_voltage", "rated_ac_voltage"],
       "skip": ["dynamic_injector"],
       "constraints": ["CHECK (bus <> dc_bus)"]
     },
@@ -746,7 +795,7 @@
         "settlement_point_id": {"references": "entities (id) ON DELETE SET NULL"},
         "max_supply": {"checks": ["max_supply >= 0"]},
         "max_demand": {"checks": ["max_demand >= 0"]},
-        "operation_cost": {"checks": ["ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')"]}
+        "operation_cost": {}
       }
     },
     "point_to_point_bids": {
@@ -763,7 +812,7 @@
         "from_id": {"references": "entities (id) ON DELETE CASCADE"},
         "to_id": {"references": "entities (id) ON DELETE CASCADE"},
         "max_active_power": {"checks": ["max_active_power >= 0"]},
-        "spread_bid": {"checks": ["ifnull(json_extract(spread_bid, '$.cost_type'), '') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES')"]},
+        "spread_bid": {},
         "price_limits": {},
         "linked_crr": {}
       },

@@ -3,12 +3,13 @@ triggers on discrete_controlled_ac_branches and the transformer tables, the
 transformer enum/pairwise CHECK constraints, and the static_time_series
 (uuid, timestep) uniqueness contract."""
 
+import json
 import re
 import sqlite3
 
 import pytest
 
-from conftest import SCHEMAS_PATH, load_schemas_json, make_entity
+from conftest import SCHEMA_DIR, SCHEMAS_PATH, load_schemas_json, make_entity
 
 
 def make_bus(conn, bus_id, name):
@@ -161,6 +162,18 @@ def test_delete_cleans_entity(fresh_db, table, entity_type, insert_row):
         "SELECT COUNT(*) FROM entities WHERE id = 99"
     ).fetchone()
     assert count == 0
+
+
+@pytest.mark.parametrize(
+    "table, entity_type, insert_row", _ENTITY_TABLE_CASES, ids=_ENTITY_TABLE_IDS
+)
+def test_a_child_id_cannot_change(fresh_db, table, entity_type, insert_row):
+    """The new id would point the row at an entities row of another subtype."""
+    make_entity(fresh_db, 99, table, entity_type)
+    insert_row(fresh_db, 99)
+    make_entity(fresh_db, 98, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match=f"{table}.id cannot change"):
+        fresh_db.execute(f"UPDATE {table} SET id = 98 WHERE id = 99")
 
 
 def test_every_entity_table_has_supertype_triggers(db):
@@ -339,7 +352,7 @@ def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
         "INSERT INTO time_series_associations("
         "owner_id, owner_type, owner_category, time_series_type, name, "
         "initial_timestamp, resolution, length, uri, features_hash) "
-        "VALUES (1, 'thing', 'Component', 'SingleTimeSeries', 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
+        "VALUES (1, 'thing_type', 'Component', 'SingleTimeSeries', 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
         "'static:load', ?)",
         ("0b" * 32,),
     )
@@ -508,6 +521,23 @@ def test_arc_domain_trigger_fires_on_update(fresh_db):
         )
 
 
+def test_arc_endpoint_update_keeps_the_branch_domain(fresh_db):
+    """Moving the arc under an AC line onto a DC bus is checked on arcs too."""
+    make_entity(fresh_db, 99, "transmission_lines", "Line")
+    arc = _ac_arc(fresh_db)
+    fresh_db.execute(
+        "INSERT INTO transmission_lines(id, name, arc_id, continuous_rating, r, x, base_power, "
+        "power_units, angle_limits) VALUES (99, 'l', ?, 100.0, 0.01, 0.1, 100.0, "
+        "'COMPONENT_BASE', '{\"min\": -1.0, \"max\": 1.0}')",
+        (arc,),
+    )
+    dc = make_dc_bus(fresh_db, 50, "dc")
+    with pytest.raises(sqlite3.IntegrityError, match="endpoints must connect AC topologies"):
+        fresh_db.execute("UPDATE arcs SET from_id = ? WHERE id = ?", (dc, arc))
+    other_ac = make_bus(fresh_db, 51, "ac3")
+    fresh_db.execute("UPDATE arcs SET from_id = ? WHERE id = ?", (other_ac, arc))
+
+
 def test_interconnecting_converter_bridges_ac_and_dc(fresh_db):
     ac, dc = make_bus(fresh_db, 1, "ac"), make_dc_bus(fresh_db, 2, "dc")
     make_entity(fresh_db, 99, "interconnecting_converters", "InterconnectingConverter")
@@ -604,3 +634,88 @@ def test_dc_flag_requires_topology_type(fresh_db):
         )
 
 
+
+
+# Parents that are never deleted: the sealed registry and the type vocabulary.
+UNINDEXED_FK_PARENTS = {"quantity_kinds", "entity_types"}
+
+
+def test_every_foreign_key_column_leads_an_index(db):
+    """A delete of a parent row scans each child table without an index on the FK column."""
+    missing = []
+    tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+    for table in tables:
+        leading = {
+            next(db.execute(f"PRAGMA index_info('{idx[1]}')"))[2]
+            for idx in db.execute(f"PRAGMA index_list('{table}')")
+        }
+        leading |= {r[1] for r in db.execute(f"PRAGMA table_info('{table}')") if r[5] == 1}
+        for fk in db.execute(f"PRAGMA foreign_key_list('{table}')"):
+            if fk[2] not in UNINDEXED_FK_PARENTS and fk[3] not in leading:
+                missing.append(f"{table}.{fk[3]}")
+    assert missing == []
+
+
+def test_lookup_vocabularies_are_seeded(db):
+    """A database built from the SQL alone holds the rows the insert SDKs would seed."""
+    vocab = json.loads((SCHEMA_DIR / "insert_manifest.json").read_text(encoding="utf-8"))["vocabulary"]
+    entity_types = {
+        (name, bool(top), bool(dc))
+        for name, top, dc in db.execute("SELECT name, is_topology, is_dc FROM entity_types")
+    }
+    assert entity_types == {(t["name"], t["is_topology"], t["is_dc"]) for t in vocab["entity_types"]}
+    for table, names in vocab.items():
+        if table != "entity_types":
+            assert sorted(r[0] for r in db.execute(f"SELECT name FROM {table}")) == names
+
+
+@pytest.mark.parametrize("base_power", [0.0, -5.0])
+def test_load_base_power_must_be_positive(fresh_db, base_power):
+    bus = make_bus(fresh_db, 1, "b1")
+    make_entity(fresh_db, 2, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        fresh_db.execute(
+            "INSERT INTO loads(id, name, balancing_topology, base_power, power_units) "
+            "VALUES (2, 'l', ?, ?, 'NATURAL_UNITS')",
+            (bus, base_power),
+        )
+
+
+def test_hydro_connection_requires_hydro_endpoints(fresh_db):
+    make_bus(fresh_db, 1, "b1")
+    make_bus(fresh_db, 2, "b2")
+    with pytest.raises(sqlite3.IntegrityError, match="must connect hydro_reservoirs"):
+        fresh_db.execute(
+            "INSERT INTO hydro_reservoir_connections(source_id, sink_id) VALUES (1, 2)"
+        )
+
+
+def _series(conn, owner_id, owner_type, owner_category="Component", series_type="SingleTimeSeries"):
+    conn.execute(
+        "INSERT INTO time_series_associations(owner_id, owner_type, owner_category, "
+        "time_series_type, name, uri, features_hash) VALUES (?, ?, ?, ?, 's', 'u', ?)",
+        (owner_id, owner_type, owner_category, series_type, "0" * 64),
+    )
+
+
+def test_time_series_owner_type_must_be_the_entity_type(fresh_db):
+    make_entity(fresh_db, 1, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match="owner_type must be the owner's entity_type"):
+        _series(fresh_db, 1, "ThermalStandard")
+    _series(fresh_db, 1, "PowerLoad")
+
+
+def test_a_component_series_owner_is_not_a_supplemental_attribute(fresh_db):
+    make_entity(fresh_db, 1, "supplemental_attributes", "GeographicInfo")
+    fresh_db.execute(
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (1, 'GeographicInfo', '{}')"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="Component owner cannot be"):
+        _series(fresh_db, 1, "GeographicInfo")
+    _series(fresh_db, 1, "GeographicInfo", owner_category="SupplementalAttribute")
+
+
+def test_scenarios_series_requires_scenario_count(fresh_db):
+    make_entity(fresh_db, 1, "loads", "PowerLoad")
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _series(fresh_db, 1, "PowerLoad", series_type="Scenarios")

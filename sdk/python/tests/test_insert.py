@@ -317,6 +317,43 @@ def test_dangling_bus_reference_rolls_back_document(conn):
     assert count(conn, "entities") == 0
 
 
+def test_a_connection_with_foreign_keys_off_still_checks_them(conn):
+    conn.execute("PRAGMA foreign_keys = OFF")
+    thermal = dict(first(golden(), "ThermalStandard"), bus=999999)
+    with pytest.raises(griddb.InsertError, match="FOREIGN KEY"):
+        griddb.insert_document(conn, {"components": {"ThermalStandard": [thermal]}})
+
+
+def test_foreign_keys_off_inside_an_open_transaction_raises(conn):
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("BEGIN")
+    with pytest.raises(griddb.InsertError, match="foreign keys are off"):
+        griddb.insert_component(conn, "ACBus", lone_bus(golden()))
+    conn.execute("ROLLBACK")
+
+
+@pytest.mark.parametrize(
+    "section, row, message",
+    [
+        ("supplemental_attributes", {"id": 1.5}, "supplemental attribute: id: expected an integer"),
+        ("supplemental_attributes", {"name": "x"}, "supplemental attribute: no id"),
+        (
+            "supplemental_attribute_associations",
+            {"attribute_type": "GeographicInfo", "component_id": 1},
+            "supplemental_attribute_associations row: no attribute_id",
+        ),
+    ],
+)
+def test_an_invalid_attribute_id_raises_insert_error(conn, section, row, message):
+    with pytest.raises(griddb.InsertError, match=message):
+        griddb.insert_document(conn, {section: [row]})
+
+
+def test_a_component_entry_that_is_not_a_list_raises_insert_error(conn):
+    with pytest.raises(griddb.InsertError, match="components.ACBus: not a list"):
+        griddb.insert_document(conn, {"components": {"ACBus": {"id": 1}}})
+
+
 # Review Focus 3
 def test_integral_float_ids_are_integers(conn):
     bus = dict(lone_bus(golden()), id=5.0)

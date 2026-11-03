@@ -17,8 +17,8 @@ def add_association(conn, owner_id, assoc_id, name):
     conn.execute(
         "INSERT INTO time_series_associations (id, owner_id, owner_type, owner_category, "
         "time_series_type, name, initial_timestamp, resolution, length, uri, features_hash) "
-        "VALUES (?, ?, 'thing', 'Component', 'SingleTimeSeries', ?, '2026-01-01T00:00:00', "
-        "'PT1H', 3, 'u', ?)",
+        "VALUES (?, ?, 'Payload', 'SupplementalAttribute', 'SingleTimeSeries', ?, "
+        "'2026-01-01T00:00:00', 'PT1H', 3, 'u', ?)",
         (assoc_id, owner_id, name, EMPTY),
     )
 

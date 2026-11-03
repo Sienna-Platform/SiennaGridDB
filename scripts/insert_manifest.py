@@ -19,6 +19,7 @@ from generate_sql_schema import (
     resolve_ref,
     schema_doc,
     sql_type_for,
+    vocabulary,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -191,32 +192,6 @@ def component_entry(conn, schemas_root, inputs, table, comp, rank, units_index):
     }
 
 
-def vocabulary(inputs, component_names, schemas_path):
-    config = inputs["config"]
-    flags = config["entity_type_flags"]
-    entity_types = set(component_names)
-    for rel_dir in config["supplemental_attribute_dirs"]:
-        directory = os.path.join(schemas_path, rel_dir)
-        for file_name in os.listdir(directory):
-            if file_name.endswith(".json"):
-                entity_types.add(file_name[: -len(".json")])
-    vocab = {
-        "entity_types": [
-            {
-                "name": n,
-                "is_topology": flags.get(n, {}).get("is_topology", False),
-                "is_dc": flags.get(n, {}).get("is_dc", False),
-            }
-            for n in sorted(entity_types)
-        ]
-    }
-    for table, ref in sorted(config["vocabulary_enums"].items()):
-        rel_file, _, frag = ref.partition("#")
-        node, _ = resolve_ref(schemas_path, "#" + frag, rel_file)
-        vocab[table] = sorted(node["enum"])
-    return vocab
-
-
 def association_entry(conn, schemas_root, section, rel_file):
     columns = table_columns(conn, section)
     props = schema_doc(schemas_root, rel_file)["properties"]
@@ -250,22 +225,29 @@ def time_series_entry(conn, schemas_root, spec):
     section = spec["section"]
     columns = table_columns(conn, section)
     props = {}
+    defaults = {}
     for branch in schema_doc(schemas_root, spec["file"])["oneOf"]:
         node, rel_file = resolve_ref(schemas_root, branch["$ref"], spec["file"])
         if node["properties"]["time_series_type"]["const"] in spec["unsupported_types"]:
             continue
         for name, prop in node["properties"].items():
             props.setdefault(name, (prop, rel_file))
+            defaults.setdefault(name, set()).add(json.dumps(prop.get("default")))
     by_column = {}
     for name, (prop, rel_file) in props.items():
         column = spec["columns"].get(name, name)
         if column not in columns:
             raise ManifestError(f"{section}: wire property {name} has no column")
         encoding = spec["encodings"].get(name) or resolved_encoding(prop, schemas_root, rel_file)
-        by_column[column] = {"path": name, "encode": encoding}
+        value = spec["placeholders"].get(name, "?")
+        # A default the series types disagree on, like time_series_type's, is none.
+        default = default_literal(prop if len(defaults[name]) == 1 else {}, columns[column])
+        if default is not None:
+            value = f"COALESCE({value}, {default})"
+        by_column[column] = ({"path": name, "encode": encoding}, value)
     names = [c for c in columns if c in by_column]
-    values = [spec["placeholders"].get(by_column[c]["path"], "?") for c in names]
-    bindings = [by_column[c] for c in names]
+    values = [by_column[c][1] for c in names]
+    bindings = [by_column[c][0] for c in names]
     fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
     return {
         "section": section,
@@ -307,7 +289,7 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
         conn.execute("EXPLAIN " + sql, [None] * sql.count("?"))
     return {
         "schema_user_version": conn.execute("PRAGMA user_version").fetchone()[0],
-        "vocabulary": vocabulary(inputs, components, schemas_path),
+        "vocabulary": vocabulary(inputs["config"], components, schemas_path),
         "components": components,
         "attribute_sql": (
             "INSERT INTO attributes (entity_id, TYPE, name, value, unit, quantity_kind) "

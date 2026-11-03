@@ -1,6 +1,6 @@
 # SiennaGridDB
 
-Schema for the SQL database for Sienna Applications
+Schema for the SQL database for Power Systems Analysis Applications
 
 > [!IMPORTANT]
 > This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
@@ -14,21 +14,22 @@ Python tooling that generates and verifies them. Nothing here is importable; the
 `pyproject.toml` exists to set up the dev environment and host the linter config.
 
 A release is a tarball attached to a `v*` GitHub Release, containing `schema/`,
-`scripts/`, `README.md`, `LICENSE` and `.justfile` under a single top-level directory:
+`scripts/`, `README.md`, `CHANGELOG.md`, `LICENSE` and `.justfile` under a single top-level directory:
 
 ```console
-tar -xzf sienna-griddb-v0.1.0.tar.gz
-cd sienna-griddb-v0.1.0
+tar -xzf sienna-griddb-vX.Y.Z.tar.gz
+cd sienna-griddb-vX.Y.Z
 just new-db                     # or the four sqlite3 calls below
 ```
 
-### Scope of 0.1
+### Scope
 
 Read this before building on it:
 
 - **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
-  `PRAGMA user_version` is bumped on every schema change but nothing reads it.
+  `PRAGMA user_version` is bumped on every schema change. The insert SDKs read it: they open
+  only a database whose `user_version` matches the schema they write, and refuse any other.
 - **Roughly half the data model is typed.**
   Dynamics and the investment policy layer have no tables; see the open coverage issue.
 - **The unit registry is the load-bearing deliverable.**
@@ -111,7 +112,7 @@ them:
 | `quantity_kinds` | The physical quantities (e.g. `ActivePower`, `Voltage`, `Impedance`), each with a dimension. |
 | `allowed_units` | The units permitted for each quantity kind (e.g. `MW` for `ActivePower`). |
 | `unit_conventions` | The column→(quantity_kind, unit) map: one row per physical column, JSON-path "column" (e.g. `operation_cost.fixed`), or attribute-name convention. |
-| `unit_basis_rules` | For each of the 5 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
+| `unit_basis_rules` | For each of the 9 quantity kinds that ever carry `pu`, the base expression that resolves it (e.g. `Resistance` → `base_voltage^2/base_power`). |
 | `column_units` (view) | Joins `unit_conventions` with `quantity_kinds` and `unit_basis_rules` to show table, column, unit, quantity, dimension, and base references in one place. |
 
 **Columns vs. `attributes`.** `schema/sql_codegen_map.json` places every property of every
@@ -124,7 +125,8 @@ insert trigger accepts any registered arm. A unitless structured attribute (a re
 list, a loss curve) gets an `attribute_identifiers` row instead. An `attributes` name means
 one quantity kind everywhere; generation fails otherwise.
 
-Current registry: **42 quantity kinds, 67 allowed units, 534 conventions.**
+The registry sizes change with each SiennaSchemas release; count them on a built database
+(`SELECT count(*) FROM unit_conventions`) instead of relying on a number written here.
 
 The generator refuses any `(quantity_kind, unit)` pair absent from the shared vocabulary in
 `Core/units.json`, so the registry can never drift from the source of truth: `Core/units.json`
@@ -222,8 +224,13 @@ Just as the OpenAPI specs generate the Python and Julia model packages, the JSON
 generate the component tables here. `scripts/generate_sql_schema.py` writes every table
 mapped in `schema/schema_map.json` into the marked region at the end of `schema/schema.sql`,
 and writes the unit conventions of the generated columns into
-`schema/column_conventions.json` (entries marked `"source": "schemas"`). Everything else in
-those two files is hand-written.
+`schema/column_conventions.json` (entries marked `"source": "schemas"`). It also writes a
+marked region at the start of `schema/triggers.sql`, with each table's entity-existence and
+delete triggers, the arc-domain triggers of the tables with `arc_domain`, and the delete
+guards of `attribute_references` id arrays. A marked
+region at the start of `schema/views.sql` holds `interface_member_tables` and
+`branch_names`, over the tables with `interface_member`. Everything else in those files
+is hand-written.
 
 Generation is closed-world. It fails, listing every problem, when a schema file is neither
 mapped nor `excluded` in `schema_map.json`, when a component property has no disposition in
@@ -382,6 +389,10 @@ builds from `schema_map.json`, `sql_codegen_map.json`, `schema/insert_config.jso
 SiennaSchemas components, and the DDL itself. Every INSERT a runtime can issue is written
 out in that file.
 
+The release tarball holds the schema only. Use the SDKs from a clone at the release tag: each
+one reads the manifest of its own checkout and opens only a database whose `user_version`
+equals the manifest's `schema_user_version`.
+
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
 - **Every field has a home.** `sql_codegen_map.json` places every property of a supported
   component, or manifest generation fails. A decomposed property maps each of its columns
@@ -420,11 +431,11 @@ Two generators project SiennaSchemas into this repo.
 
 | Generated from | Generator | Output |
 |---|---|---|
-| SiennaSchemas JSON Schemas, via `schema/schema_map.json` × `schema/sql_codegen_map.json` | `scripts/generate_sql_schema.py` | the component tables in `schema/schema.sql`, and the `"source": "schemas"` entries of `schema/column_conventions.json` |
+| SiennaSchemas JSON Schemas, via `schema/schema_map.json` × `schema/sql_codegen_map.json` | `scripts/generate_sql_schema.py` | the component tables in `schema/schema.sql`, the per-table triggers in `schema/triggers.sql`, the branch views in `schema/views.sql`, and the `"source": "schemas"` entries of `schema/column_conventions.json` |
 | SiennaSchemas `Core/units.json` × `schema/column_conventions.json` | `scripts/generate_unit_registry.py` | `schema/unit_registry.sql` (sha256-sealed) |
 
 Hand-written: the rest of `schema/schema.sql` (entities, attributes, associations, time
-series, the registry tables), `schema/triggers.sql`, and `schema/views.sql`.
+series, the registry tables), and the rest of `schema/triggers.sql` and `schema/views.sql`.
 
 ### Mapping and config files
 
@@ -451,13 +462,13 @@ above — and always before opening a PR that touches any of them:
 python3 scripts/verify_unit_registry.py $DB_NAME                                        # registry content matches its own seal
 python3 scripts/generate_sql_schema.py --schemas-path ../SiennaSchemas --check         # generated tables + closed-world gate
 python3 scripts/check_units_sync.py --schemas-path ../SiennaSchemas --db $DB_NAME        # 3-layer unit consistency: schemas <-> registry <-> DB (add --psy-path for the PSY layer)
+python3 scripts/generate_unit_registry.py --units-json ../SiennaSchemas/Core/units.json --check  # registry is not stale
 ```
 
-`generate_unit_registry.py` has no built-in `--check`; CI proves registry staleness the blunt
-way instead — regenerate, then `git diff --exit-code schema/unit_registry.sql`. All of the
+All of the
 above run in CI
 ([`.github/workflows/sqlite-schema-tests.yml`](.github/workflows/sqlite-schema-tests.yml))
-on every push and pull request.
+on every pull request and every push to `main`.
 
 ### Never hand-edit generated output
 
@@ -474,13 +485,13 @@ then regenerate.
 Install a virtual environment
 
 ```console
-python -m venv .venv
+python3 -m venv .venv
 ```
 
 Setup the python environment
 
 ```console
-python -m pip install -r requirements.txt
+python3 -m pip install -e ".[dev]"
 ```
 
 Setup pre-commit to run automatically on each commit.
