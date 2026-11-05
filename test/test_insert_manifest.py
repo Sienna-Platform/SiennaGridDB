@@ -181,7 +181,6 @@ def test_unsupported_sections(manifest):
     assert set(manifest["unsupported_sections"]) == {
         "aggregation",
         "ext",
-        "financial_data",
         "investment_schedule",
         "requirements_associations",
         "voltage_control_associations",

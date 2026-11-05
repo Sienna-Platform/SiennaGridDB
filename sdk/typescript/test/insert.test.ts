@@ -520,7 +520,7 @@ test.skipIf(!hasGolden)("a portfolio file brings its base system first", () => {
   const portfolio = {
     base_system_file: "base_system",
     aggregation: "PowerSystems.Area",
-    financial_data: { id: 9000000, base_year: 2025 },
+    investment_schedule: { "2030": { "gen-1": 100.0 } },
     components: {},
     time_series_associations: [series(gen, 7, { name: "fuel_price" })],
   };
@@ -529,7 +529,7 @@ test.skipIf(!hasGolden)("a portfolio file brings its base system first", () => {
   const report = insertFile(db, dir);
   expect(report.inserted.time_series_associations).toBe(2);
   expect(report.unsupported.aggregation).toBe(1);
-  expect(report.unsupported.financial_data).toBe(1);
+  expect(report.unsupported.investment_schedule).toBe(1);
   expect(db.prepare("SELECT id FROM time_series_associations ORDER BY id").pluck().all()).toEqual([7, 14]);
 });
 

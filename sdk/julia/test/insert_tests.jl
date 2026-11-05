@@ -98,10 +98,10 @@ if HAS_GOLDEN
         mktempdir() do dir
             fresh(dir) do db
                 doc = golden()
-                doc["financial_data"] = Dict("id" => 9_000_000, "base_year" => 2025)
+                doc["investment_schedule"] = Dict("2030" => Dict("gen-1" => 100.0))
                 doc["aggregation"] = "PowerSystems.Area"
                 report = insert_document!(db, doc)
-                @test report.unsupported["financial_data"] == 1
+                @test report.unsupported["investment_schedule"] == 1
                 @test report.unsupported["aggregation"] == 1
             end
         end

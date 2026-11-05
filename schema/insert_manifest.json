@@ -3052,7 +3052,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'storage_technologies', 'StorageTechnology')",
       "rank": 0,
-      "row_sql": "INSERT INTO storage_technologies (id, name, prime_mover_type, storage_tech, region, power_systems_type, lifetime, unit_size_charge, unit_size_discharge, unit_size_energy, capacity_limits_charge, capacity_limits_discharge, capacity_limits_energy, available, duration_limits, efficiency, min_discharge_fraction, losses, capital_costs_charge, capital_costs_discharge, capital_costs_energy, interconnection_cost, operation_costs, financial_data) VALUES (?, ?, COALESCE(?, 'OT'), ?, ?, ?, COALESCE(?, 100), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), COALESCE(?, 1.0), ?, COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"THERMAL\",\"fixed\":0,\"shut_down\":0,\"start_up\":0,\"variable\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), ?)",
+      "row_sql": "INSERT INTO storage_technologies (id, name, prime_mover_type, storage_tech, region, power_systems_type, lifetime, unit_size_charge, unit_size_discharge, unit_size_energy, capacity_limits_charge, capacity_limits_discharge, capacity_limits_energy, available, duration_limits, efficiency, min_discharge_fraction, losses, capital_costs_charge, capital_costs_discharge, capital_costs_energy, interconnection_cost, operation_costs, financial_data) VALUES (?, ?, COALESCE(?, 'OT'), COALESCE(?, 'OTHER_CHEM'), ?, ?, COALESCE(?, 100), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), COALESCE(?, 1.0), ?, COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"THERMAL\",\"fixed\":0,\"shut_down\":0,\"start_up\":0,\"variable\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), ?)",
       "skip": [],
       "table": "storage_technologies"
     },
@@ -4720,7 +4720,7 @@
       "table": "virtual_participants"
     }
   },
-  "schema_user_version": 11,
+  "schema_user_version": 12,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",
@@ -4871,7 +4871,6 @@
   "unsupported_sections": {
     "aggregation": "no column for a portfolio's aggregation type",
     "ext": "no table in schema.sql",
-    "financial_data": "no table in schema.sql",
     "investment_schedule": "no table in schema.sql",
     "requirements_associations": "no table in schema.sql",
     "voltage_control_associations": "no table in schema.sql"
