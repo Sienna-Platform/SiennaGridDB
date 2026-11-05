@@ -176,29 +176,29 @@ def test_verify_fails_when_seal_row_missing(fresh_db, fresh_db_path):
 # Seal enforcement (protected registry tables)
 @pytest.mark.parametrize("table", SEALED_TABLES)
 def test_seal_blocks_delete(fresh_db, table):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(f"DELETE FROM {table}")
 
 
 def test_seal_blocks_update_quantity_kinds(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "UPDATE quantity_kinds SET default_unit = 'x' WHERE name = 'ActivePower'"
         )
 
 
 def test_seal_blocks_update_allowed_units(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute("UPDATE allowed_units SET unit = 'x' WHERE unit = 'MW'")
 
 
 def test_seal_blocks_update_unit_conventions(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute("UPDATE unit_conventions SET unit = 'x' WHERE id = 1")
 
 
 def test_seal_blocks_update_metadata(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "UPDATE unit_management_metadata SET value = 'x' "
             "WHERE key = 'unit_conventions_checksum'"
@@ -206,7 +206,7 @@ def test_seal_blocks_update_metadata(fresh_db):
 
 
 def test_seal_blocks_insert_quantity_kinds(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO quantity_kinds(name, default_unit, dimension) "
             "VALUES ('Bogus', 'x', 'x')"
@@ -214,14 +214,14 @@ def test_seal_blocks_insert_quantity_kinds(fresh_db):
 
 
 def test_seal_blocks_insert_allowed_units(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO allowed_units(quantity_kind, unit) VALUES ('ActivePower', 'GW')"
         )
 
 
 def test_seal_blocks_insert_unit_conventions(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO unit_conventions(table_name, column_name, quantity_kind, unit) "
             "VALUES ('loads', 'bogus', 'ActivePower', 'MW')"
@@ -229,14 +229,14 @@ def test_seal_blocks_insert_unit_conventions(fresh_db):
 
 
 def test_seal_blocks_insert_metadata(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT INTO unit_management_metadata(key, value) VALUES ('k', 'v')"
         )
 
 
 def test_seal_blocks_insert_or_replace_metadata(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT OR REPLACE INTO unit_management_metadata(key, value) "
             "VALUES ('unit_conventions_checksum', 'forged')"
@@ -244,7 +244,7 @@ def test_seal_blocks_insert_or_replace_metadata(fresh_db):
 
 
 def test_seal_blocks_insert_or_replace_quantity_kinds(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         fresh_db.execute(
             "INSERT OR REPLACE INTO quantity_kinds(name, default_unit, dimension) "
             "VALUES ('ActivePower', 'x', 'x')"
@@ -261,7 +261,7 @@ def test_registry_rerun_is_noop_failure_not_corruption(fresh_db, fresh_db_path):
 
     conn = sqlite3.connect(str(fresh_db_path))
     conn.execute("PRAGMA foreign_keys = ON")
-    with pytest.raises(sqlite3.IntegrityError, match="is immutable outside scripts/generate_unit_registry.py"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"is immutable outside scripts/generate_unit_registry.py"):
         conn.executescript(REGISTRY_SQL.read_text())
     # BEFORE trigger aborts on first INSERT; counts stay stable without rollback
     after = {
@@ -276,7 +276,7 @@ def test_registry_rerun_is_noop_failure_not_corruption(fresh_db, fresh_db_path):
 def test_attribute_known_name_wrong_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
-        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
+        sqlite3.IntegrityError, match=r"attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(fresh_db, 1, "ramp_limits", "1.0", "MW", "ActivePower")
 
@@ -366,7 +366,7 @@ def test_attribute_polymorphic_both_pairs_accepted_cross_rejected(fresh_db):
     # A cross pair (valid vocabulary Duration/s, but not registered for this name).
     make_entity(fresh_db, 3)
     with pytest.raises(
-        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
+        sqlite3.IntegrityError, match=r"attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(fresh_db, 3, "poly_attr", "3.0", "s", "Duration")
 
@@ -463,7 +463,7 @@ def test_association_registered_quantity_kind_bad_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="registered .quantity_kind, unit. pair",
+        match=r"registered .quantity_kind, unit. pair",
     ):
         _insert_association(fresh_db, 1, units="bananas", quantity_kind="ActivePower")
 
@@ -472,7 +472,7 @@ def test_association_registered_quantity_kind_missing_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
         sqlite3.IntegrityError,
-        match="registered .quantity_kind, unit. pair",
+        match=r"registered .quantity_kind, unit. pair",
     ):
         _insert_association(fresh_db, 1, units=None, quantity_kind="ActivePower")
 
@@ -1397,7 +1397,7 @@ def test_attribute_start_time_limits_registered_unit_accepted(fresh_db):
 def test_attribute_start_time_limits_wrong_unit_rejected(fresh_db):
     make_entity(fresh_db, 1)
     with pytest.raises(
-        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
+        sqlite3.IntegrityError, match=r"attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(
             fresh_db, 1, "start_time_limits", '{"hot": 0.5, "warm": 2, "cold": 5}',
@@ -1802,7 +1802,7 @@ def test_attributes_trigger_accepts_either_natural_units_arm_rejects_cross_pair(
 
     make_entity(fresh_db, 3)
     with pytest.raises(
-        sqlite3.IntegrityError, match="attributes.name is a known name and must use its registered unit"
+        sqlite3.IntegrityError, match=r"attributes.name is a known name and must use its registered unit"
     ):
         insert_attribute(fresh_db, 3, "shunt_susceptance_arm", "0.01", "MW", "ActivePower")
 

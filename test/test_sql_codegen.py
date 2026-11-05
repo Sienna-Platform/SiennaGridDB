@@ -93,7 +93,7 @@ def test_property_without_disposition_fails():
     assert codegen.disposition_problems("sources", merged, cfg) == []
 
     cfg["columns"].pop("internal_angle")
-    cfg["skip"] = cfg.get("skip", []) + ["no_such_property"]
+    cfg["skip"] = [*cfg.get("skip", []), "no_such_property"]
     problems = codegen.disposition_problems("sources", merged, cfg)
     assert any(p.startswith("sources.internal_angle (Source) has no disposition") for p in problems)
     assert "sources.no_such_property is in skip but no mapped component defines it" in problems
