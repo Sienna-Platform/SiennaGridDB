@@ -321,9 +321,8 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
         )
 
 
-def test_series_compensators_store_and_reject_control_modes(fresh_db):
-    """A FIXED row needs no limits; DISPATCHABLE needs reactance_limits, and
-    ACTIVE_POWER_FLOW also needs active_power_flow_setpoint."""
+def test_series_admittances_store_bypassed_flag(fresh_db):
+    """bypassed defaults to 0 (in service), stores 1, and rejects anything else."""
     from test_unit_registry import make_entity
 
     arc, a, b = 601, 602, 603
@@ -337,27 +336,21 @@ def test_series_compensators_store_and_reject_control_modes(fresh_db):
         )
     fresh_db.execute("INSERT INTO arcs(id, from_id, to_id) VALUES (?, ?, ?)", (arc, a, b))
 
-    insert = (
-        "INSERT INTO series_compensators "
-        "(id, name, arc_id, r, x, continuous_rating, power_units, base_power, control_mode, "
-        "reactance_limits, active_power_flow_setpoint) "
-        "VALUES (?, ?, ?, 0.0, -0.05, 100.0, 'COMPONENT_BASE', 100.0, ?, ?, ?)"
+    columns = "(id, name, arc_id, r, x, continuous_rating, power_units, base_power"
+    values = "VALUES (?, ?, ?, 0.0, -0.05, 100.0, 'COMPONENT_BASE', 100.0"
+    for eid in range(1, 4):
+        make_entity(fresh_db, eid, entity_table="series_admittances", entity_type="SeriesAdmittance")
+    fresh_db.execute(f"INSERT INTO series_admittances {columns}) {values})", (1, "sa1", arc))
+    fresh_db.execute(
+        f"INSERT INTO series_admittances {columns}, bypassed) {values}, ?)", (2, "sa2", arc, 1)
     )
-    limits = '{"min": -0.1, "max": 0.0}'
-    for eid in range(1, 6):
-        make_entity(fresh_db, eid, entity_table="series_compensators", entity_type="SeriesCompensator")
-    fresh_db.execute(insert, (1, "sc1", arc, "FIXED", None, None))
-    fresh_db.execute(insert, (2, "sc2", arc, "ACTIVE_POWER_FLOW", limits, 50.0))
-    row = fresh_db.execute(
-        "SELECT x, control_mode, reactance_limits FROM series_compensators WHERE id = 1"
-    ).fetchone()
-    assert row == (-0.05, "FIXED", None)
+    rows = fresh_db.execute("SELECT id, x, bypassed FROM series_admittances ORDER BY id").fetchall()
+    assert rows == [(1, -0.05, 0), (2, -0.05, 1)]
 
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-        fresh_db.execute(insert, (3, "sc3", arc, "DISPATCHABLE", None, None))
-    with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
-        fresh_db.execute(insert, (4, "sc4", arc, "ACTIVE_POWER_FLOW", limits, None))
-    fresh_db.execute(insert, (5, "sc5", arc, "DISPATCHABLE", limits, None))
+        fresh_db.execute(
+            f"INSERT INTO series_admittances {columns}, bypassed) {values}, ?)", (3, "sa3", arc, 2)
+        )
 
 
 def test_out_of_area_load_cannot_be_deleted(fresh_db):

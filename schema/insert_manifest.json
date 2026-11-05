@@ -2482,7 +2482,7 @@
       ],
       "table": "renewable_generators"
     },
-    "SeriesCompensator": {
+    "SeriesAdmittance": {
       "attributes": [],
       "bindings": [
         {
@@ -2510,16 +2510,8 @@
           "path": "x"
         },
         {
-          "encode": "text",
-          "path": "control_mode"
-        },
-        {
-          "encode": "json",
-          "path": "reactance_limits"
-        },
-        {
-          "encode": "real",
-          "path": "active_power_flow_setpoint"
+          "encode": "bool",
+          "path": "bypassed"
         },
         {
           "encode": "text",
@@ -2558,11 +2550,11 @@
           "path": "operational_flow_limit"
         }
       ],
-      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'series_compensators', 'SeriesCompensator')",
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'series_admittances', 'SeriesAdmittance')",
       "rank": 1,
-      "row_sql": "INSERT INTO series_compensators (id, name, arc_id, continuous_rating, r, x, control_mode, reactance_limits, active_power_flow_setpoint, parameter_units, base_power, power_units, available, active_power_flow, reactive_power_flow, rating_b, rating_c, operational_flow_limit) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 'FIXED'), ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?)",
+      "row_sql": "INSERT INTO series_admittances (id, name, arc_id, continuous_rating, r, x, bypassed, parameter_units, base_power, power_units, available, active_power_flow, reactive_power_flow, rating_b, rating_c, operational_flow_limit) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, FALSE), COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?)",
       "skip": [],
-      "table": "series_compensators"
+      "table": "series_admittances"
     },
     "ShiftablePowerLoad": {
       "attributes": [
@@ -4720,7 +4712,7 @@
       "table": "virtual_participants"
     }
   },
-  "schema_user_version": 7,
+  "schema_user_version": 8,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",
@@ -4957,7 +4949,7 @@
       {
         "is_dc": false,
         "is_topology": false,
-        "name": "SeriesCompensator"
+        "name": "SeriesAdmittance"
       },
       {
         "is_dc": false,

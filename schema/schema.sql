@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 7; -- bump on every schema or registry change
+PRAGMA user_version = 8; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -806,23 +806,21 @@ CREATE TABLE discrete_controlled_ac_branches (
 ) STRICT;
 CREATE INDEX idx_discrete_controlled_ac_branches_arc_id ON discrete_controlled_ac_branches (arc_id);
 
--- Series compensator (PSY SeriesCompensator): a series capacitor or reactor, a
--- TCSC, or an SSSC on one AC arc. x is negative for a capacitor. r/x/reactance_limits
--- follow parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);
--- power_units governs the power-family columns. DISPATCHABLE and ACTIVE_POWER_FLOW
--- require reactance_limits; ACTIVE_POWER_FLOW also requires active_power_flow_setpoint.
--- Components: SeriesCompensator
-DROP TABLE IF EXISTS series_compensators;
-CREATE TABLE series_compensators (
+-- Fixed series admittance (PSY SeriesAdmittance): a series capacitor or reactor
+-- with constant r and x on one AC arc. x is negative for a capacitor. r/x follow
+-- parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);
+-- power_units governs the power-family columns. bypassed = 1 shorts the device
+-- into a zero-impedance tie; r and x keep its in-service impedance.
+-- Components: SeriesAdmittance
+DROP TABLE IF EXISTS series_admittances;
+CREATE TABLE series_admittances (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     continuous_rating REAL NOT NULL CHECK (continuous_rating >= 0),
     r REAL NOT NULL CHECK (r >= 0),
     x REAL NOT NULL,
-    control_mode TEXT NOT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('FIXED', 'BYPASSED', 'DISPATCHABLE', 'ACTIVE_POWER_FLOW')),
-    reactance_limits TEXT NULL CHECK (json_valid(reactance_limits)),
-    active_power_flow_setpoint REAL NULL,
+    bypassed INTEGER NOT NULL DEFAULT 0 CHECK (bypassed IN (0, 1)),
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -831,11 +829,9 @@ CREATE TABLE series_compensators (
     reactive_power_flow REAL NOT NULL DEFAULT 0.0,
     rating_b REAL NULL,
     rating_c REAL NULL,
-    operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit)),
-    CHECK (control_mode NOT IN ('DISPATCHABLE', 'ACTIVE_POWER_FLOW') OR reactance_limits IS NOT NULL),
-    CHECK (control_mode <> 'ACTIVE_POWER_FLOW' OR active_power_flow_setpoint IS NOT NULL)
+    operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
-CREATE INDEX idx_series_compensators_arc_id ON series_compensators (arc_id);
+CREATE INDEX idx_series_admittances_arc_id ON series_admittances (arc_id);
 
 -- One modeled arc of a transformer (PSY TransformerCircuit); unnamed
 -- subcomponents, so no name column. r/x follow parameter_units (COMPONENT_BASE ->
@@ -1360,7 +1356,7 @@ VALUES
     ('RenewableDispatch', 0, 0),
     ('RenewableNonDispatch', 0, 0),
     ('RenewablePowerPlant', 0, 0),
-    ('SeriesCompensator', 0, 0),
+    ('SeriesAdmittance', 0, 0),
     ('ShiftablePowerLoad', 0, 0),
     ('Source', 0, 0),
     ('StandardLoad', 0, 0),

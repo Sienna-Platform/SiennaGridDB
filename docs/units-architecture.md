@@ -190,7 +190,7 @@ physical quantity, and — under `NATURAL_UNITS` — which representation of it?
 ### Axis 1: `parameter_units`, exactly two values
 
 One discriminator column, `parameter_units`, on six tables — `transmission_lines`,
-`series_compensators`, `transformer_circuits`, `three_winding_transformers`, `sources`,
+`series_admittances`, `transformer_circuits`, `three_winding_transformers`, `sources`,
 `facts_control_devices`. The two shunt tables are not among them:
 `fixed_admittance` and `switched_admittance` carry `admittance_units`, whose arms are
 `NATURAL_UNITS` and `COMPONENT_MVAR`, because a shunt has no MVA rating to per-unitize against.

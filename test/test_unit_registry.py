@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 42
 EXPECTED_ALLOWED_UNITS = 67
-EXPECTED_UNIT_CONVENTIONS = 558
+EXPECTED_UNIT_CONVENTIONS = 554
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1659,20 +1659,20 @@ def _build_facts_control_device(conn, base_id, parameter_units):
     )
 
 
-def _build_series_compensator(conn, base_id, parameter_units):
+def _build_series_admittance(conn, base_id, parameter_units):
     arc = _provision_arc(conn, base_id * 100)
-    make_entity(conn, base_id, entity_table="series_compensators", entity_type="SeriesCompensator")
+    make_entity(conn, base_id, entity_table="series_admittances", entity_type="SeriesAdmittance")
     conn.execute(
-        "INSERT INTO series_compensators"
+        "INSERT INTO series_admittances"
         "(id, name, arc_id, continuous_rating, r, x, parameter_units, power_units, base_power) "
         "VALUES (?, ?, ?, 100.0, 0.0, -0.05, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, f"sc_{base_id}", arc, parameter_units),
+        (base_id, f"sa_{base_id}", arc, parameter_units),
     )
 
 
 UNIT_BASIS_BUILDERS = {
     "transmission_lines": _build_transmission_line,
-    "series_compensators": _build_series_compensator,
+    "series_admittances": _build_series_admittance,
     "transformer_circuits": _build_transformer_circuit,
     "three_winding_transformers": _build_three_winding_transformer,
     "sources": _build_source,
