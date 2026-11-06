@@ -409,8 +409,6 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('reserves', 'time_frame', 'OperationalDuration', 'min', NULL, NULL, NULL, NULL, NULL, NULL, 'The saturation time frame to provide reserve contribution.'),
     ('series_compensators', 'active_power_flow', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Initial condition of active power flow through the compensator.'),
     ('series_compensators', 'active_power_flow', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial condition of active power flow through the compensator.'),
-    ('series_compensators', 'active_power_flow_setpoint', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Active power flow, from the `from` bus to the `to` bus, the compensator holds. Required when `control_mode` is `ACTIVE_POWER_FLOW`.'),
-    ('series_compensators', 'active_power_flow_setpoint', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Active power flow, from the `from` bus to the `to` bus, the compensator holds. Required when `control_mode` is `ACTIVE_POWER_FLOW`.'),
     ('series_compensators', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'System base power for per-unitization of this component''s per-unit fields, recorded per component in lieu of a system-level table.'),
     ('series_compensators', 'continuous_rating', 'ApparentPower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Thermal rating. Flow through the compensator must be between -`rating` and `rating`.'),
     ('series_compensators', 'continuous_rating', 'ApparentPower', 'MVA', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Thermal rating. Flow through the compensator must be between -`rating` and `rating`.'),
@@ -422,12 +420,10 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('series_compensators', 'rating_b', 'ApparentPower', 'MVA', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Second current rating.'),
     ('series_compensators', 'rating_c', 'ApparentPower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Third current rating.'),
     ('series_compensators', 'rating_c', 'ApparentPower', 'MVA', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Third current rating.'),
-    ('series_compensators', 'reactance_limits', 'Reactance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'arc_id->arcs.from_id->balancing_topologies.base_voltage', 'Minimum and maximum series reactance. Required when `control_mode` is `DISPATCHABLE` or `ACTIVE_POWER_FLOW`.'),
-    ('series_compensators', 'reactance_limits', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Minimum and maximum series reactance. Required when `control_mode` is `DISPATCHABLE` or `ACTIVE_POWER_FLOW`.'),
     ('series_compensators', 'reactive_power_flow', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Initial condition of reactive power flow through the compensator.'),
     ('series_compensators', 'reactive_power_flow', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial condition of reactive power flow through the compensator.'),
-    ('series_compensators', 'x', 'Reactance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'arc_id->arcs.from_id->balancing_topologies.base_voltage', 'Series reactance; negative for a capacitor. Under `DISPATCHABLE` and `ACTIVE_POWER_FLOW`, the present value.'),
-    ('series_compensators', 'x', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Series reactance; negative for a capacitor. Under `DISPATCHABLE` and `ACTIVE_POWER_FLOW`, the present value.'),
+    ('series_compensators', 'x', 'Reactance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'arc_id->arcs.from_id->balancing_topologies.base_voltage', 'Series reactance; negative for a capacitor.'),
+    ('series_compensators', 'x', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Series reactance; negative for a capacitor.'),
     ('sources', 'active_power', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Initial active power set point of the unit. For power flow, this is the steady state operating point of the system. For production cost modeling, this may or may not be used as the initial starting point for the solver, depending on the solver used.'),
     ('sources', 'active_power', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial active power set point of the unit. For power flow, this is the steady state operating point of the system. For production cost modeling, this may or may not be used as the initial starting point for the solver, depending on the solver used.'),
     ('sources', 'active_power_limits', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Minimum and maximum stable active power levels.'),
@@ -702,4 +698,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'a1b486b60be8292cba63dbcd15ce43094660b4a072ab656129ce3577c7e38c20', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', '1a5e5151af9506abad8a16255c446afd999eb578a34594566ea8f65a3fdc9774', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
