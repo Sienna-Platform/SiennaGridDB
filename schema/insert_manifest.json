@@ -860,6 +860,64 @@
       ],
       "table": "fixed_admittance"
     },
+    "GenericArcImpedance": {
+      "attributes": [],
+      "bindings": [
+        {
+          "encode": "int",
+          "path": "id"
+        },
+        {
+          "encode": "text",
+          "path": "name"
+        },
+        {
+          "encode": "int",
+          "path": "arc"
+        },
+        {
+          "encode": "real",
+          "path": "r"
+        },
+        {
+          "encode": "real",
+          "path": "x"
+        },
+        {
+          "encode": "text",
+          "path": "parameter_units"
+        },
+        {
+          "encode": "real",
+          "path": "base_power"
+        },
+        {
+          "encode": "text",
+          "path": "power_units"
+        },
+        {
+          "encode": "bool",
+          "path": "available"
+        },
+        {
+          "encode": "real",
+          "path": "active_power_flow"
+        },
+        {
+          "encode": "real",
+          "path": "reactive_power_flow"
+        },
+        {
+          "encode": "json",
+          "path": "operational_flow_limit"
+        }
+      ],
+      "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'generic_arc_impedances', 'GenericArcImpedance')",
+      "rank": 1,
+      "row_sql": "INSERT INTO generic_arc_impedances (id, name, arc_id, r, x, parameter_units, base_power, power_units, available, active_power_flow, reactive_power_flow, operational_flow_limit) VALUES (?, ?, ?, ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), ?)",
+      "skip": [],
+      "table": "generic_arc_impedances"
+    },
     "GroupReserve": {
       "attributes": [],
       "bindings": [
@@ -4823,6 +4881,11 @@
         "is_dc": false,
         "is_topology": false,
         "name": "FixedForcedOutage"
+      },
+      {
+        "is_dc": false,
+        "is_topology": false,
+        "name": "GenericArcImpedance"
       },
       {
         "is_dc": false,

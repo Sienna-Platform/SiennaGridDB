@@ -724,6 +724,29 @@ CREATE TABLE transmission_lines (
 ) STRICT;
 CREATE INDEX idx_transmission_lines_arc_id ON transmission_lines (arc_id);
 
+-- Generic series impedance on an arc (PSY GenericArcImpedance). Its own table,
+-- not a transmission_lines variant: r may be negative here (equivalent-network
+-- branches), it has no thermal rating (only an optional operational_flow_limit),
+-- and it carries no shunt (b/g) or angle_limits. r/x follow parameter_units as in
+-- transmission_lines: COMPONENT_BASE is per-unit on base_power, NATURAL_UNITS is ohm.
+-- Components: GenericArcImpedance
+DROP TABLE IF EXISTS generic_arc_impedances;
+CREATE TABLE generic_arc_impedances (
+    id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
+    name TEXT NOT NULL UNIQUE,
+    arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
+    r REAL NOT NULL,
+    x REAL NOT NULL,
+    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    base_power REAL NOT NULL CHECK (base_power > 0),
+    power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    active_power_flow REAL NOT NULL DEFAULT 0.0,
+    reactive_power_flow REAL NOT NULL DEFAULT 0.0,
+    operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
+) STRICT;
+CREATE INDEX idx_generic_arc_impedances_arc_id ON generic_arc_impedances (arc_id);
+
 -- Physical flow limits between areas or balancing topologies, distinct from
 -- transmission_lines: these enforce market-level interchange limits.
 -- Components: AreaInterchange
@@ -1334,6 +1357,7 @@ VALUES
     ('FACTSControlDevice', 0, 0),
     ('FixedAdmittance', 0, 0),
     ('FixedForcedOutage', 0, 0),
+    ('GenericArcImpedance', 0, 0),
     ('GeographicInfo', 0, 0),
     ('GeometricDistributionForcedOutage', 0, 0),
     ('GroupReserve', 0, 0),

@@ -23,7 +23,7 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 42
 EXPECTED_ALLOWED_UNITS = 67
-EXPECTED_UNIT_CONVENTIONS = 558
+EXPECTED_UNIT_CONVENTIONS = 569
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1670,8 +1670,23 @@ def _build_series_compensator(conn, base_id, parameter_units):
     )
 
 
+def _build_generic_arc_impedance(conn, base_id, parameter_units):
+    arc = _provision_arc(conn, base_id * 100)
+    make_entity(
+        conn, base_id, entity_table="generic_arc_impedances", entity_type="GenericArcImpedance",
+    )
+    # r < 0 on purpose: unlike transmission_lines, this table carries no r >= 0 CHECK.
+    conn.execute(
+        "INSERT INTO generic_arc_impedances"
+        "(id, name, arc_id, r, x, parameter_units, power_units, base_power) "
+        "VALUES (?, ?, ?, -0.01, 0.1, ?, 'COMPONENT_BASE', 100.0)",
+        (base_id, f"gai_{base_id}", arc, parameter_units),
+    )
+
+
 UNIT_BASIS_BUILDERS = {
     "transmission_lines": _build_transmission_line,
+    "generic_arc_impedances": _build_generic_arc_impedance,
     "series_compensators": _build_series_compensator,
     "transformer_circuits": _build_transformer_circuit,
     "three_winding_transformers": _build_three_winding_transformer,
