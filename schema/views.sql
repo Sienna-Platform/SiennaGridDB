@@ -9,7 +9,7 @@ VALUES
     ('transmission_lines'),
     ('transmission_interchanges'),
     ('discrete_controlled_ac_branches'),
-    ('series_admittances'),
+    ('series_compensators'),
     ('two_winding_transformers'),
     ('three_winding_transformers'),
     ('two_terminal_hvdc_lines'),
@@ -23,7 +23,7 @@ CREATE VIEW IF NOT EXISTS branch_names AS
     UNION ALL
     SELECT id, name FROM discrete_controlled_ac_branches
     UNION ALL
-    SELECT id, name FROM series_admittances
+    SELECT id, name FROM series_compensators
     UNION ALL
     SELECT id, name FROM two_winding_transformers
     UNION ALL

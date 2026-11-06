@@ -304,11 +304,11 @@
         "power_units": {}
       }
     },
-    "series_admittances": {
+    "series_compensators": {
       "arc_domain": "AC",
       "interface_member": true,
       "comment": [
-        "Fixed series admittance (PSY SeriesAdmittance): a series capacitor or reactor",
+        "Fixed series compensator (PSY SeriesCompensator): a series capacitor or reactor",
         "with constant r and x on one AC arc. x is negative for a capacitor. r/x follow",
         "parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);",
         "power_units governs the power-family columns. bypassed = 1 shorts the device",

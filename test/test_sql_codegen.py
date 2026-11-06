@@ -321,7 +321,7 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
         )
 
 
-def test_series_admittances_store_bypassed_flag(fresh_db):
+def test_series_compensators_store_bypassed_flag(fresh_db):
     """bypassed defaults to 0 (in service), stores 1, and rejects anything else."""
     from test_unit_registry import make_entity
 
@@ -339,17 +339,17 @@ def test_series_admittances_store_bypassed_flag(fresh_db):
     columns = "(id, name, arc_id, r, x, continuous_rating, power_units, base_power"
     values = "VALUES (?, ?, ?, 0.0, -0.05, 100.0, 'COMPONENT_BASE', 100.0"
     for eid in range(1, 4):
-        make_entity(fresh_db, eid, entity_table="series_admittances", entity_type="SeriesAdmittance")
-    fresh_db.execute(f"INSERT INTO series_admittances {columns}) {values})", (1, "sa1", arc))
+        make_entity(fresh_db, eid, entity_table="series_compensators", entity_type="SeriesCompensator")
+    fresh_db.execute(f"INSERT INTO series_compensators {columns}) {values})", (1, "sa1", arc))
     fresh_db.execute(
-        f"INSERT INTO series_admittances {columns}, bypassed) {values}, ?)", (2, "sa2", arc, 1)
+        f"INSERT INTO series_compensators {columns}, bypassed) {values}, ?)", (2, "sa2", arc, 1)
     )
-    rows = fresh_db.execute("SELECT id, x, bypassed FROM series_admittances ORDER BY id").fetchall()
+    rows = fresh_db.execute("SELECT id, x, bypassed FROM series_compensators ORDER BY id").fetchall()
     assert rows == [(1, -0.05, 0), (2, -0.05, 1)]
 
     with pytest.raises(sqlite3.IntegrityError, match="CHECK constraint failed"):
         fresh_db.execute(
-            f"INSERT INTO series_admittances {columns}, bypassed) {values}, ?)", (3, "sa3", arc, 2)
+            f"INSERT INTO series_compensators {columns}, bypassed) {values}, ?)", (3, "sa3", arc, 2)
         )
 
 

@@ -806,14 +806,14 @@ CREATE TABLE discrete_controlled_ac_branches (
 ) STRICT;
 CREATE INDEX idx_discrete_controlled_ac_branches_arc_id ON discrete_controlled_ac_branches (arc_id);
 
--- Fixed series admittance (PSY SeriesAdmittance): a series capacitor or reactor
+-- Fixed series compensator (PSY SeriesCompensator): a series capacitor or reactor
 -- with constant r and x on one AC arc. x is negative for a capacitor. r/x follow
 -- parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);
 -- power_units governs the power-family columns. bypassed = 1 shorts the device
 -- into a zero-impedance tie; r and x keep its in-service impedance.
--- Components: SeriesAdmittance
-DROP TABLE IF EXISTS series_admittances;
-CREATE TABLE series_admittances (
+-- Components: SeriesCompensator
+DROP TABLE IF EXISTS series_compensators;
+CREATE TABLE series_compensators (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
@@ -831,7 +831,7 @@ CREATE TABLE series_admittances (
     rating_c REAL NULL,
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
-CREATE INDEX idx_series_admittances_arc_id ON series_admittances (arc_id);
+CREATE INDEX idx_series_compensators_arc_id ON series_compensators (arc_id);
 
 -- One modeled arc of a transformer (PSY TransformerCircuit); unnamed
 -- subcomponents, so no name column. r/x follow parameter_units (COMPONENT_BASE ->
@@ -1356,7 +1356,7 @@ VALUES
     ('RenewableDispatch', 0, 0),
     ('RenewableNonDispatch', 0, 0),
     ('RenewablePowerPlant', 0, 0),
-    ('SeriesAdmittance', 0, 0),
+    ('SeriesCompensator', 0, 0),
     ('ShiftablePowerLoad', 0, 0),
     ('Source', 0, 0),
     ('StandardLoad', 0, 0),

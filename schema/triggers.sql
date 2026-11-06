@@ -278,9 +278,9 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS check_series_admittances_entity_exists BEFORE
+CREATE TRIGGER IF NOT EXISTS check_series_compensators_entity_exists BEFORE
 INSERT
-    ON series_admittances
+    ON series_compensators
     WHEN NOT EXISTS (
         SELECT
             1
@@ -288,13 +288,13 @@ INSERT
             entities
         WHERE
             id = NEW.id
-            AND entity_table = 'series_admittances'
+            AND entity_table = 'series_compensators'
     )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'series_admittances.id must exist in entities with entity_table series_admittances before insert'
+        'series_compensators.id must exist in entities with entity_table series_compensators before insert'
     );
 
 END;
@@ -869,15 +869,15 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS prevent_series_admittances_id_update BEFORE
+CREATE TRIGGER IF NOT EXISTS prevent_series_compensators_id_update BEFORE
 UPDATE
-    OF id ON series_admittances
+    OF id ON series_compensators
     WHEN NEW.id IS NOT OLD.id
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'series_admittances.id cannot change; delete the row and insert it again'
+        'series_compensators.id cannot change; delete the row and insert it again'
     );
 
 END;
@@ -1273,9 +1273,9 @@ WHERE
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS delete_series_admittances_entity
+CREATE TRIGGER IF NOT EXISTS delete_series_compensators_entity
 AFTER
-    DELETE ON series_admittances FOR EACH ROW
+    DELETE ON series_compensators FOR EACH ROW
 BEGIN
 DELETE FROM
     entities
@@ -1637,9 +1637,9 @@ SELECT
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS enforce_series_admittances_arc_domain_insert BEFORE
+CREATE TRIGGER IF NOT EXISTS enforce_series_compensators_arc_domain_insert BEFORE
 INSERT
-    ON series_admittances
+    ON series_compensators
     WHEN EXISTS (
         SELECT
             1
@@ -1655,14 +1655,14 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'series_admittances.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+        'series_compensators.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS enforce_series_admittances_arc_domain_update BEFORE
+CREATE TRIGGER IF NOT EXISTS enforce_series_compensators_arc_domain_update BEFORE
 UPDATE
-    OF arc_id ON series_admittances
+    OF arc_id ON series_compensators
     WHEN EXISTS (
         SELECT
             1
@@ -1678,19 +1678,19 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'series_admittances.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+        'series_compensators.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
     );
 
 END;
 
-CREATE TRIGGER IF NOT EXISTS enforce_series_admittances_arc_domain_endpoints BEFORE
+CREATE TRIGGER IF NOT EXISTS enforce_series_compensators_arc_domain_endpoints BEFORE
 UPDATE
     OF from_id, to_id ON arcs
     WHEN EXISTS (
         SELECT
             1
         FROM
-            series_admittances t,
+            series_compensators t,
             entities e
             JOIN entity_types et ON et.name = e.entity_type
         WHERE
@@ -1702,7 +1702,7 @@ BEGIN
 SELECT
     RAISE(
         ABORT,
-        'arcs row is the series_admittances.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+        'arcs row is the series_compensators.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
     );
 
 END;
