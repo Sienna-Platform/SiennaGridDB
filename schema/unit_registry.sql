@@ -291,6 +291,17 @@ INSERT INTO unit_conventions (table_name, column_name, quantity_kind, unit, disc
     ('fixed_admittance', 'y_b', 'Susceptance', 'S', 'admittance_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Shunt susceptance in siemens'),
     ('fixed_admittance', 'y_g', 'ActivePower', 'MW', 'admittance_units', 'COMPONENT_MVAR', NULL, NULL, NULL, NULL, 'Shunt conductance in the PSS/E form: MW at 1.0 pu voltage'),
     ('fixed_admittance', 'y_g', 'Conductance', 'S', 'admittance_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Shunt conductance in siemens'),
+    ('generic_arc_impedances', 'active_power_flow', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Initial condition of active power flow on the line.'),
+    ('generic_arc_impedances', 'active_power_flow', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial condition of active power flow on the line.'),
+    ('generic_arc_impedances', 'base_power', 'ApparentPower', 'MVA', NULL, NULL, NULL, NULL, NULL, NULL, 'System base power for per-unitization of this component''s per-unit fields, recorded per component in lieu of a system-level table.'),
+    ('generic_arc_impedances', 'operational_flow_limit', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Operator-set minimum and maximum flow in each direction. Absent means no operational limit.'),
+    ('generic_arc_impedances', 'operational_flow_limit', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Operator-set minimum and maximum flow in each direction. Absent means no operational limit.'),
+    ('generic_arc_impedances', 'r', 'Resistance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'arc_id->arcs.from_id->balancing_topologies.base_voltage', 'Resistance.'),
+    ('generic_arc_impedances', 'r', 'Resistance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Resistance.'),
+    ('generic_arc_impedances', 'reactive_power_flow', 'ReactivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Initial condition of reactive power flow on the line.'),
+    ('generic_arc_impedances', 'reactive_power_flow', 'ReactivePower', 'MVAr', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial condition of reactive power flow on the line.'),
+    ('generic_arc_impedances', 'x', 'Reactance', 'pu', 'parameter_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', 'arc_id->arcs.from_id->balancing_topologies.base_voltage', 'Reactance.'),
+    ('generic_arc_impedances', 'x', 'Reactance', 'ohm', 'parameter_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Reactance.'),
     ('hydro_generators', 'active_power', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Initial active power set point of the unit. For power flow, this is the steady state operating point of the system. For production cost modeling, this may or may not be used as the initial starting point for the solver, depending on the solver used.'),
     ('hydro_generators', 'active_power', 'ActivePower', 'MW', 'power_units', 'NATURAL_UNITS', NULL, NULL, NULL, NULL, 'Initial active power set point of the unit. For power flow, this is the steady state operating point of the system. For production cost modeling, this may or may not be used as the initial starting point for the solver, depending on the solver used.'),
     ('hydro_generators', 'active_power_limits', 'ActivePower', 'pu', 'power_units', 'COMPONENT_BASE', NULL, NULL, 'base_power', NULL, 'Minimum and maximum stable active power levels.'),
@@ -702,4 +713,4 @@ INSERT INTO unit_management_metadata (key, value, description) VALUES
 -- Inserting this row activates the immutability triggers. See the
 -- module docstring of generate_unit_registry.py for the exact repr.
 INSERT INTO unit_management_metadata (key, value, description) VALUES
-    ('unit_conventions_checksum', 'a1b486b60be8292cba63dbcd15ce43094660b4a072ab656129ce3577c7e38c20', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');
+    ('unit_conventions_checksum', 'e87ef402a1933a6d5515841079cee1e94d552a67d277f23ae805e30116eb6761', 'Registry content fingerprint -- verify with scripts/verify_unit_registry.py');

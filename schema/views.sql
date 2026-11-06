@@ -7,6 +7,7 @@
 CREATE VIEW IF NOT EXISTS interface_member_tables (name) AS
 VALUES
     ('transmission_lines'),
+    ('generic_arc_impedances'),
     ('transmission_interchanges'),
     ('discrete_controlled_ac_branches'),
     ('series_compensators'),
@@ -18,6 +19,8 @@ VALUES
 -- Every row of those tables, by id and name.
 CREATE VIEW IF NOT EXISTS branch_names AS
     SELECT id, name FROM transmission_lines
+    UNION ALL
+    SELECT id, name FROM generic_arc_impedances
     UNION ALL
     SELECT id, name FROM transmission_interchanges
     UNION ALL

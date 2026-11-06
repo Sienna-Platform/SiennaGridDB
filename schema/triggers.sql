@@ -194,6 +194,27 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_generic_arc_impedances_entity_exists BEFORE
+INSERT
+    ON generic_arc_impedances
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'generic_arc_impedances'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.id must exist in entities with entity_table generic_arc_impedances before insert'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_transmission_interchanges_entity_exists BEFORE
 INSERT
     ON transmission_interchanges
@@ -817,6 +838,19 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS prevent_generic_arc_impedances_id_update BEFORE
+UPDATE
+    OF id ON generic_arc_impedances
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS prevent_transmission_interchanges_id_update BEFORE
 UPDATE
     OF id ON transmission_interchanges
@@ -1229,6 +1263,17 @@ WHERE
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS delete_generic_arc_impedances_entity
+AFTER
+    DELETE ON generic_arc_impedances FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS delete_transmission_interchanges_entity
 AFTER
     DELETE ON transmission_interchanges FOR EACH ROW
@@ -1563,6 +1608,76 @@ SELECT
     RAISE(
         ABORT,
         'arcs row is the transmission_lines.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_generic_arc_impedances_arc_domain_insert BEFORE
+INSERT
+    ON generic_arc_impedances
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_generic_arc_impedances_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON generic_arc_impedances
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_generic_arc_impedances_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            generic_arc_impedances t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the generic_arc_impedances.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
     );
 
 END;

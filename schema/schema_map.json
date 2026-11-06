@@ -38,6 +38,9 @@
     "transmission_lines": [
       {"component": "Line", "file": "Operations/Branch/Line.json", "is_psy": true}
     ],
+    "generic_arc_impedances": [
+      {"component": "GenericArcImpedance", "file": "Operations/Branch/GenericArcImpedance.json", "is_psy": true}
+    ],
     "transmission_interchanges": [
       {"component": "AreaInterchange", "file": "Operations/Branch/AreaInterchange.json", "is_psy": true}
     ],
@@ -137,7 +140,6 @@
     "Operations/Associations/ServiceAssociation.json": "Hand-written service_associations table.",
     "Operations/Associations/TradingHubAssociation.json": "Hand-written trading_hub_associations table.",
     "Operations/Associations/VoltageControlAssociation.json": "No table yet.",
-    "Operations/Branch/GenericArcImpedance.json": "No table yet.",
     "Operations/Market/BilateralTransaction.json": "No table yet.",
     "Operations/Service/AGC.json": "No table yet.",
     "Operations/StaticInjection/HybridSystem.json": "No table yet.",

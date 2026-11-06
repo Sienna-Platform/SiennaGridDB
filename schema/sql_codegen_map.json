@@ -244,6 +244,31 @@
         "angle_limits": {}
       }
     },
+    "generic_arc_impedances": {
+      "interface_member": true,
+      "arc_domain": "AC",
+      "comment": [
+        "Generic series impedance on an arc (PSY GenericArcImpedance). Its own table,",
+        "not a transmission_lines variant: r may be negative here (equivalent-network",
+        "branches), it has no thermal rating (only an optional operational_flow_limit),",
+        "and it carries no shunt (b/g) or angle_limits. r/x follow parameter_units as in",
+        "transmission_lines: COMPONENT_BASE is per-unit on base_power, NATURAL_UNITS is ohm."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "r": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "x": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "parameter_units": {},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "available": {"default": 1},
+        "active_power_flow": {"default": 0.0},
+        "reactive_power_flow": {"default": 0.0},
+        "operational_flow_limit": {}
+      }
+    },
     "transmission_interchanges": {
       "interface_member": true,
       "comment": [
