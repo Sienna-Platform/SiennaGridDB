@@ -97,7 +97,11 @@ function write_feature(io::IO, v::Integer)
 end
 # Any NaN hashes as Rust's f64::NAN, which is Julia's NaN.
 function write_feature(io::IO, v::AbstractFloat)
-    bits = isnan(v) ? reinterpret(UInt64, NaN) : reinterpret(UInt64, Float64(v))
+    if isnan(v)
+        bits = reinterpret(UInt64, NaN)
+    else
+        bits = reinterpret(UInt64, Float64(v))
+    end
     return write(io, UInt8('f'), htol(bits))
 end
 function write_feature(io::IO, v::AbstractString)
