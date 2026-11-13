@@ -35,6 +35,7 @@ export interface Manifest {
   attribute_sql: string;
   supplemental_attributes: { plant_types: string[]; plant_sql: string; attribute_sql: string };
   associations: AssociationPlan[];
+  time_series: { section: string };
   unsupported_sections: Record<string, string>;
 }
 

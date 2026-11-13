@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 7; -- bump on every schema or registry change
+PRAGMA user_version = 8; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -253,9 +253,11 @@ CREATE TABLE time_series_associations (
     owner_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     owner_type TEXT NOT NULL,
     owner_category TEXT NOT NULL CHECK (owner_category IN ('Component', 'SupplementalAttribute')),
+    -- No DeterministicSingleTimeSeries: it is a view over its SingleTimeSeries' array,
+    -- which a consumer derives again (transform_single_time_series!).
     time_series_type TEXT NOT NULL CHECK (time_series_type IN (
         'SingleTimeSeries', 'NonSequentialTimeSeries', 'Deterministic',
-        'DeterministicSingleTimeSeries', 'Probabilistic', 'Scenarios'
+        'Probabilistic', 'Scenarios'
     )),
     name TEXT NOT NULL,
     initial_timestamp TEXT,
@@ -281,6 +283,10 @@ CREATE TABLE time_series_associations (
     quantity_kind TEXT,
     unit_system TEXT,
     time_reference TEXT,
+    -- Where each timestamp sits in the period it represents; descriptive only.
+    interval_alignment TEXT NOT NULL DEFAULT 'PERIOD_ENDING' CHECK (
+        interval_alignment IN ('PERIOD_BEGINNING', 'PERIOD_MIDPOINT', 'PERIOD_ENDING')
+    ),
     component_field TEXT,
     percentiles_json TEXT,
     -- Three columns describe the stored values at two levels, per the wire
