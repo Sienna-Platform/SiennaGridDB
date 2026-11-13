@@ -6,6 +6,14 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
+### Schema
+
+- `PRAGMA user_version = 12`.
+- A portfolio has no `financial_data` section: SiennaSchemas moves its discount, inflation and
+  interest rates into each technology's `financial_data` column, and the base year to the
+  consuming model. The insert SDKs no longer report the section.
+- `storage_technologies.storage_tech` defaults to `OTHER_CHEM`, following the schema.
+
 ## [0.4.0] - 2026-11-02
 
 Built from SiennaSchemas v0.4.0. `PRAGMA user_version = 7`.

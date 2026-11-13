@@ -395,7 +395,7 @@ equals the manifest's `schema_user_version`.
 
 - **Files and portfolios.** `insert_file` (Julia `insert_file!`, TypeScript `insertFile`) and the CLIs' `build` take a document file or a bundle directory holding one `.json` document.
   A portfolio's `base_system_file` goes in first, then the portfolio, in one transaction; each document's sidecar is its own `time_series_storage_file`, resolved next to it.
-  The same code inserts a system and a portfolio: the manifest maps every component type, and a portfolio's sections with no table (`financial_data`, `requirements_associations`, `investment_schedule`, `aggregation`) are reported, one per object.
+  The same code inserts a system and a portfolio: the manifest maps every component type, and a portfolio's sections with no table (`requirements_associations`, `investment_schedule`, `aggregation`) are reported, one per object.
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
   A document whose ids are already stored fails, naming how many: a portfolio must number its own components above its base system's.
 - **Every field has a home.** `sql_codegen_map.json` places every property of a supported
