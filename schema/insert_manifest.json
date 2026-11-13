@@ -4720,7 +4720,7 @@
       "table": "virtual_participants"
     }
   },
-  "schema_user_version": 10,
+  "schema_user_version": 11,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",
@@ -4843,23 +4843,33 @@
         "path": "features"
       }
     ],
+    "export_views": {
+      "time_series_export_series": "SELECT {store_id} AS store_id, partition_name, array_id, id, owner_id, name, time_reference FROM \"{prefix}all_series\"",
+      "time_series_export_values": "SELECT {store_id} AS store_id, partition_name, array_id, timestamp, issue_time, percentile, scenario, value FROM \"{prefix}all_values\""
+    },
+    "exported_stores_sql": "SELECT id, values_prefix FROM time_series_stores WHERE values_prefix IS NOT NULL ORDER BY id",
     "feature_sql": "INSERT INTO feature_sets (features_hash, key, value_kind, value_int, value_float, value_bool, value_str) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (features_hash, key) DO NOTHING",
+    "id_offset_sql": "SELECT max(coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'time_series_associations'), 0), coalesce((SELECT max(id) FROM time_series_associations), 0))",
     "references": [
       "owner_id"
     ],
     "row_sql": "INSERT INTO time_series_associations (id, owner_id, owner_type, owner_category, time_series_type, name, initial_timestamp, resolution, length, horizon, interval, count, scenario_count, units, quantity_kind, unit_system, time_reference, interval_alignment, component_field, percentiles_json, element_type, element_shape, array_shape, application_data, uri, data_hash, features_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, lower(?), ?, COALESCE(?, 'PERIOD_ENDING'), ?, ?, COALESCE(?, 'f64'), COALESCE(?, '[]'), ?, ?, ?, ?, ?)",
     "section": "time_series_associations",
+    "store_rows_sql": "UPDATE time_series_associations SET store_id = ? WHERE id > ?",
+    "store_sql": "INSERT INTO time_series_stores (id_offset, sidecar) VALUES (?, ?)",
     "table_prefix": "ts_",
     "unsupported_types": {
       "DeterministicSingleTimeSeries": "derived from its SingleTimeSeries; regenerate it with transform_single_time_series!",
       "NonSequentialTimeSeries": "GridDB has no column for its timestamps_uri"
     },
+    "values_prefix_sql": "UPDATE time_series_stores SET values_prefix = ? WHERE id = ?",
     "views_sql": [
-      "-- Views over infrastore's SQLite export of the time series values. Not part of\n-- new-db: they read the ts_all_* views the export creates, so the SDKs run these\n-- statements (insert_manifest.json time_series.views_sql) after they copy an export in.\n-- A view over a table that does not exist makes ALTER TABLE ... RENAME COLUMN fail.\n\n-- Time series values, from infrastore's SQLite export under the ts_ prefix. ts_all_series.id\n-- is the association id. The timestamps are spelled in UTC; a 'zoneless' time_reference\n-- means wall-clock time. A forecast value also has its issue_time.\nCREATE VIEW IF NOT EXISTS time_series_values AS\nSELECT\n    a.id AS association_id,\n    a.owner_id,\n    a.owner_type,\n    a.owner_category,\n    a.name,\n    a.time_series_type,\n    strftime('%Y-%m-%dT%H:%M:%fZ', v.timestamp / 1000.0, 'unixepoch') AS timestamp,\n    strftime('%Y-%m-%dT%H:%M:%fZ', v.issue_time / 1000.0, 'unixepoch') AS issue_time,\n    v.percentile,\n    v.scenario,\n    v.value,\n    a.units,\n    s.time_reference\nFROM\n    time_series_associations a\n    JOIN ts_all_series s ON s.id = a.id\n    JOIN ts_all_values v ON v.partition_name = s.partition_name\n    AND v.array_id = s.array_id;",
-      "-- Exported series no association names any more (an owner was deleted, say): their\n-- values are left behind, since the export's tables have no foreign key into GridDB.\nCREATE VIEW IF NOT EXISTS orphaned_time_series AS\nSELECT\n    s.partition_name,\n    s.id AS association_id,\n    s.owner_id,\n    s.name\nFROM\n    ts_all_series s\nWHERE\n    NOT EXISTS (\n        SELECT\n            1\n        FROM\n            time_series_associations a\n        WHERE\n            a.id = s.id\n    );"
+      "-- Views over infrastore's SQLite exports of the time series values, one export per\n-- store under its time_series_stores.values_prefix. Not part of new-db: they read\n-- time_series_export_series and time_series_export_values, the views uniting every\n-- store's export, which the SDKs rebuild after each export (insert_manifest.json\n-- time_series.export_views) before they run these statements.\n-- A view over a table that does not exist makes ALTER TABLE ... RENAME COLUMN fail.\n\n-- Time series values, found by association id alone: an export's series id is the\n-- association id. The timestamps are spelled in UTC; a 'zoneless' time_reference\n-- means wall-clock time. A forecast value also has its issue_time.\nCREATE VIEW IF NOT EXISTS time_series_values AS\nSELECT\n    a.id AS association_id,\n    a.store_id,\n    a.owner_id,\n    a.owner_type,\n    a.owner_category,\n    a.name,\n    a.time_series_type,\n    strftime('%Y-%m-%dT%H:%M:%fZ', v.timestamp / 1000.0, 'unixepoch') AS timestamp,\n    strftime('%Y-%m-%dT%H:%M:%fZ', v.issue_time / 1000.0, 'unixepoch') AS issue_time,\n    v.percentile,\n    v.scenario,\n    v.value,\n    a.units,\n    s.time_reference\nFROM\n    time_series_associations a\n    JOIN time_series_export_series s ON s.id = a.id\n    JOIN time_series_export_values v ON v.store_id = s.store_id\n    AND v.partition_name = s.partition_name\n    AND v.array_id = s.array_id;",
+      "-- Exported series no association names any more (an owner was deleted, say): their\n-- values are left behind, since the export's tables have no foreign key into GridDB.\nCREATE VIEW IF NOT EXISTS orphaned_time_series AS\nSELECT\n    s.store_id,\n    s.partition_name,\n    s.id AS association_id,\n    s.owner_id,\n    s.name\nFROM\n    time_series_export_series s\nWHERE\n    NOT EXISTS (\n        SELECT\n            1\n        FROM\n            time_series_associations a\n        WHERE\n            a.id = s.id\n    );"
     ]
   },
   "unsupported_sections": {
+    "aggregation": "no column for a portfolio's aggregation type",
     "ext": "no table in schema.sql",
     "financial_data": "no table in schema.sql",
     "investment_schedule": "no table in schema.sql",

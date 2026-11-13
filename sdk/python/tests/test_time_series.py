@@ -1,4 +1,5 @@
 import json
+import shutil
 
 import pytest
 from test_insert import count, golden
@@ -185,16 +186,18 @@ def test_a_reference_no_stored_series_has_is_reported_and_strict_raises(conn):
         griddb.insert_document(conn, doc, strict=True)
 
 
-def test_point_at_sources_copies_only_what_changes():
-    from sienna_griddb_tools.time_series import point_at_sources
+def test_remap_references_copies_only_what_changes():
+    from sienna_griddb_tools.time_series import remap_references
 
     untouched = {"curve": [1, 2], "association_id": 3}
     node = {"a": untouched, "b": [{"fuel_cost_time_series": 8}], "c": 8}
-    out = point_at_sources(node, {8: 7})
+    remap = {8: 7}.get
+    out = remap_references(node, lambda ref: remap(ref, ref))
     assert out == {"a": untouched, "b": [{"fuel_cost_time_series": 7}], "c": 8}
     assert out["a"] is untouched
     assert node["b"][0]["fuel_cost_time_series"] == 8
-    assert point_at_sources(untouched, {8: 7}) is untouched
+    assert remap_references(untouched, lambda ref: remap(ref, ref)) is untouched
+    assert remap_references(node, None) is node
 
 
 def sidecar_document(tmp_path):
@@ -287,15 +290,88 @@ def test_deleting_an_owner_leaves_its_values_orphaned(conn, tmp_path):
     assert len(conn.execute("SELECT * FROM orphaned_time_series").fetchall()) == 2
 
 
-def test_a_second_export_into_one_database_raises(conn, tmp_path):
+def test_a_second_store_minting_the_same_ids_lands_past_the_first(conn, tmp_path):
     doc, sidecar = sidecar_document(tmp_path)
     griddb.insert_document(conn, doc, time_series=sidecar)
-    # A second document's series (new ids and names) land in the same export tables.
-    rows = [
-        {**r, "association_id": r["association_id"] + 100, "name": r["name"] + "_2"}
-        for r in doc["time_series_associations"]
-    ]
-    second = {"components": {}, "time_series_associations": rows}
-    with pytest.raises(griddb.InsertError, match="already exists"):
-        griddb.insert_document(conn, second, time_series=sidecar)
-    assert count(conn, "time_series_associations") == 2
+    gen = thermal(doc)
+    # A second store minted the same ids (2 and 3); its plant references series 2.
+    rows = [{**r, "name": r["name"] + "_2"} for r in doc["time_series_associations"]]
+    second = {
+        "components": {},
+        "supplemental_attributes": [{"id": 9200, "name": "p", "fuel_cost_time_series": 2}],
+        "supplemental_attribute_associations": [
+            {
+                "component_id": gen["id"],
+                "component_type": "ThermalStandard",
+                "attribute_id": 9200,
+                "attribute_type": "ThermalPowerPlant",
+            }
+        ],
+        "time_series_associations": rows,
+    }
+    griddb.insert_document(conn, second, time_series=sidecar)
+    stores = conn.execute(
+        "SELECT id, id_offset, values_prefix FROM time_series_stores ORDER BY id"
+    ).fetchall()
+    assert stores == [(1, 0, "ts_1_"), (2, 3, "ts_2_")]
+    values = conn.execute(
+        "SELECT association_id, store_id, count(*) FROM time_series_values GROUP BY 1, 2"
+    ).fetchall()
+    assert values == [(2, 1, 3), (3, 1, 3), (5, 2, 3), (6, 2, 3)]
+    plant = conn.execute("SELECT value FROM plants WHERE id = 9200").fetchone()[0]
+    assert json.loads(plant)["fuel_cost_time_series"] == 5
+    assert conn.execute("SELECT count(*) FROM orphaned_time_series").fetchone()[0] == 0
+
+
+def portfolio_bundle(tmp_path):
+    """PSIP's directory form: portfolio.json and its sidecar, with the base system in
+    base_system/. The portfolio's series reuse the base system's ids."""
+    doc, sidecar = sidecar_document(tmp_path)
+    bundle = tmp_path / "bundle"
+    (bundle / "base_system").mkdir(parents=True)
+    shutil.copyfile(sidecar, bundle / "time_series.h5")
+    shutil.copyfile(sidecar, bundle / "base_system" / "time_series.h5")
+    doc["time_series_storage_file"] = "time_series.h5"
+    (bundle / "base_system" / "system.json").write_text(json.dumps(doc))
+    rows = [{**r, "name": r["name"] + "_2"} for r in doc["time_series_associations"]]
+    portfolio = {
+        "base_system_file": "base_system",
+        "time_series_storage_file": "time_series.h5",
+        "aggregation": "PowerSystems.Area",
+        "components": {},
+        "time_series_associations": rows,
+    }
+    (bundle / "portfolio.json").write_text(json.dumps(portfolio))
+    return bundle
+
+
+def test_a_portfolio_file_brings_its_base_system_first(conn, tmp_path):
+    report = griddb.insert_file(conn, portfolio_bundle(tmp_path))
+    assert report.inserted["time_series_associations"] == 4
+    assert report.unsupported["aggregation"] == 1
+    values = conn.execute(
+        "SELECT store_id, count(*) FROM time_series_values GROUP BY 1"
+    ).fetchall()
+    assert values == [(1, 6), (2, 6)]
+
+
+def test_a_failing_portfolio_rolls_back_its_base_system(conn, tmp_path):
+    bundle = portfolio_bundle(tmp_path)
+    (bundle / "time_series.h5").write_bytes(b"not hdf5")
+    with pytest.raises(griddb.InsertError, match="time series sidecar"):
+        griddb.insert_file(conn, bundle / "portfolio.json")
+    assert count(conn, "entities") == 0
+
+
+def test_the_cli_builds_a_portfolio_bundle(tmp_path, capsys):
+    from sienna_griddb_tools.__main__ import main
+
+    out = tmp_path / "out.sqlite"
+    assert main(["build", str(portfolio_bundle(tmp_path)), str(out)]) == 0
+    assert json.loads(capsys.readouterr().out)["inserted"]["time_series_associations"] == 4
+
+
+def test_ids_already_stored_are_named(conn):
+    griddb.insert_document(conn, golden())
+    with pytest.raises(griddb.InsertError, match="ids are already in the database"):
+        griddb.insert_document(conn, golden())

@@ -195,18 +195,23 @@ if HAS_GOLDEN
         end
     end
 
-    @testset "point_at_sources copies only what changes" begin
+    @testset "remap_references copies only what changes" begin
         untouched = Dict{String, Any}("curve" => Any[1, 2], "association_id" => 3)
         node = Dict{String, Any}(
             "a" => untouched,
             "b" => Any[Dict{String, Any}("fuel_cost_time_series" => 8)],
             "c" => 8,
         )
-        out = G.point_at_sources(node, Dict(8 => 7))
+        remap = G.SeriesRemap(Dict(8 => 7), 0)
+        out = G.remap_references(node, remap)
         @test out["b"][1]["fuel_cost_time_series"] == 7
         @test out["c"] == 8
         @test out["a"] === untouched
         @test node["b"][1]["fuel_cost_time_series"] == 8
-        @test G.point_at_sources(untouched, Dict(8 => 7)) === untouched
+        @test G.remap_references(untouched, remap) === untouched
+        @test G.remap_references(node, G.SeriesRemap(Dict{Int, Int}(), 0)) === node
+        @test G.remap_references(node, G.SeriesRemap(Dict(8 => 7), 10))["c"] == 8
+        @test G.remap_references(node, G.SeriesRemap(Dict(8 => 7), 10))["b"][1]["fuel_cost_time_series"] ==
+              17
     end
 end

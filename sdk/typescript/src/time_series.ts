@@ -87,23 +87,40 @@ export function danglingReferences(payloads: [number, unknown][], storedIds: Set
   return found;
 }
 
+export type SeriesRemap = (ref: number) => number;
+
 /**
- * node with its time series references to a derived series naming the source instead
- * (the keys dangling_time_series_references reads). An object or array is copied only
- * when something inside it changes; the caller's stays as it was.
+ * A document's series id to the one GridDB stores: a derived series' names its source,
+ * and every id moves past offset. Undefined when no id changes.
  */
-export function pointAtSources<T>(node: T, sources: Map<number, number>): T {
-  if (sources.size === 0 || node === null || typeof node !== "object") return node;
+export function seriesRemap(sources: Map<number, number>, offset: number): SeriesRemap | undefined {
+  if (sources.size === 0 && offset === 0) return undefined;
+  return (ref) => (sources.get(ref) ?? ref) + offset;
+}
+
+/** The association rows with their ids moved past offset; any other id reaches the encoder and fails there. */
+export function shiftIds(rows: JsonObject[], offset: number): JsonObject[] {
+  if (offset === 0) return rows;
+  return rows.map((r) => (isInt(r.association_id) ? { ...r, association_id: r.association_id + offset } : r));
+}
+
+/**
+ * node with each time series reference (the keys dangling_time_series_references reads)
+ * replaced by remap(id). An object or array is copied only when something inside it
+ * changes; the caller's stays as it was.
+ */
+export function remapReferences<T>(node: T, remap: SeriesRemap | undefined): T {
+  if (remap === undefined || node === null || typeof node !== "object") return node;
   const entries: [string | number, unknown][] = Array.isArray(node)
     ? [...node.entries()]
     : Object.entries(node as JsonObject);
   const changed = new Map<string | number, unknown>();
   for (const [k, v] of entries) {
-    if (typeof k === "string" && isReference(k) && isInt(v) && sources.has(v)) {
-      changed.set(k, sources.get(v));
+    if (typeof k === "string" && isReference(k) && isInt(v)) {
+      if (remap(v) !== v) changed.set(k, remap(v));
     } else {
-      const pointed = pointAtSources(v, sources);
-      if (pointed !== v) changed.set(k, pointed);
+      const remapped = remapReferences(v, remap);
+      if (remapped !== v) changed.set(k, remapped);
     }
   }
   if (changed.size === 0) return node;

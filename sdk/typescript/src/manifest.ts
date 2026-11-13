@@ -28,6 +28,9 @@ export interface AssociationPlan { section: string; row_sql: string; bindings: B
 export interface TimeSeriesPlan extends AssociationPlan {
   feature_sql: string;
   unsupported_types: Record<string, string>;
+  id_offset_sql: string;
+  store_sql: string;
+  store_rows_sql: string;
 }
 export interface Manifest {
   schema_user_version: number;

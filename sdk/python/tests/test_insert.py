@@ -247,7 +247,7 @@ def test_plant_attribute_association_is_stored(conn):
 
 def test_investment_attribute_is_stored_and_portfolio_sections_reported(conn):
     """A portfolio's ExistingDevices lands in supplemental_attributes; its
-    financial_data has no table, so the report counts it."""
+    financial_data and aggregation have no table, so the report counts them."""
     doc = golden()
     thermal_id = first(doc, "ThermalStandard")["id"]
     attr_id = 1 + max(
@@ -260,8 +260,11 @@ def test_investment_attribute_is_stored_and_portfolio_sections_reported(conn):
          "attribute_id": attr_id, "attribute_type": "ExistingDevices"}
     )
     doc["financial_data"] = {"id": attr_id + 1, "base_year": 2025, "discount_rate": 0.07}
+    doc["aggregation"] = "PowerSystems.Area"
     report = griddb.insert_document(conn, doc)
-    assert report.unsupported["financial_data"] == 3
+    # One object and one type name, not their keys or characters.
+    assert report.unsupported["financial_data"] == 1
+    assert report.unsupported["aggregation"] == 1
     (stored,) = conn.execute(
         "SELECT TYPE FROM supplemental_attributes WHERE id = ?", (attr_id,)
     ).fetchone()

@@ -18,6 +18,7 @@ export create_database,
     insert_component!,
     insert_components!,
     insert_document!,
+    insert_file!,
     InsertReport,
     GridDBToolsError,
     InsertError
