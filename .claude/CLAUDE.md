@@ -1,6 +1,6 @@
 # SiennaGridDB — Claude Guide
 
-The canonical **SQLite database schema** ("griddb") for Sienna applications: tables mirroring the PowerSystems data model (entities, thermal/renewable/hydro generators, storage, reservoirs, transmission, planning regions, investment technologies, time-series metadata and static storage) plus the units tables (`quantity_kinds`, `allowed_units`, `unit_conventions`, `unit_management_metadata`). Content is SQL under `schema/` with a little Python tooling in `scripts/`. Requires **SQLite ≥ 3.45** (jsonb) — `.justfile`'s `assert-sqlite-version` enforces it. Platform conventions: the `sienna-psy6` skill; `README.md` documents the commands and the sync semantics in more detail.
+The goal of this repo is **CRUD SDKs** (Python, Julia, TypeScript today; Rust planned) that store SiennaSchemas objects in a GridDB database and read them back. It is not a general interface to the database: no query builder, no ORM. Today the SDKs only insert. They write to the canonical **SQLite database schema** ("griddb") for Sienna applications: tables mirroring the PowerSystems data model (entities, thermal/renewable/hydro generators, storage, reservoirs, transmission, planning regions, investment technologies, time-series metadata and static storage) plus the units tables (`quantity_kinds`, `allowed_units`, `unit_conventions`, `unit_management_metadata`). Content is SQL under `schema/` with a little Python tooling in `scripts/`. Requires **SQLite ≥ 3.45** (jsonb) — `.justfile`'s `assert-sqlite-version` enforces it. Platform conventions: the `sienna-psy6` skill; `README.md` documents the commands and the sync semantics in more detail.
 
 Branch, table counts, convention counts, test counts, and sync-check results all drift constantly. Measure them; don't trust a number written here:
 
@@ -32,7 +32,7 @@ python3 -c "import json;print(len(json.load(open('schema/column_conventions.json
 
 Downstream consumer of **SiennaSchemas' unit vocabulary**:
 
-```
+```text
 SiennaSchemas/Core/units.json  +  schema/column_conventions.json (DB-owned column→(quantity_kind, unit) map)
         │
         └── scripts/generate_unit_registry.py ──▶ schema/unit_registry.sql   (deterministic, sha256-sealed)

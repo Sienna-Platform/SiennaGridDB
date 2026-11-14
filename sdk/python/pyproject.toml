@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sienna-griddb-tools"
 version = "0.1.0"
-description = "Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database."
+description = "CRUD SDK for Sienna OpenAPI SDK objects in a SiennaGridDB SQLite database (create today)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "BSD-3-Clause"

@@ -1,6 +1,9 @@
 # SiennaGridDBTools.jl
 
-Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database.
+The Julia CRUD SDK for SiennaGridDB: it stores Sienna OpenAPI SDK objects in a
+SiennaGridDB SQLite database. Today it implements create (insert); read, update and
+delete come next. It is not a general database client: use SQLite directly for anything
+else.
 
 ```julia
 using PowerOpenAPIModels, SiennaGridDBTools
