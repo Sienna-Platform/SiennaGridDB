@@ -83,7 +83,7 @@ SHAPE_CASES = [
 
 @pytest.mark.parametrize(
     "entity_type, overrides, message",
-    [*SHAPE_CASES, ("ThermalStandard", {"time_frame": 5.0}, "must be OnlineReserve")],
+    [*SHAPE_CASES, ("ThermalStandard", {"time_frame": 5.0}, "must be a type of entities.entity_table")],
 )
 def test_reserve_rejects_wrong_shape_on_insert(fresh_db, entity_type, overrides, message):
     with pytest.raises(sqlite3.IntegrityError, match=message):
@@ -344,6 +344,12 @@ def test_unresolved_direction_name_is_a_violation(system):
     assert rows(system, "SELECT * FROM interface_direction_violations") == [(5, "xf_b")]
     join(system, 5, 21)
     assert rows(system, "SELECT * FROM interface_direction_violations") == []
+
+
+def test_a_direction_name_matching_two_members_is_a_violation(system):
+    # Names are unique per table: a line and a transformer can both be line_a.
+    join(system, 4, 23)
+    assert (4, "line_a") in rows(system, "SELECT * FROM interface_direction_violations")
 
 
 def test_service_bid_offers_read_columns_and_attributes(system):

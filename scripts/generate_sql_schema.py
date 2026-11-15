@@ -231,7 +231,7 @@ DELETE ON {target}
             json_each(a.value) j
         WHERE
             a.TYPE IN ({types})
-            AND a.name = '{prop}'
+            AND lower(a.name) = '{prop}'
             AND j.value = OLD.id
     )
 BEGIN
@@ -268,6 +268,62 @@ class GenerationError(Exception):
     def __init__(self, problems):
         super().__init__("\n".join(problems))
         self.problems = problems
+
+
+# Checks entities, not {target}: an SDK writes every entities row before any typed row,
+# so a listed row may not be in its table yet.
+ATTRIBUTE_TARGETS_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS check_{table}_{prop}_targets_{event} BEFORE
+{event_clause}
+    WHEN NEW.TYPE IN ({types})
+    AND lower(NEW.name) = '{prop}'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = '{target}'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        '{table}.{prop} lists an id that is not a {target} row'
+    );
+
+END;
+"""
+
+NAME_OWNER_TRIGGER = """\
+CREATE TRIGGER IF NOT EXISTS check_{table}_name_owner_{event} BEFORE
+{event_clause}
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            {table}
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: {table}.name is used by another row'
+    );
+
+END;
+"""
 
 
 @functools.lru_cache(maxsize=None)
@@ -755,6 +811,37 @@ def vocabulary(config, component_names, schemas_path):
     return vocab
 
 
+def entity_type_tables(tables, config, schemas_path):
+    """{entity type: the table that holds its rows}, and problems."""
+    pairs = {}
+    problems = []
+
+    def add(entity_type, table):
+        if pairs.setdefault(entity_type, table) != table:
+            problems.append(f"{entity_type} maps to both {pairs[entity_type]} and {table}")
+
+    for table, components in tables.items():
+        for c in components:
+            add(c["component"], table)
+    plants = set(config["plant_attribute_types"])
+    for rel_dir in config["supplemental_attribute_dirs"]:
+        for file_name in os.listdir(os.path.join(schemas_path, rel_dir)):
+            if file_name.endswith(".json"):
+                name = file_name[: -len(".json")]
+                add(name, "plants" if name in plants else "supplemental_attributes")
+    return pairs, problems
+
+
+def entity_type_tables_sql(pairs):
+    rows = ",\n".join(
+        f"    ({sql_literal(t)}, {sql_literal(pairs[t])})" for t in sorted(pairs)
+    )
+    return (
+        "-- The table of each entity type, for the entities triggers.\n"
+        f"INSERT INTO entity_type_tables (entity_type, entity_table)\nVALUES\n{rows};\n"
+    )
+
+
 def vocabulary_sql(vocab):
     """The lookup rows as INSERTs, so a database built from the SQL alone accepts a
     component row; the insert SDKs seed the same rows with INSERT OR IGNORE."""
@@ -774,7 +861,7 @@ def vocabulary_sql(vocab):
     return "\n".join(parts)
 
 
-def triggers_region(tables, codegen):
+def triggers_region(tables, codegen, table_columns):
     """The per-table entity and arc-domain triggers, as the triggers.sql region.
 
     Returns (region text, problems).
@@ -783,12 +870,17 @@ def triggers_region(tables, codegen):
     entity = []
     identity = []
     delete = []
+    names = []
     arc = []
     references = []
     for table in tables:
         entity.append(ENTITY_EXISTS_TRIGGER.format(table=table))
         identity.append(ID_UPDATE_TRIGGER.format(table=table))
         delete.append(DELETE_ENTITY_TRIGGER.format(table=table))
+        if "name" in table_columns.get(table, ()):
+            for event, clause in (("insert", f"INSERT\n    ON {table}"),
+                                  ("update", f"UPDATE\n    OF name ON {table}")):
+                names.append(NAME_OWNER_TRIGGER.format(table=table, event=event, event_clause=clause))
         cfg = codegen.get(table, {})
         types = ", ".join(sql_literal(c["component"]) for c in tables[table])
         for prop, target in cfg.get("attribute_references", {}).items():
@@ -800,6 +892,12 @@ def triggers_region(tables, codegen):
                 references.append(ATTRIBUTE_REFERENCE_TRIGGER.format(
                     target=target, table=table, prop=prop, types=types,
                 ))
+                for event, clause in (("insert", "INSERT\n    ON attributes"),
+                                      ("update", "UPDATE\n    OF TYPE, name, value ON attributes")):
+                    references.append(ATTRIBUTE_TARGETS_TRIGGER.format(
+                        target=target, table=table, prop=prop, types=types,
+                        event=event, event_clause=clause,
+                    ))
         if "arc_domain" not in cfg:
             continue
         if cfg["arc_domain"] not in ARC_DOMAINS:
@@ -827,13 +925,17 @@ def triggers_region(tables, codegen):
         "\n".join(identity),
         "\n-- Deleting a child row also deletes its entities row; entities has no cascading FK of its own.\n",
         "\n".join(delete),
+        "\n-- A name belongs to one row. These triggers fire before the UNIQUE index, so\n"
+        "-- INSERT OR REPLACE cannot delete the other row without its delete triggers.\n\n",
+        "\n".join(names),
         "\n-- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc),\n"
         "-- on an insert or update of the branch and on an update of the arc's endpoints.\n"
         "-- A foreign key can't express this, since arcs reference entities generically\n"
         "-- and the domain lives on entity_types.\n",
         "\n".join(arc),
-        "\n-- A row listed in an attribute_references id array cannot be deleted: the array\n"
-        "-- lives in attributes, where a foreign key cannot reach it.\n",
+        "\n-- An attribute_references id array lists only rows of its target table, and a\n"
+        "-- listed row cannot be deleted. The array lives in attributes, where a foreign\n"
+        "-- key cannot reach it.\n",
         "\n".join(references),
         "\n" + TRIGGERS_END,
     ]
@@ -885,15 +987,19 @@ def generate(schemas_path):
         attributes.extend((table, prop, c, o) for prop, c, o in attrs)
     attr_conventions, identifiers, attr_problems = merge_attribute_rows(attributes)
     problems.extend(attr_problems)
-    triggers, trigger_problems = triggers_region(schema_map["tables"], codegen)
+    triggers, trigger_problems = triggers_region(schema_map["tables"], codegen, table_columns)
     problems.extend(trigger_problems)
+    config = load_json(INSERT_CONFIG)
+    type_tables, type_problems = entity_type_tables(schema_map["tables"], config, schemas_path)
+    problems.extend(type_problems)
     if problems:
         raise GenerationError(problems)
     conventions.extend(attr_conventions)
     blocks.append("\n" + identifiers_sql(identifiers))
     component_names = [c["component"] for comps in schema_map["tables"].values() for c in comps]
-    vocab = vocabulary(load_json(INSERT_CONFIG), component_names, schemas_path)
+    vocab = vocabulary(config, component_names, schemas_path)
     blocks.append("\n" + vocabulary_sql(vocab))
+    blocks.append("\n" + entity_type_tables_sql(type_tables))
     blocks.append("\n" + END_MARKER)
     regions = {
         SCHEMA_SQL: ("".join(blocks), BEGIN_MARKER, END_MARKER),

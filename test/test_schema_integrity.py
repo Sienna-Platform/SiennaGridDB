@@ -144,7 +144,8 @@ _ENTITY_TABLE_IDS = [case[0] for case in _ENTITY_TABLE_CASES]
 def test_requires_matching_entity(fresh_db, table, entity_type, insert_row):
     """The supertype guard: a row cannot be parented by an entities row whose
     entity_table points at a different subtype table."""
-    make_entity(fresh_db, 99, "transmission_lines", entity_type)
+    other = "arcs" if table != "arcs" else "transmission_lines"
+    make_entity(fresh_db, 99, other)
     with pytest.raises(sqlite3.IntegrityError, match=f"entity_table {table}"):
         insert_row(fresh_db, 99)
 
@@ -344,13 +345,12 @@ def test_feature_set_key_check_matches_wire_reservation(db):
 
 
 def test_supplemental_attribute_association_identity_unique(fresh_db):
-    """Identity is the (component_id, attribute_id) pair (infrastore mirror);
-    the denormalized type labels are not part of it, so re-attaching the same
-    attribute under a different type spelling must still be rejected."""
-    make_entity(fresh_db, 1)
-    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    """Identity is the (component_id, attribute_id) pair (infrastore mirror):
+    attaching the same attribute to the same component again is rejected."""
+    make_entity(fresh_db, 1, "thermal_generators", "ThermalStandard")
+    make_entity(fresh_db, 2, "supplemental_attributes", "GeographicInfo")
     fresh_db.execute(
-        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'GeographicInfo', '{}')"
     )
     fresh_db.execute(
         "INSERT INTO supplemental_attribute_associations("
@@ -361,7 +361,7 @@ def test_supplemental_attribute_association_identity_unique(fresh_db):
         fresh_db.execute(
             "INSERT INTO supplemental_attribute_associations("
             "component_id, component_type, attribute_id, attribute_type) "
-            "VALUES (1, 'OtherSpelling', 2, 'OtherType')"
+            "VALUES (1, 'ThermalStandard', 2, 'GeographicInfo')"
         )
 
 
@@ -369,7 +369,7 @@ def _attach(conn, attribute_id, attribute_type):
     conn.execute(
         "INSERT INTO supplemental_attribute_associations("
         "component_id, component_type, attribute_id, attribute_type) "
-        "VALUES (1, 'ThermalStandard', ?, ?)",
+        "VALUES (1, (SELECT entity_type FROM entities WHERE id = 1), ?, ?)",
         (attribute_id, attribute_type),
     )
 
@@ -396,7 +396,7 @@ def test_supplemental_attribute_association_accepts_plant(fresh_db):
 
 def test_supplemental_attribute_association_accepts_supplemental_attribute(fresh_db):
     make_entity(fresh_db, 1)
-    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    make_entity(fresh_db, 2, "supplemental_attributes", "Substation")
     fresh_db.execute(
         "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'Substation', '{}')"
     )
@@ -409,15 +409,18 @@ def test_supplemental_attribute_association_rejects_non_attribute(fresh_db):
     make_entity(fresh_db, 1)
     make_entity(fresh_db, 2)
     with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
-        _attach(fresh_db, 2, "Substation")
+        _attach(fresh_db, 2, "thing_type")
 
 
 def test_supplemental_attribute_association_update_rejects_non_attribute(fresh_db):
     make_entity(fresh_db, 1)
     _plant(fresh_db)
     _attach(fresh_db, 3, "CombinedCycleBlock")
+    make_entity(fresh_db, 4)
     with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
-        fresh_db.execute("UPDATE supplemental_attribute_associations SET attribute_id = 1")
+        fresh_db.execute(
+            "UPDATE supplemental_attribute_associations SET attribute_id = 4, attribute_type = 'thing_type'"
+        )
 
 
 def test_deleting_plant_removes_its_associations(fresh_db):
@@ -556,13 +559,22 @@ IDENTIFIER_CASES = [
 
 
 def _attr_owner(conn, entity_type):
-    make_entity(conn, 1, "attribute_owner", entity_type)
+    (table,) = conn.execute(
+        "SELECT entity_table FROM entity_type_tables WHERE entity_type = ?", (entity_type,)
+    ).fetchone()
+    make_entity(conn, 1, table, entity_type)
     return 1
+
+
+# An id array lists rows of its target table, so the listed 8901 must exist there.
+ID_ARRAY_TARGETS = {"upstream_turbines": ("hydro_generators", "HydroTurbine")}
 
 
 @pytest.mark.parametrize("name, entity_type", IDENTIFIER_CASES)
 def test_identifier_attribute_needs_no_unit(fresh_db, name, entity_type):
     owner = _attr_owner(fresh_db, entity_type)
+    if name in ID_ARRAY_TARGETS:
+        make_entity(fresh_db, 8901, *ID_ARRAY_TARGETS[name])
     fresh_db.execute(
         "INSERT INTO attributes(entity_id, TYPE, name, value) VALUES (?, ?, ?, '8901')",
         (owner, entity_type, name),
@@ -593,12 +605,14 @@ def test_identifier_exemption_is_scoped_by_type(fresh_db):
 
 def test_identifier_exemption_survives_update(fresh_db):
     owner = _attr_owner(fresh_db, "HydroReservoir")
+    make_entity(fresh_db, 2, "hydro_generators", "HydroTurbine")
+    make_entity(fresh_db, 3, "hydro_generators", "HydroTurbine")
     fresh_db.execute(
         "INSERT INTO attributes(entity_id, TYPE, name, value) "
-        "VALUES (?, 'HydroReservoir', 'upstream_turbines', '[1]')",
+        "VALUES (?, 'HydroReservoir', 'upstream_turbines', '[2]')",
         (owner,),
     )
-    fresh_db.execute("UPDATE attributes SET value = '[2]' WHERE name = 'upstream_turbines'")
+    fresh_db.execute("UPDATE attributes SET value = '[3]' WHERE name = 'upstream_turbines'")
 
 
 def test_dc_flag_requires_topology_type(fresh_db):

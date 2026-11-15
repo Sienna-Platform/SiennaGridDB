@@ -10,7 +10,7 @@ Built from SiennaSchemas v0.5.0.
 
 ### Schema
 
-- `PRAGMA user_version = 13`.
+- `PRAGMA user_version = 14`.
 - A regulated bus is a bus ID (SiennaSchemas #108). A nullable `remote_regulated_bus` column,
   a foreign key to `balancing_topologies`, replaces `regulated_bus_number` and
   `remote_bus_control` on the devices that regulate voltage. It cannot equal the device's own
@@ -31,6 +31,21 @@ Built from SiennaSchemas v0.5.0.
   interest rates into each technology's `financial_data` column, and the base year to the
   consuming model. The insert SDKs no longer report the section.
 - `storage_technologies.storage_tech` defaults to `OTHER_CHEM`, following the schema.
+- `entity_type_tables` pairs each entity type with its table, and an `entities` row must use
+  that pair. `entity_types` is STRICT and its rows cannot change.
+- The type labels on `attributes`, `supplemental_attributes`, `plants` and
+  `supplemental_attribute_associations` must equal the owner's `entity_type`.
+- An id attribute (`out_of_area_load_ids`, the HydroReservoir turbine and reservoir lists, the
+  VSC `remote_regulated_bus_from` and `remote_regulated_bus_to`) names only rows of its target
+  table, on insert and update.
+- Deleting a transformer deletes its circuits. A name owned by another row cannot be taken,
+  so `INSERT OR REPLACE` cannot delete a row without its delete triggers.
+- `time_series_stores.id` is AUTOINCREMENT; `time_series_associations.id` must be above 0.
+- `feature_sets` keeps a value only in the column its `value_kind` names; attribute names
+  that differ only in case collide; `json_valid` on the capital cost columns and
+  `percentiles_json`; an interchange needs two different areas.
+- `operational_data` reads the typed limit and cost columns. `interface_direction_violations`
+  lists a name that matches two members.
 
 ### Insert SDKs
 
