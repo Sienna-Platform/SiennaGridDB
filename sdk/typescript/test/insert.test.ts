@@ -616,3 +616,19 @@ test.skipIf(!hasGolden)("a dangling reference names the document's own id", () =
   };
   expect(() => insertDocument(db, second, { strict: true })).toThrow(/fuel_cost_time_series=7/);
 });
+
+test.skipIf(!hasGolden)("insertFile hashes a feature written as 2030.0 as a Float, as infrastore does", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 2, { features: { year: 2030 } })];
+  const dir = mkdtempSync(join(tmpdir(), "f-"));
+  const path = join(dir, "doc.json");
+  writeFileSync(path, JSON.stringify(doc).replace('"year":2030', '"year":2030.0'));
+  const db = fresh();
+  insertFile(db, path);
+  // Python's features_hash({"year": 2030.0}); {"year": 2030} hashes as c8bf77ad...
+  expect(db.prepare("SELECT features_hash FROM time_series_associations").pluck().get()).toBe(
+    "0764c17f209f974613560105a34c01b0a6509eab34158863b0f4c9720a68d176",
+  );
+  expect(db.prepare("SELECT value_kind, value_float FROM feature_sets").raw().get()).toEqual(["float", 2030]);
+});

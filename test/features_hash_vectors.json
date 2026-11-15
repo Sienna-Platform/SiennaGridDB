@@ -1,5 +1,5 @@
 {
-  "description": "features_hash golden vectors, produced by infrastore itself (test/test_features_hash_oracle.py re-derives them when infrastore is installed). Every SDK hashes each map to the given lowercase hex. integral_float marks a float whose JSON token has no fraction; JSON.parse cannot tell it from an int, so the TypeScript SDK skips it.",
+  "description": "features_hash golden vectors, produced by infrastore itself (test/test_features_hash_oracle.py re-derives them when infrastore is installed). Every SDK hashes each map to the given lowercase hex. integral_float marks a float whose JSON token has no fraction; JSON.parse cannot tell it from an int, so the TypeScript SDK hashes it as a Float only when parseJson read the document (insertFile does).",
   "vectors": [
     {
       "features": {},

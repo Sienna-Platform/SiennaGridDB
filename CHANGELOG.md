@@ -10,7 +10,8 @@ Built from SiennaSchemas v0.5.0.
 
 ### Schema
 
-- `PRAGMA user_version = 14`.
+- `PRAGMA user_version = 15`.
+- Generated JSON defaults use RFC 8785 text, as the SDKs write it (`"fixed":0`, not `0.0`).
 - A regulated bus is a bus ID (SiennaSchemas #108). A nullable `remote_regulated_bus` column,
   a foreign key to `balancing_topologies`, replaces `regulated_bus_number` and
   `remote_bus_control` on the devices that regulate voltage. It cannot equal the device's own
@@ -60,6 +61,10 @@ Built from SiennaSchemas v0.5.0.
 - `open_database` does not create a missing file; a failed CLI build deletes its output.
 - Julia waits 5 s on a locked database and has `get_inserted`, `get_skipped_fields` and
   `get_unsupported`. The TypeScript CLI accepts `--time-series`.
+- Every SDK writes JSON text in RFC 8785 (JCS) form, so a document stores the same bytes from
+  any SDK, and the parity dumps compare that text as stored.
+- TypeScript `insertFile` and the new `parseJson` keep a feature written as `2030.0` a Float
+  in `features_hash`, as infrastore does.
 - The time series extensions need InfraStore 0.17 (Julia `InfraStore = "0.17"`, Python
   `infrastore>=0.17.0`).
 

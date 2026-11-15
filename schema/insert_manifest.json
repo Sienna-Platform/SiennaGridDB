@@ -1034,7 +1034,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroDispatch')",
       "rank": 2,
-      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, remote_regulated_bus, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, active_power, reactive_power, operation_cost, time_at_status) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 'OFFLINE'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"HYDRO_GEN\",\"fixed\":0.0,\"variable_operation_cost\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), COALESCE(?, 600000.0))",
+      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, remote_regulated_bus, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, active_power, reactive_power, operation_cost, time_at_status) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 'OFFLINE'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"HYDRO_GEN\",\"fixed\":0,\"variable_operation_cost\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), COALESCE(?, 600000.0))",
       "skip": [
         "dynamic_injector"
       ],
@@ -1206,7 +1206,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroPumpTurbine')",
       "rank": 2,
-      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, remote_regulated_bus, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, operating_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost, time_at_status) VALUES (?, ?, COALESCE(?, 'PS'), ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 'OFF'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\":\"HYDRO_GEN\",\"fixed\":0.0,\"variable_operation_cost\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), COALESCE(?, 600000.0))",
+      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, remote_regulated_bus, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, operating_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost, time_at_status) VALUES (?, ?, COALESCE(?, 'PS'), ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 'OFF'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\":\"HYDRO_GEN\",\"fixed\":0,\"variable_operation_cost\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), COALESCE(?, 600000.0))",
       "skip": [
         "dynamic_injector"
       ],
@@ -1293,7 +1293,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_reservoirs', 'HydroReservoir')",
       "rank": 0,
-      "row_sql": "INSERT INTO hydro_reservoirs (id, name, available, storage_level_limits, initial_level, spillage_limits, inflow, outflow, level_targets, intake_elevation, head_to_volume_factor, operation_cost, level_data_type, evaporative_loss) VALUES (?, ?, COALESCE(?, 1), ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 0.0), ?, COALESCE(?, '{\"cost_type\":\"HYDRO_RES\",\"level_shortage_cost\":0.0,\"level_surplus_cost\":0.0,\"spillage_cost\":0.0}'), COALESCE(?, 'USABLE_VOLUME'), COALESCE(?, 0.0))",
+      "row_sql": "INSERT INTO hydro_reservoirs (id, name, available, storage_level_limits, initial_level, spillage_limits, inflow, outflow, level_targets, intake_elevation, head_to_volume_factor, operation_cost, level_data_type, evaporative_loss) VALUES (?, ?, COALESCE(?, 1), ?, ?, ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 0.0), ?, COALESCE(?, '{\"cost_type\":\"HYDRO_RES\",\"level_shortage_cost\":0,\"level_surplus_cost\":0,\"spillage_cost\":0}'), COALESCE(?, 'USABLE_VOLUME'), COALESCE(?, 0.0))",
       "skip": [],
       "table": "hydro_reservoirs"
     },
@@ -1413,7 +1413,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'hydro_generators', 'HydroTurbine')",
       "rank": 2,
-      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, remote_regulated_bus, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost, time_at_status) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\":\"HYDRO_GEN\",\"fixed\":0.0,\"variable_operation_cost\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), COALESCE(?, 600000.0))",
+      "row_sql": "INSERT INTO hydro_generators (id, name, prime_mover_type, balancing_topology, remote_regulated_bus, rating, base_power, power_units, active_power_limits, reactive_power_limits, ramp_limits, time_limits, available, status, commitment_mode, active_power, reactive_power, powerhouse_elevation, outflow_limits, conversion_factor, travel_time, operation_cost, time_at_status) VALUES (?, ?, COALESCE(?, 'HY'), ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 'OFFLINE'), COALESCE(?, 'COMMITTED'), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, COALESCE(?, 1.0), ?, COALESCE(?, '{\"cost_type\":\"HYDRO_GEN\",\"fixed\":0,\"variable_operation_cost\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), COALESCE(?, 600000.0))",
       "skip": [
         "dynamic_injector"
       ],
@@ -1563,7 +1563,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'interconnecting_converters', 'InterconnectingConverter')",
       "rank": 2,
-      "row_sql": "INSERT INTO interconnecting_converters (id, name, bus, remote_regulated_bus, dc_bus, dc_control, ac_control, base_power, power_units, power_factor_weighting_fraction, voltage_limits, available, active_power, rating, active_power_limits, reactive_power_limits, dc_power_setpoint, dc_voltage_setpoint, power_factor_setpoint) VALUES (?, ?, ?, ?, ?, COALESCE(?, 'DC_VOLTAGE'), COALESCE(?, 'AC_REACTIVE_POWER'), ?, ?, COALESCE(?, 1.0), COALESCE(?, '{\"max\":999.9,\"min\":0.0}'), COALESCE(?, 1), ?, ?, ?, ?, ?, ?, ?)",
+      "row_sql": "INSERT INTO interconnecting_converters (id, name, bus, remote_regulated_bus, dc_bus, dc_control, ac_control, base_power, power_units, power_factor_weighting_fraction, voltage_limits, available, active_power, rating, active_power_limits, reactive_power_limits, dc_power_setpoint, dc_voltage_setpoint, power_factor_setpoint) VALUES (?, ?, ?, ?, ?, COALESCE(?, 'DC_VOLTAGE'), COALESCE(?, 'AC_REACTIVE_POWER'), ?, ?, COALESCE(?, 1.0), COALESCE(?, '{\"max\":999.9,\"min\":0}'), COALESCE(?, 1), ?, ?, ?, ?, ?, ?, ?)",
       "skip": [
         "dynamic_injector"
       ],
@@ -1937,7 +1937,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'transmission_lines', 'Line')",
       "rank": 1,
-      "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units, available, active_power_flow, reactive_power_flow, rating_b, rating_c, operational_flow_limit, angle_limits) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0.0,\"to\":0.0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?, ?)",
+      "row_sql": "INSERT INTO transmission_lines (id, name, arc_id, continuous_rating, r, x, b, g, parameter_units, base_power, power_units, available, active_power_flow, reactive_power_flow, rating_b, rating_c, operational_flow_limit, angle_limits) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, '{\"from\":0,\"to\":0}'), COALESCE(?, 'COMPONENT_BASE'), ?, ?, COALESCE(?, 1), COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?, ?)",
       "skip": [],
       "table": "transmission_lines"
     },
@@ -2793,7 +2793,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'sources', 'Source')",
       "rank": 2,
-      "row_sql": "INSERT INTO sources (id, name, bus, remote_regulated_bus, available, base_voltage, base_power, power_units, active_power, reactive_power, active_power_limits, reactive_power_limits, internal_voltage, internal_angle, r_th, x_th, parameter_units, operation_cost) VALUES (?, ?, ?, ?, COALESCE(?, 1), ?, COALESCE(?, 100.0), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_BASE'), COALESCE(?, '{\"cost_type\":\"IMPORTEXPORT\",\"energy_export_weekly_limit\":1000000.0,\"energy_import_weekly_limit\":1000000.0,\"export_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}},\"import_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'))",
+      "row_sql": "INSERT INTO sources (id, name, bus, remote_regulated_bus, available, base_voltage, base_power, power_units, active_power, reactive_power, active_power_limits, reactive_power_limits, internal_voltage, internal_angle, r_th, x_th, parameter_units, operation_cost) VALUES (?, ?, ?, ?, COALESCE(?, 1), ?, COALESCE(?, 100.0), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, '{\"max\":0,\"min\":0}'), COALESCE(?, '{\"max\":0,\"min\":0}'), COALESCE(?, 1.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 0.0), COALESCE(?, 'COMPONENT_BASE'), COALESCE(?, '{\"cost_type\":\"IMPORTEXPORT\",\"energy_export_weekly_limit\":1000000,\"energy_import_weekly_limit\":1000000,\"export_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}},\"import_offer_curves\":{\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'))",
       "skip": [
         "dynamic_injector"
       ],
@@ -3122,7 +3122,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'storage_technologies', 'StorageTechnology')",
       "rank": 0,
-      "row_sql": "INSERT INTO storage_technologies (id, name, prime_mover_type, storage_tech, region, power_systems_type, lifetime, unit_size_charge, unit_size_discharge, unit_size_energy, capacity_limits_charge, capacity_limits_discharge, capacity_limits_energy, available, duration_limits, efficiency, min_discharge_fraction, losses, capital_costs_charge, capital_costs_discharge, capital_costs_energy, interconnection_cost, operation_costs, financial_data) VALUES (?, ?, COALESCE(?, 'OT'), COALESCE(?, 'OTHER_CHEM'), ?, ?, COALESCE(?, 100), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), COALESCE(?, 1.0), ?, COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), COALESCE(?, '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"THERMAL\",\"fixed\":0,\"shut_down\":0,\"start_up\":0,\"variable\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), ?)",
+      "row_sql": "INSERT INTO storage_technologies (id, name, prime_mover_type, storage_tech, region, power_systems_type, lifetime, unit_size_charge, unit_size_discharge, unit_size_energy, capacity_limits_charge, capacity_limits_discharge, capacity_limits_energy, available, duration_limits, efficiency, min_discharge_fraction, losses, capital_costs_charge, capital_costs_discharge, capital_costs_energy, interconnection_cost, operation_costs, financial_data) VALUES (?, ?, COALESCE(?, 'OT'), COALESCE(?, 'OTHER_CHEM'), ?, ?, COALESCE(?, 100), ?, COALESCE(?, 0.0), COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), COALESCE(?, 1.0), ?, COALESCE(?, '{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}'), COALESCE(?, '{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}'), COALESCE(?, 0.0), COALESCE(?, '{\"cost_type\":\"THERMAL\",\"fixed\":0,\"shut_down\":0,\"start_up\":0,\"variable\":{\"power_units\":\"NATURAL_UNITS\",\"value_curve\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}},\"variable_cost_type\":\"COST\",\"vom_cost\":{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}}}'), ?)",
       "skip": [],
       "table": "storage_technologies"
     },
@@ -3694,7 +3694,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'three_winding_transformers', 'ThreeWindingTransformer')",
       "rank": 3,
-      "row_sql": "INSERT INTO three_winding_transformers (id, name, primary_circuit, secondary_circuit, tertiary_circuit, star_bus, r_12, x_12, r_23, x_23, r_31, x_31, parameter_units, base_power_12, base_power_23, base_power_31, magnetizing_shunt, shunt_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, ?, COALESCE(?, '{\"imag\":0.0,\"real\":0.0}'), COALESCE(?, 'PRIMARY'))",
+      "row_sql": "INSERT INTO three_winding_transformers (id, name, primary_circuit, secondary_circuit, tertiary_circuit, star_bus, r_12, x_12, r_23, x_23, r_31, x_31, parameter_units, base_power_12, base_power_23, base_power_31, magnetizing_shunt, shunt_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'COMPONENT_BASE'), ?, ?, ?, COALESCE(?, '{\"imag\":0,\"real\":0}'), COALESCE(?, 'PRIMARY'))",
       "skip": [
         "admittance_units"
       ],
@@ -4341,7 +4341,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalLCCLine')",
       "rank": 1,
-      "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, rating, rating_from, rating_to, reactive_power_limits_from, reactive_power_limits_to, operational_flow_limit, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), ?, 'LCC')",
+      "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, rating, rating_from, rating_to, reactive_power_limits_from, reactive_power_limits_to, operational_flow_limit, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, '{\"max\":0,\"min\":0}'), COALESCE(?, '{\"max\":0,\"min\":0}'), ?, 'LCC')",
       "skip": [],
       "table": "two_terminal_hvdc_lines"
     },
@@ -4709,7 +4709,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_terminal_hvdc_lines', 'TwoTerminalVSCLine')",
       "rank": 1,
-      "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, rating, rating_from, rating_to, reactive_power_limits_from, reactive_power_limits_to, operational_flow_limit, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), COALESCE(?, '{\"max\":0.0,\"min\":0.0}'), ?, 'VSC')",
+      "row_sql": "INSERT INTO two_terminal_hvdc_lines (id, name, arc_id, available, base_power, power_units, active_power_flow, rating, rating_from, rating_to, reactive_power_limits_from, reactive_power_limits_to, operational_flow_limit, converter_type) VALUES (?, ?, ?, COALESCE(?, 1), ?, ?, COALESCE(?, 0.0), ?, ?, ?, COALESCE(?, '{\"max\":0,\"min\":0}'), COALESCE(?, '{\"max\":0,\"min\":0}'), ?, 'VSC')",
       "skip": [],
       "table": "two_terminal_hvdc_lines"
     },
@@ -4739,7 +4739,7 @@
       ],
       "entity_sql": "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, 'two_winding_transformers', 'TwoWindingTransformer')",
       "rank": 3,
-      "row_sql": "INSERT INTO two_winding_transformers (id, name, circuit, magnetizing_shunt, shunt_location) VALUES (?, ?, ?, COALESCE(?, '{\"imag\":0.0,\"real\":0.0}'), COALESCE(?, 'PRIMARY'))",
+      "row_sql": "INSERT INTO two_winding_transformers (id, name, circuit, magnetizing_shunt, shunt_location) VALUES (?, ?, ?, COALESCE(?, '{\"imag\":0,\"real\":0}'), COALESCE(?, 'PRIMARY'))",
       "skip": [
         "admittance_units"
       ],
@@ -4784,7 +4784,7 @@
       "table": "virtual_participants"
     }
   },
-  "schema_user_version": 14,
+  "schema_user_version": 15,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",

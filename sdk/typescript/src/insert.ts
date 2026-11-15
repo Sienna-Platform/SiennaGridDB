@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Connection } from "./db.js";
 import { seedVocabulary } from "./db.js";
-import { canonicalJson, encode, isInt, isNull, isObject, valueAt, type SqlValue } from "./encode.js";
+import { canonicalJson, encode, isInt, isNull, isObject, parseJson, valueAt, type SqlValue } from "./encode.js";
 import {
   EncodeError,
   InsertError,
@@ -480,7 +480,7 @@ function documentPath(path: string): string {
   return join(path, docs[0]);
 }
 
-const readDocument = (path: string): JsonObject => JSON.parse(readFileSync(path, "utf-8")) as JsonObject;
+const readDocument = (path: string): JsonObject => parseJson(readFileSync(path, "utf-8")) as JsonObject;
 
 /**
  * Insert the document at path (a file or bundle directory). A portfolio's base_system_file,

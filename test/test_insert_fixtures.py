@@ -14,7 +14,7 @@ import pytest
 from conftest import REPO_ROOT, SCRIPTS_DIR, build_database
 
 sys.path.insert(0, str(SCRIPTS_DIR))
-from canonical_dump import dump, normalize
+from canonical_dump import dump
 
 GENERATOR = REPO_ROOT / "test" / "prepare_fixtures.py"
 
@@ -80,10 +80,20 @@ def test_unsupported_cost_shape_raises():
         _load_prepare().convert(_thermal("COMPONENT_BASE", data))
 
 
-def test_normalize_treats_json_ints_and_floats_alike():
-    assert normalize('{"b":1,"a":[2]}') == normalize('{"a": [2.0], "b": 1.0}')
-    assert normalize(3) == 3
-    assert normalize("text") == "text"
+def test_dump_keeps_json_text_as_stored(tmp_path):
+    """Every runtime writes RFC 8785 text, so parity compares the stored bytes."""
+    texts = []
+    for text in ('{"a":1}', '{"a":1.0}'):
+        path = build_database(tmp_path / f"{len(texts)}.sqlite")
+        conn = sqlite3.connect(str(path))
+        conn.execute(
+            "INSERT INTO feature_sets (features_hash, key, value_kind, value_str) VALUES (?, 'k', 'str', ?)",
+            ("0" * 64, text),
+        )
+        conn.commit()
+        conn.close()
+        texts.append(dump(str(path)))
+    assert texts[0] != texts[1]
 
 
 def test_dump_keeps_entity_ids_and_drops_surrogate_ids(tmp_path):

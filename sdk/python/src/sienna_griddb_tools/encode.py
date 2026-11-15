@@ -11,12 +11,53 @@ class EncodeError(ValueError):
 
 
 def canonical_json(value):
-    try:
-        return json.dumps(
-            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-        )
-    except ValueError as exc:
-        raise EncodeError(f"{exc}: GridDB stores finite numbers only") from exc
+    """RFC 8785 (JCS) text, the form the three SDKs write: keys in UTF-16 code-unit
+    order, numbers as ECMAScript writes them (1.0 -> 1), no whitespace."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return _number(value)
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(canonical_json(v) for v in value) + "]"
+    if isinstance(value, dict):
+        keys = sorted(value, key=lambda k: k.encode("utf-16-be"))
+        items = (json.dumps(k, ensure_ascii=False) + ":" + canonical_json(value[k]) for k in keys)
+        return "{" + ",".join(items) + "}"
+    raise EncodeError(f"not a JSON value: {value!r}")
+
+
+def _number(x):
+    """ECMAScript Number::toString, from the shortest round-trip digits repr gives."""
+    if not math.isfinite(x):
+        raise EncodeError(f"{x!r}: GridDB stores finite numbers only")
+    if x == 0:
+        return "0"
+    sign = "-" if x < 0 else ""
+    mantissa, _, exponent = repr(abs(x)).partition("e")
+    whole, _, fraction = mantissa.partition(".")
+    all_digits = whole + fraction
+    digits = all_digits.lstrip("0")
+    # n: where the decimal point sits relative to the first significant digit.
+    n = len(whole) + int(exponent or 0) - (len(all_digits) - len(digits))
+    digits = digits.rstrip("0")
+    k = len(digits)
+    if k <= n <= 21:
+        return sign + digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return sign + digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return sign + "0." + "0" * -n + digits
+    e = n - 1
+    mark = "+" if e >= 0 else "-"
+    if k == 1:
+        return f"{sign}{digits}e{mark}{abs(e)}"
+    return f"{sign}{digits[0]}.{digits[1:]}e{mark}{abs(e)}"
 
 
 def is_int(value):

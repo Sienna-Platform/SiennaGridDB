@@ -5,7 +5,7 @@ const DERIVED = "DeterministicSingleTimeSeries";
 
 export function featureRows(hash: string, features: JsonObject): SqlValue[][] {
   return Object.entries(features).map(([key, value]) => {
-    const kind = featureKind(value);
+    const kind = featureKind(features, key);
     if (kind === "bool") return [hash, key, kind, null, null, value ? 1 : 0, null];
     if (kind === "int") return [hash, key, kind, BigInt(value as number), null, null, null];
     if (kind === "float") return [hash, key, kind, null, value as number, null, null];
@@ -34,7 +34,7 @@ function featureKey(features: unknown): unknown {
   if (!isObject(features)) return null;
   return Object.keys(features)
     .sort()
-    .map((k) => [k, featureKind(features[k]), features[k]]);
+    .map((k) => [k, featureKind(features, k), features[k]]);
 }
 
 function seriesKey(row: JsonObject): string {

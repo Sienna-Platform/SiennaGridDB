@@ -430,6 +430,7 @@ equals the manifest's `schema_user_version`.
   and the runtimes do not convert.
 - **Time series.** The three runtimes write each `time_series_associations` row and its feature set.
   `features_hash` is infrastore's hash of the feature map (`crates/infrastore-core/src/hash.rs`), checked against `test/features_hash_vectors.json`.
+  A feature written as `2030.0` hashes as a Float. The TypeScript runtime keeps that only for a document it parsed itself (`insertFile`, or `parseJson`); an object built in code hashes `2030` as an Int.
   A row that names its owner with another type or category raises.
   A `NonSequentialTimeSeries` is reported, not written: GridDB has no column for its `timestamps_uri`.
   A `DeterministicSingleTimeSeries` is reported, not written: it is a view over its `SingleTimeSeries`' array, which a consumer derives again with `transform_single_time_series!`.
@@ -449,6 +450,11 @@ equals the manifest's `schema_user_version`.
   checked in. The Python runtime produces the expected outputs; CI builds a database
   from the inputs with the Julia and TypeScript runtimes and requires identical
   canonical dumps (`scripts/check_insert_parity.py`).
+- **Canonical JSON.** Every runtime, and the generated JSON defaults, write JSON text in
+  RFC 8785 (JCS) form: keys in UTF-16 code-unit order, numbers as ECMAScript writes them
+  (`1.0` is `1`, `1e16` is `10000000000000000`), no whitespace. So the same document
+  stores the same bytes from any runtime, and the parity dumps compare that text as
+  stored. `test/canonical_json_vectors.json` holds every implementation to it.
 - **Schema files.** The runtimes read `schema/` directly, so nothing is copied by hand.
   The Python package links each file from `schema/`, and the Julia package reads the
   repository's `schema/` directory. The TypeScript `build` script copies the files into
