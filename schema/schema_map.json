@@ -125,7 +125,6 @@
     "Core/SystemDocument.json": "Document envelope, not a component.",
     "Dynamics/": "Dynamic components are out of scope for the database.",
     "Investments/Associations/RequirementAssociation.json": "No table yet.",
-    "Investments/Financials/PortfolioFinancialData.json": "No table yet.",
     "Investments/Financials/TechnologyFinancialData.json": "Stored as the financial_data JSON column of the technology tables.",
     "Investments/PortfolioDocument.json": "Document envelope, not a component.",
     "Investments/Requirements/": "No table yet.",
