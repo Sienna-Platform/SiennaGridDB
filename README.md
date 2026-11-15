@@ -1,17 +1,35 @@
 # SiennaGridDB
 
-Schema for the SQL database for Power Systems Analysis Applications
+CRUD SDKs that store SiennaSchemas objects in a SQLite database and read them back, in
+four languages.
 
 > [!IMPORTANT]
 > This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
 
 ## What this repository ships
 
-The product is **SQL**, not a Python package. `schema/` holds the four files that build a
-database — `schema.sql` (tables), `triggers.sql` (integrity), `unit_registry.sql`
-(the generated, sha256-sealed unit vocabulary) and `views.sql` — and `scripts/` holds the
-Python tooling that generates and verifies them. Nothing here is importable; the
-`pyproject.toml` exists to set up the dev environment and host the linter config.
+The goal is **CRUD SDKs**: create, read, update and delete SiennaSchemas objects
+(systems, portfolios, their time series) in a GridDB database. The SDKs speak the
+schemas, not SQL; the database is their storage format.
+
+| Language | Package | Status |
+|---|---|---|
+| Python | [`sdk/python`](sdk/python/README.md) | create (insert) |
+| Julia | [`sdk/julia`](sdk/julia/README.md) | create (insert) |
+| TypeScript | [`sdk/typescript`](sdk/typescript/README.md) | create (insert); no time series values |
+| Rust | — | planned |
+
+Read, update and delete come next, in all four languages.
+
+This repository is **not a general interface to the database**. It does not offer a
+query builder, an ORM or arbitrary SQL access. Anything outside the SDKs' CRUD calls
+— ad hoc queries, analytics, bulk edits — uses SQLite directly, against the tables and
+views documented below, and the SDKs make no promise about data written that way.
+
+The SDKs write to the schema in `schema/`: `schema.sql` (tables), `triggers.sql`
+(integrity), `unit_registry.sql` (the generated, sha256-sealed unit vocabulary) and
+`views.sql`. `scripts/` holds the Python tooling that generates and verifies the schema
+and the insert manifest the SDKs read.
 
 A release is a tarball attached to a `v*` GitHub Release, containing `schema/`,
 `scripts/`, `README.md`, `CHANGELOG.md`, `LICENSE` and `.justfile` under a single top-level directory:
@@ -26,7 +44,7 @@ just new-db                     # or the four sqlite3 calls below
 
 Read this before building on it:
 
-- **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
+- **No migration path.** `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
   `PRAGMA user_version` is bumped on every schema change. The insert SDKs read it: they open
   only a database whose `user_version` matches the schema they write, and refuse any other.
@@ -381,9 +399,10 @@ Both were run against a database built from `schema/schema.sql` + `triggers.sql`
 
 ## Insert SDKs
 
-`sdk/` holds three small packages that insert Sienna OpenAPI SDK objects into a GridDB
-database: [`sdk/python`](sdk/python/README.md), [`sdk/julia`](sdk/julia/README.md), and
-[`sdk/typescript`](sdk/typescript/README.md). None of them contains mapping logic. Each
+`sdk/` holds the CRUD SDKs. Today they implement create: they insert Sienna OpenAPI SDK
+objects into a GridDB database: [`sdk/python`](sdk/python/README.md),
+[`sdk/julia`](sdk/julia/README.md), and [`sdk/typescript`](sdk/typescript/README.md).
+None of them contains mapping logic. Each
 one interprets `schema/insert_manifest.json`, which `scripts/generate_insert_manifest.py`
 builds from `schema_map.json`, `sql_codegen_map.json`, `schema/insert_config.json`, the
 SiennaSchemas components, and the DDL itself. Every INSERT a runtime can issue is written

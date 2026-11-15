@@ -1,7 +1,10 @@
 # sienna-griddb-tools (Python)
 
-Insert Sienna OpenAPI SDK objects (`power-openapi-models`) into a SiennaGridDB SQLite
-database. The SQL comes from the bundled insert manifest; this package only binds values.
+The Python CRUD SDK for SiennaGridDB: it stores Sienna OpenAPI SDK objects
+(`power-openapi-models`) in a SiennaGridDB SQLite database. Today it implements create
+(insert); read, update and delete come next. It is not a general database client: use
+SQLite directly for anything else. The SQL comes from the bundled insert manifest; this
+package only binds values.
 
 ```python
 from power_openapi_models.document import read_document

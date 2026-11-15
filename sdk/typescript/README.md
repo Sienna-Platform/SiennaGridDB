@@ -1,6 +1,9 @@
 # @sienna-platform/griddb-tools
 
-Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database (Node ≥ 22).
+The TypeScript CRUD SDK for SiennaGridDB: it stores Sienna OpenAPI SDK objects in a
+SiennaGridDB SQLite database (Node ≥ 22). Today it implements create (insert), without
+time series values; read, update and delete come next. It is not a general database
+client: use SQLite directly for anything else.
 
 ```ts
 import { readDocument } from "@sienna-platform/power-openapi-models/document";
