@@ -25,7 +25,11 @@ import {
 
 const SAVEPOINT = "sienna_griddb_tools_insert";
 
-export interface InsertOptions { strict?: boolean }
+export interface InsertOptions {
+  strict?: boolean;
+  /** The document's HDF5 sidecar, recorded on its time_series_stores row; never read. */
+  timeSeries?: string;
+}
 
 // The caller's connection may have foreign keys off. The PRAGMA does nothing inside an
 // open transaction, so read it back.
@@ -44,17 +48,56 @@ function requiredId(row: JsonObject, key: string, what: string): number {
   return value;
 }
 
-function withSavepoint(db: Connection, f: () => void): void {
+function requireSchemaVersion(db: Connection): void {
+  const found = db.pragma("user_version", { simple: true }) as number;
+  const expected = loadManifest().schema_user_version;
+  if (found !== expected) {
+    throw new InsertError(`database has user_version ${found}; this package writes ${expected}`);
+  }
+}
+
+function withSavepoint<T>(db: Connection, f: () => T): T {
   requireForeignKeys(db);
+  requireSchemaVersion(db);
   db.exec(`SAVEPOINT ${SAVEPOINT}`);
+  let result: T;
   try {
-    f();
+    result = f();
   } catch (err) {
-    db.exec(`ROLLBACK TO ${SAVEPOINT}`);
-    db.exec(`RELEASE ${SAVEPOINT}`);
+    rollback(db, err);
     throw err;
   }
-  db.exec(`RELEASE ${SAVEPOINT}`);
+  // RELEASE of the outermost savepoint is the commit: deferred foreign keys fail here.
+  try {
+    db.exec(`RELEASE ${SAVEPOINT}`);
+  } catch (err) {
+    rollback(db, err);
+    throw withCause(new InsertError(`the insert fails its commit checks: ${(err as Error).message}`), err);
+  }
+  return result;
+}
+
+function rollback(db: Connection, cause: unknown): void {
+  try {
+    db.exec(`ROLLBACK TO ${SAVEPOINT}`);
+    db.exec(`RELEASE ${SAVEPOINT}`);
+  } catch (err) {
+    const message = `rollback failed (${(err as Error).message}) after: ${(cause as Error).message}`;
+    throw withCause(new InsertError(message), cause);
+  }
+}
+
+function withCause(err: Error, cause: unknown): Error {
+  err.cause = cause;
+  return err;
+}
+
+function jsonText(value: unknown, what: string): string {
+  try {
+    return canonicalJson(value);
+  } catch (err) {
+    throw wrap(err, what);
+  }
 }
 
 function wrap(err: unknown, what: string): unknown {
@@ -130,7 +173,7 @@ function writeRow(
     run(
       db,
       loadManifest().attribute_sql,
-      [BigInt(obj.id as number), plan.typeName, attr.field, canonicalJson(value), arm?.unit ?? null, arm?.quantity_kind ?? null],
+      [BigInt(obj.id as number), plan.typeName, attr.field, jsonText(value, what), arm?.unit ?? null, arm?.quantity_kind ?? null],
       what,
     );
   }
@@ -229,6 +272,7 @@ function timeSeriesRows(
     } else if (namesUnsupported(row, plan.references, unsupportedIds)) {
       report.addUnsupported(plan.section, 1);
     } else {
+      requirePositiveId(row);
       stored.push(row);
     }
   }
@@ -257,14 +301,23 @@ function insertAssociations(db: Connection, plan: TimeSeriesPlan, rows: JsonObje
 
 // A foreign key cannot reach into JSON, so the insert is the only place that sees a payload
 // reference to an association it does not store.
+// A store mints ids from 1; an id below would land on an id already used.
+function requirePositiveId(row: JsonObject): void {
+  const id = row.association_id;
+  if (isInt(id) && id <= 0) throw new InsertError(`time series association id=${id}: ids start at 1`);
+}
+
+// Ids are the document's own: a reference to a derived series resolves to its stored source.
 function reportDangling(
   report: InsertReport,
   strict: boolean,
   plans: [ComponentPlan, JsonObject[]][],
   attrs: JsonObject[],
   series: JsonObject[],
+  sources: Map<number, number>,
 ) {
   const storedIds = new Set(series.map((r) => r.association_id).filter(isInt));
+  for (const [derived, source] of sources) if (storedIds.has(source)) storedIds.add(derived);
   const rows = [...plans.flatMap(([, objs]) => objs), ...attrs];
   const payloads = rows.filter((o) => isObject(o) && isInt(o.id)).map((o): [number, unknown] => [o.id as number, o]);
   const dangling = danglingReferences(payloads, storedIds);
@@ -308,6 +361,10 @@ function requireNewIds(db: Connection, plans: [ComponentPlan, JsonObject[]][], a
 }
 
 export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOptions = {}): InsertReport {
+  return withSavepoint(db, () => insertDocumentRows(db, doc, opts));
+}
+
+function insertDocumentRows(db: Connection, doc: JsonObject, opts: InsertOptions): InsertReport {
   const strict = opts.strict ?? false;
   const m = loadManifest();
   const report = new InsertReport();
@@ -315,17 +372,13 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   for (const [typeName, objs] of Object.entries(components)) {
     if (!Array.isArray(objs)) throw new InsertError(`components.${typeName}: not a list`);
   }
-  // Series ids move past every id stored, and references to a derived series name its
-  // source, which GridDB stores instead.
-  const offset = Number(db.prepare(m.time_series.id_offset_sql).pluck().get());
-  const remap = seriesRemap(derivedSources(sectionRows(doc, m.time_series.section)), offset);
   const plans: [ComponentPlan, JsonObject[]][] = [];
   // Ids follow the int encoder's rule, so any other value reaches the encoder and fails there.
   // A non-object entry (schema-invalid) has no id and is only counted.
   const unsupportedIds = new Set<number>();
   const owners = new Map<number, [string, string]>();
   for (const typeName of Object.keys(components).sort()) {
-    const objs = components[typeName].map((o) => remapReferences(o, remap));
+    const objs = components[typeName];
     const ids = objs.map((o) => o?.id).filter(isInt);
     for (const id of ids) owners.set(id, [typeName, "Component"]);
     const plan = planFor(typeName, objs.length, report, strict);
@@ -341,20 +394,29 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   for (const a of sectionRows(doc, "supplemental_attribute_associations")) {
     attrTypes.set(requiredId(a, "attribute_id", "supplemental_attribute_associations row"), a.attribute_type as string);
   }
-  const attrs = remapReferences(sectionRows(doc, "supplemental_attributes"), remap);
-  for (const attr of attrs) {
+  const rawAttrs = sectionRows(doc, "supplemental_attributes");
+  for (const attr of rawAttrs) {
     const attrType = attrTypes.get(attr.id as number);
     if (attrType !== undefined) owners.set(attr.id as number, [attrType, "SupplementalAttribute"]);
   }
-  const series = shiftIds(timeSeriesRows(doc, report, strict, unsupportedIds, owners), offset);
-  if (series.length > 0) {
+  const sources = derivedSources(sectionRows(doc, m.time_series.section));
+  const rawSeries = timeSeriesRows(doc, report, strict, unsupportedIds, owners);
+  if (rawSeries.length > 0) {
     const reason = "the TypeScript SDK has no infrastore binding to read the time series sidecar";
-    unsupported(report, strict, "time_series_values", series.length, reason);
+    unsupported(report, strict, "time_series_values", rawSeries.length, reason);
   }
-  reportDangling(report, strict, plans, attrs, series);
+  reportDangling(report, strict, plans, rawAttrs, rawSeries, sources);
+  // Read inside the savepoint, so no other writer can store ids past it first. Series ids
+  // move past every id stored, and references to a derived series name its source, which
+  // GridDB stores instead.
+  const offset = Number(db.prepare(m.time_series.id_offset_sql).pluck().get());
+  const remap = seriesRemap(sources, offset);
+  for (const entry of plans) entry[1] = entry[1].map((o) => remapReferences(o, remap));
+  const attrs = remapReferences(rawAttrs, remap);
+  const series = shiftIds(rawSeries, offset);
   requireNewIds(db, plans, attrs);
   const supp = m.supplemental_attributes;
-  withSavepoint(db, () => {
+  {
     seedVocabulary(db);
     for (const [plan, objs] of plans) for (const obj of objs) writeEntity(db, plan, obj);
     const routed: [string, string, JsonObject, string][] = [];
@@ -379,10 +441,10 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
       const id = BigInt(attr.id as number);
       if (table === "plants") {
         const { id: _id, name, ...rest } = attr;
-        run(db, supp.plant_sql, [id, name as string, attrType, canonicalJson(rest)], what);
+        run(db, supp.plant_sql, [id, name as string, attrType, jsonText(rest, what)], what);
       } else {
         const { id: _id, ...rest } = attr;
-        run(db, supp.attribute_sql, [id, attrType, canonicalJson(rest)], what);
+        run(db, supp.attribute_sql, [id, attrType, jsonText(rest, what)], what);
       }
       report.addInserted(table);
     }
@@ -400,11 +462,13 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
     }
     if (series.length > 0) {
       const ts = m.time_series;
-      const storeId = BigInt(prepared(db, ts.store_sql).run(BigInt(offset), null).lastInsertRowid);
+      const sidecar = opts.timeSeries ?? null;
+      const storeId = BigInt(prepared(db, ts.store_sql).run(BigInt(offset), sidecar).lastInsertRowid);
       insertAssociations(db, ts, series, report);
-      prepared(db, ts.store_rows_sql).run(storeId, BigInt(offset));
+      const ids = JSON.stringify(series.map((r) => r.association_id));
+      prepared(db, ts.store_rows_sql).run(storeId, ids);
     }
-  });
+  }
   return report;
 }
 
@@ -430,9 +494,17 @@ export function insertFile(db: Connection, path: string, opts: InsertOptions = {
   withSavepoint(db, () => {
     if (typeof doc.base_system_file === "string" && doc.base_system_file !== "") {
       const base = documentPath(resolve(dirname(docPath), doc.base_system_file));
-      report.merge(insertDocument(db, readDocument(base), opts));
+      const system = readDocument(base);
+      report.merge(insertDocument(db, system, { ...opts, timeSeries: beside(base, system.time_series_storage_file) }));
     }
-    report.merge(insertDocument(db, doc, opts));
+    const timeSeries = opts.timeSeries ?? beside(docPath, doc.time_series_storage_file);
+    report.merge(insertDocument(db, doc, { ...opts, timeSeries }));
   });
   return report;
+}
+
+/** A sidecar a document names by basename, resolved next to it. */
+function beside(path: string, name: unknown): string | undefined {
+  if (typeof name !== "string" || name === "") return undefined;
+  return resolve(dirname(path), name);
 }

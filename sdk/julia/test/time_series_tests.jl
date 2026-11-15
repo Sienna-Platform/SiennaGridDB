@@ -215,3 +215,118 @@ if HAS_GOLDEN
               17
     end
 end
+
+if HAS_GOLDEN
+    @testset "a commit check failure rolls back and throws" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                # load_zone is a deferred foreign key: SQLite checks it only at the commit.
+                bus = lone_bus(golden())
+                bus["load_zone"] = 999
+                @test_throws InsertError insert_component!(db, "ACBus", bus)
+                @test count_rows(db, "entities") == 0
+                insert_component!(db, "ACBus", lone_bus(golden()))
+                @test count_rows(db, "balancing_topologies") == 1
+            end
+        end
+    end
+
+    @testset "a non-finite number throws" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                bus = lone_bus(golden())
+                bus["magnitude"] = Inf
+                @test_throws InsertError insert_component!(db, "ACBus", bus)
+                @test count_rows(db, "entities") == 0
+            end
+        end
+    end
+
+    @testset "an insert refuses another schema version" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                DBInterface.execute(db, "PRAGMA user_version = 1")
+                err = try
+                    insert_component!(db, "ACBus", lone_bus(golden()))
+                catch e
+                    e
+                end
+                @test occursin("user_version 1", sprint(showerror, err))
+            end
+        end
+    end
+
+    @testset "an association id below one throws" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                gen = first_of(doc, "ThermalStandard")["id"]
+                doc["time_series_associations"] = Any[series(gen, 0)]
+                @test_throws InsertError insert_document!(db, doc)
+                @test count_rows(db, "entities") == 0
+            end
+        end
+    end
+
+    @testset "each store tags only its own rows" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                gen = first_of(doc, "ThermalStandard")["id"]
+                doc["time_series_associations"] =
+                    Any[series(gen, 2), series(gen, 3; name="min_active_power")]
+                insert_document!(db, doc)
+                rows = Any[series(gen, 2; name="a"), series(gen, 3; name="b")]
+                second = Dict{String, Any}(
+                    "components" => Dict{String, Any}(),
+                    "time_series_associations" => rows,
+                )
+                insert_document!(db, second)
+                sql = "SELECT id, store_id FROM time_series_associations ORDER BY id"
+                @test query_rows(db, sql) == [(2, 1), (3, 1), (5, 2), (6, 2)]
+            end
+        end
+    end
+
+    @testset "a dangling reference names the document's own id" begin
+        mktempdir() do dir
+            fresh(dir) do db
+                doc = golden()
+                gen = first_of(doc, "ThermalStandard")["id"]
+                doc["time_series_associations"] =
+                    Any[series(gen, 2), series(gen, 3; name="min_active_power")]
+                insert_document!(db, doc)
+                # Stored past offset 3, the plant's 7 would read 10; the report names the 7.
+                second = Dict{String, Any}(
+                    "components" => Dict{String, Any}(),
+                    "supplemental_attributes" => Any[Dict{String, Any}(
+                        "id" => 9200,
+                        "name" => "p",
+                        "fuel_cost_time_series" => 7,
+                    )],
+                    "supplemental_attribute_associations" => Any[Dict{String, Any}(
+                        "component_id" => gen,
+                        "component_type" => "ThermalStandard",
+                        "attribute_id" => 9200,
+                        "attribute_type" => "ThermalPowerPlant",
+                    )],
+                    "time_series_associations" => Any[],
+                )
+                err = try
+                    insert_document!(db, second; strict=true)
+                catch e
+                    e
+                end
+                @test occursin("fuel_cost_time_series=7", sprint(showerror, err))
+            end
+        end
+    end
+end
+
+@testset "opening a missing database creates no file" begin
+    mktempdir() do dir
+        path = joinpath(dir, "typo.sqlite")
+        @test_throws GridDBToolsError open_database(path)
+        @test !isfile(path)
+    end
+end

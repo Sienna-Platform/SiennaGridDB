@@ -8,7 +8,11 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(sortDeep(value));
 }
 
+// JSON.stringify writes NaN and Infinity as null; GridDB stores finite numbers only.
 function sortDeep(value: unknown): unknown {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new EncodeError(`expected a finite number, got ${value}`);
+  }
   if (Array.isArray(value)) return value.map(sortDeep);
   if (value !== null && typeof value === "object") {
     const o = value as JsonObject;
@@ -38,6 +42,7 @@ const ENCODERS: Record<Encoding, (v: unknown) => SqlValue> = {
   },
   real: (v) => {
     if (typeof v !== "number") throw new EncodeError(`expected a number, got ${JSON.stringify(v)}`);
+    if (!Number.isFinite(v)) throw new EncodeError(`expected a finite number, got ${v}`);
     return v;
   },
   text: (v) => {

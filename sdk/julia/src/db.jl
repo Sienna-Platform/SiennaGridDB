@@ -9,8 +9,11 @@ function connect(path::AbstractString)
     db = SQLite.DB(path)
     found = VersionNumber(scalar(db, "SELECT sqlite_version()"))
     if found < MIN_SQLITE
+        close(db)
         throw(GridDBToolsError("SQLite $found is older than the required $MIN_SQLITE"))
     end
+    # SQLite.jl waits 0 ms on a locked database; the Python and TypeScript SDKs wait 5 s.
+    SQLite.busy_timeout(db, 5000)
     DBInterface.execute(db, "PRAGMA foreign_keys = ON")
     # A document inserts in one savepoint, so every row opens a statement journal;
     # on disk that file I/O dominates the insert. Set at open: no temp tables yet.
@@ -35,6 +38,10 @@ function execute_script(db::SQLite.DB, sql::AbstractString)
 end
 
 function open_database(path::AbstractString)
+    # SQLite.DB creates a missing file; a mistyped path must not leave one behind.
+    if !isfile(path)
+        throw(GridDBToolsError("$path: no such database file"))
+    end
     db = connect(path)
     found = scalar(db, "PRAGMA user_version")
     expected = manifest().schema_user_version

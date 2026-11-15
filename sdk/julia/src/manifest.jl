@@ -68,8 +68,11 @@ struct Manifest
     unsupported_sections::Dict{String, String}
 end
 
-parse_bindings(raw) =
-    Binding[Binding(String.(split(b["path"], '.')), ENCODINGS[b["encode"]]) for b in raw]
+function parse_bindings(raw)
+    return Binding[
+        Binding(String.(split(b["path"], '.')), ENCODINGS[b["encode"]]) for b in raw
+    ]
+end
 
 unit_field_name(::Nothing) = ""
 unit_field_name(name::AbstractString) = String(name)

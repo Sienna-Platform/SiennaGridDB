@@ -32,8 +32,19 @@ Built from SiennaSchemas v0.5.0.
   consuming model. The insert SDKs no longer report the section.
 - `storage_technologies.storage_tech` defaults to `OTHER_CHEM`, following the schema.
 
-### SDKs
+### Insert SDKs
 
+- A document that fails its commit checks (a deferred foreign key) rolls back and raises
+  `InsertError`; before, the transaction stayed open and later inserts were lost on close.
+- An insert refuses a database whose `user_version` differs from the manifest's.
+- NaN and Infinity raise in every SDK; Python stored them as NULL or invalid JSON.
+- Python `insert_model` stores the wire field names (`from`, not `from_`).
+- The series id offset is read inside the savepoint, and each store tags only its own rows.
+  A time series association id below 1 raises.
+- A dangling-reference report names the id in the document, not the stored one.
+- `open_database` does not create a missing file; a failed CLI build deletes its output.
+- Julia waits 5 s on a locked database and has `get_inserted`, `get_skipped_fields` and
+  `get_unsupported`. The TypeScript CLI accepts `--time-series`.
 - The time series extensions need InfraStore 0.17 (Julia `InfraStore = "0.17"`, Python
   `infrastore>=0.17.0`).
 

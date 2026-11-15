@@ -16,6 +16,27 @@ function InsertReport()
     )
 end
 
+"""
+    get_inserted(report) -> Dict{String, Int}
+
+Rows written, by component type or section.
+"""
+get_inserted(report::InsertReport) = report.inserted
+
+"""
+    get_skipped_fields(report) -> Dict{String, Dict{String, Int}}
+
+Fields not written because GridDB has no column for them, by type and field.
+"""
+get_skipped_fields(report::InsertReport) = report.skipped_fields
+
+"""
+    get_unsupported(report) -> Dict{String, Int}
+
+Rows not written because GridDB cannot store them, by type or section.
+"""
+get_unsupported(report::InsertReport) = report.unsupported
+
 function add_inserted!(report::InsertReport, key::AbstractString, n::Int=1)
     report.inserted[key] = get(report.inserted, key, 0) + n
     return report

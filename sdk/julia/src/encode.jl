@@ -15,7 +15,17 @@ const ENCODINGS = Dict{String, Encoding}(
     "features_hash" => FeaturesHashEncoding(),
 )
 
-canonical_json(value) = JSON.json(value)
+function canonical_json(value)
+    try
+        return JSON.json(value)
+    catch e
+        throw(json_error(e))
+    end
+end
+
+# JSON.jl throws an ArgumentError for NaN and Inf.
+json_error(e::ArgumentError) = EncodeError("$(e.msg): GridDB stores finite numbers only")
+json_error(e) = e
 
 """
 What the int encoder accepts: an integer or integral float, not a `Bool`, in Int64.
@@ -30,7 +40,12 @@ function encode(::IntEncoding, v)
     end
     return Int(v)
 end
-encode(::RealEncoding, v::Real) = Float64(v)
+function encode(::RealEncoding, v::Real)
+    if !isfinite(v)
+        throw(EncodeError("expected a finite number, got $(repr(v))"))
+    end
+    return Float64(v)
+end
 encode(::RealEncoding, v::Bool) = throw(EncodeError("expected a number, got $(repr(v))"))
 encode(::RealEncoding, v) = throw(EncodeError("expected a number, got $(repr(v))"))
 encode(::TextEncoding, v::AbstractString) = String(v)
