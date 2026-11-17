@@ -2056,6 +2056,50 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS restrict_balancing_topologies_delete_two_terminal_hvdc_lines_remote_regulated_bus_from BEFORE
+DELETE ON balancing_topologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+            AND a.name = 'remote_regulated_bus_from'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'balancing_topologies row is listed in two_terminal_hvdc_lines.remote_regulated_bus_from; remove it from the list first'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS restrict_balancing_topologies_delete_two_terminal_hvdc_lines_remote_regulated_bus_to BEFORE
+DELETE ON balancing_topologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+            AND a.name = 'remote_regulated_bus_to'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'balancing_topologies row is listed in two_terminal_hvdc_lines.remote_regulated_bus_to; remove it from the list first'
+    );
+
+END;
+
 -- END GENERATED TABLE TRIGGERS
 
 CREATE TRIGGER IF NOT EXISTS check_supplemental_attributes_entity_exists BEFORE

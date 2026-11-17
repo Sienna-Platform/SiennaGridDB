@@ -699,3 +699,31 @@ def test_scenarios_series_requires_scenario_count(fresh_db):
     make_entity(fresh_db, 1, "loads", "PowerLoad")
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
         _series(fresh_db, 1, "PowerLoad", series_type="Scenarios")
+
+
+def test_remote_regulated_bus_is_another_existing_bus(fresh_db):
+    """remote_regulated_bus names a bus other than the device's own, and that bus
+    cannot be deleted while a device regulates it."""
+    own, remote = make_bus(fresh_db, 1, "own"), make_bus(fresh_db, 2, "remote")
+    insert = (
+        "INSERT INTO switched_admittance(id, name, bus, remote_regulated_bus, Y_increase) "
+        "VALUES (?, ?, ?, ?, '[]')"
+    )
+    for eid in (10, 11, 12):
+        make_entity(fresh_db, eid, "switched_admittance", "SwitchedAdmittance")
+    fresh_db.execute(insert, (10, "sa", own, remote))
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        fresh_db.execute(insert, (11, "self", own, own))
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        fresh_db.execute(insert, (12, "missing", own, 999))
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        fresh_db.execute("DELETE FROM balancing_topologies WHERE id = ?", (remote,))
+
+
+def test_series_stores_per_unit_of(fresh_db):
+    make_entity(fresh_db, 1, "loads", "PowerLoad")
+    _series(fresh_db, 1, "PowerLoad")
+    fresh_db.execute("UPDATE time_series_associations SET per_unit_of = 'max_active_power'")
+    assert fresh_db.execute("SELECT per_unit_of FROM time_series_associations").fetchone() == (
+        "max_active_power",
+    )
