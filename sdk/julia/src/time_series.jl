@@ -47,6 +47,7 @@ function storable_time_series(
         elseif names_unsupported(row, plan.references, unsupported_ids)
             add_unsupported!(report, plan.section, 1)
         else
+            require_positive_id(row)
             push!(stored, row)
         end
     end
@@ -89,17 +90,33 @@ is_features_hash(::Encoding) = false
 
 const DERIVED = "DeterministicSingleTimeSeries"
 
-series_key(row::AbstractDict) = (
-    get(row, "owner_id", nothing),
-    get(row, "owner_category", nothing),
-    get(row, "name", nothing),
-    feature_key(get(row, "features", nothing)),
-    get(row, "uri", nothing),
-)
+# A store mints ids from 1; an id below would land on an id already used.
+function require_positive_id(row::AbstractDict)
+    id = get(row, "association_id", nothing)
+    if is_int_value(id) && Int(id) <= 0
+        throw(InsertError("time series association id=$id: ids start at 1"))
+    end
+    return nothing
+end
 
-# Tells 1, 1.0 and true apart, as features_hash does.
-feature_key(d::AbstractDict) = sort!([(String(k), typeof(v), v) for (k, v) in d]; by=first)
-feature_key(_) = nothing
+function series_key(row::AbstractDict)
+    return (
+        get(row, "owner_id", nothing),
+        get(row, "owner_category", nothing),
+        get(row, "name", nothing),
+        feature_key(get(row, "features", nothing)),
+        get(row, "uri", nothing),
+    )
+end
+
+# Tells 1, 1.0 and true apart, as features_hash does. A non-map fails at the encoder.
+function feature_key(d::AbstractDict)
+    return sort!(
+        Tuple{String, DataType, Any}[(String(k), typeof(v), v) for (k, v) in d];
+        by=first,
+    )
+end
+feature_key(_) = Tuple{String, DataType, Any}[]
 
 """
 `DeterministicSingleTimeSeries` id => its `SingleTimeSeries` id. A derived series is a
@@ -122,8 +139,10 @@ function derived_sources(rows)
     return derived
 end
 
-is_reference(key::AbstractString) =
-    key in ("association_id", "fuel_cost_time_series") || endswith(key, "_association_id")
+function is_reference(key::AbstractString)
+    return key in ("association_id", "fuel_cost_time_series") ||
+           endswith(key, "_association_id")
+end
 
 """
 A document's series id to the one GridDB stores: a derived series' names its source, and
@@ -134,14 +153,18 @@ struct SeriesRemap
     offset::Int
 end
 (r::SeriesRemap)(ref::Int) = get(r.sources, ref, ref) + r.offset
-is_identity(r::SeriesRemap) = isempty(r.sources) && r.offset == 0
+is_identity(r::SeriesRemap) = isempty(r.sources) && iszero(r.offset)
 
 """
 The association rows with their ids moved past `offset`; any other id reaches the
 encoder and fails there.
 """
-shift_ids(rows::Vector{Any}, offset::Int) =
-    offset == 0 ? rows : Any[shifted_row(r, offset) for r in rows]
+function shift_ids(rows::Vector{Any}, offset::Int)
+    if iszero(offset)
+        return rows
+    end
+    return Any[shifted_row(r, offset) for r in rows]
+end
 
 function shifted_row(row::AbstractDict, offset::Int)
     id = get(row, "association_id", nothing)
@@ -218,7 +241,10 @@ end
 function remapped(key::AbstractString, v, remap::SeriesRemap)
     if is_reference(key) && is_int_value(v)
         new = remap(Int(v))
-        return new == v ? v : new
+        if new == v
+            return v
+        end
+        return new
     end
     return remap_references(v, remap)
 end
@@ -233,8 +259,9 @@ by the InfraStore extension.
 """
 function export_values end
 
-infrastore_loaded() =
-    !isnothing(Base.get_extension(@__MODULE__, :SiennaGridDBToolsInfraStoreExt))
+function infrastore_loaded()
+    return !isnothing(Base.get_extension(@__MODULE__, :SiennaGridDBToolsInfraStoreExt))
+end
 
 """
 Whether this session can store the values from `sidecar`; `values_missing_reason` says
@@ -282,7 +309,8 @@ function copy_export!(
 )
     src = SQLite.DB(path)
     try
-        sql = "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
+        # sqlite_% objects (sqlite_sequence, sqlite_stat1) are SQLite's own and cannot be created.
+        sql = "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY rowid"
         objects = [(r.type, r.name, r.sql) for r in DBInterface.execute(src, sql)]
         for (kind, name, ddl) in objects
             kind == "table" || continue
@@ -315,7 +343,7 @@ end
 
 # InfraStore exports through its own connection and bundled SQLite, so it can neither join
 # the document's savepoint nor safely write to `db`'s file. It writes a temporary file that
-# copy_export! brings in, keeping the document atomic (see infrastore #106 item 1).
+# copy_export! brings in, keeping the document atomic.
 is_sqlite_error(::SQLite.SQLiteException) = true
 is_sqlite_error(_) = false
 

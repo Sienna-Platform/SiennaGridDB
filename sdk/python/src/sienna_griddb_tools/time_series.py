@@ -199,8 +199,10 @@ def _copy_export(conn, path, plan, store_id, prefix):
     tables with their rows, then their indexes and views, then GridDB's views over it."""
     src = sqlite3.connect(path)
     try:
+        # sqlite_% objects (sqlite_sequence, sqlite_stat1) are SQLite's own and cannot be created.
         objects = src.execute(
-            "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rowid"
+            "SELECT type, name, sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY rowid"
         ).fetchall()
         for kind, name, sql in objects:
             if kind == "table":
@@ -226,7 +228,7 @@ def export_values(conn, plan, rows, sidecar, store_id):
 
     infrastore exports through its own connection and bundled SQLite, so it can neither
     join conn's savepoint nor safely write to conn's file. It writes a temporary file that
-    _copy_export brings in, keeping the document atomic (see infrastore #106 item 1)."""
+    _copy_export brings in, keeping the document atomic."""
     import infrastore
 
     # infrastore rejects null for an optional field, which a model dump spells for

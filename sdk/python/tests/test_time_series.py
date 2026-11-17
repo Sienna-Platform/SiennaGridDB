@@ -375,3 +375,44 @@ def test_ids_already_stored_are_named(conn):
     griddb.insert_document(conn, golden())
     with pytest.raises(griddb.InsertError, match="ids are already in the database"):
         griddb.insert_document(conn, golden())
+
+
+def test_an_association_id_below_one_raises(conn):
+    doc = golden()
+    doc["time_series_associations"] = [series(thermal(doc), 0)]
+    with pytest.raises(griddb.InsertError, match="ids start at 1"):
+        griddb.insert_document(conn, doc)
+    assert count(conn, "entities") == 0
+
+
+def test_a_dangling_reference_names_the_documents_own_id(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    gen = thermal(doc)
+    # Stored past offset 3, the plant's 7 would read 10; the report names the 7.
+    second = {
+        "components": {},
+        "supplemental_attributes": [{"id": 9200, "name": "p", "fuel_cost_time_series": 7}],
+        "supplemental_attribute_associations": [
+            {
+                "component_id": gen["id"],
+                "component_type": "ThermalStandard",
+                "attribute_id": 9200,
+                "attribute_type": "ThermalPowerPlant",
+            }
+        ],
+        "time_series_associations": [],
+    }
+    with pytest.raises(griddb.InsertError, match="fuel_cost_time_series=7"):
+        griddb.insert_document(conn, second, strict=True)
+
+
+def test_each_store_tags_only_its_own_rows(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    rows = [{**r, "name": r["name"] + "_2"} for r in doc["time_series_associations"]]
+    griddb.insert_document(conn, {"components": {}, "time_series_associations": rows}, time_series=sidecar)
+    tags = conn.execute(
+        "SELECT id, store_id FROM time_series_associations ORDER BY id"
+    ).fetchall()
+    assert tags == [(2, 1), (3, 1), (5, 2), (6, 2)]

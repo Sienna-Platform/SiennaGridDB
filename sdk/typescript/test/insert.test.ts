@@ -10,6 +10,8 @@ import {
   insertDocument,
   insertFile,
   InsertError,
+  GridDBToolsError,
+  openDatabase,
   type Connection,
   type JsonObject,
 } from "../src/index.js";
@@ -537,4 +539,80 @@ test.skipIf(!hasGolden)("ids already stored are named", () => {
   const db = fresh();
   insertDocument(db, golden());
   expect(() => insertDocument(db, golden())).toThrow(/ids are already in the database/);
+});
+
+test.skipIf(!hasGolden)("a commit check failure rolls back and throws", () => {
+  const db = fresh();
+  // load_zone is a deferred foreign key: SQLite checks it only at the commit.
+  const bus = { ...loneBus(golden()), load_zone: 999 };
+  expect(() => insertComponent(db, "ACBus", bus)).toThrow(/commit checks/);
+  expect(db.inTransaction).toBe(false);
+  expect(count(db, "entities")).toBe(0);
+  insertComponent(db, "ACBus", loneBus(golden()));
+  expect(count(db, "balancing_topologies")).toBe(1);
+});
+
+test.skipIf(!hasGolden)("a non-finite number throws", () => {
+  const db = fresh();
+  const bus = { ...loneBus(golden()), magnitude: Infinity };
+  expect(() => insertComponent(db, "ACBus", bus)).toThrow(InsertError);
+  expect(count(db, "entities")).toBe(0);
+});
+
+test("opening a missing database creates no file", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "o-")), "typo.sqlite");
+  expect(() => openDatabase(path)).toThrow(GridDBToolsError);
+  expect(existsSync(path)).toBe(false);
+});
+
+test.skipIf(!hasGolden)("an insert refuses another schema version", () => {
+  const db = fresh();
+  db.pragma("user_version = 1");
+  expect(() => insertComponent(db, "ACBus", loneBus(golden()))).toThrow(/user_version 1/);
+});
+
+test.skipIf(!hasGolden)("an association id below one throws", () => {
+  const doc = golden();
+  doc.time_series_associations = [series(thermal(doc), 0)];
+  const db = fresh();
+  expect(() => insertDocument(db, doc)).toThrow(/ids start at 1/);
+  expect(count(db, "entities")).toBe(0);
+});
+
+test.skipIf(!hasGolden)("each store tags only its own rows, past the first store's ids", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 2), series(gen, 3, { name: "min_active_power" })];
+  const db = fresh();
+  insertDocument(db, doc, { timeSeries: "/data/first.h5" });
+  const rows = [series(gen, 2, { name: "a" }), series(gen, 3, { name: "b" })];
+  insertDocument(db, { components: {}, time_series_associations: rows }, { timeSeries: "/data/second.h5" });
+  expect(db.prepare("SELECT id, store_id FROM time_series_associations ORDER BY id").raw().all()).toEqual([
+    [2, 1],
+    [3, 1],
+    [5, 2],
+    [6, 2],
+  ]);
+  expect(db.prepare("SELECT sidecar FROM time_series_stores ORDER BY id").pluck().all()).toEqual([
+    "/data/first.h5",
+    "/data/second.h5",
+  ]);
+});
+
+test.skipIf(!hasGolden)("a dangling reference names the document's own id", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 2), series(gen, 3, { name: "min_active_power" })];
+  const db = fresh();
+  insertDocument(db, doc);
+  // Stored past offset 3, the plant's 7 would read 10; the report names the 7.
+  const second: JsonObject = {
+    components: {},
+    supplemental_attributes: [{ id: 9200, name: "p", fuel_cost_time_series: 7 }],
+    supplemental_attribute_associations: [
+      { component_id: gen.id, component_type: "ThermalStandard", attribute_id: 9200, attribute_type: "ThermalPowerPlant" },
+    ],
+    time_series_associations: [],
+  };
+  expect(() => insertDocument(db, second, { strict: true })).toThrow(/fuel_cost_time_series=7/);
 });

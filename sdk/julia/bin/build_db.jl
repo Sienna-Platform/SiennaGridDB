@@ -24,8 +24,16 @@ function main(args::Vector{String})
         println(stderr, USAGE)
         return 2
     end
-    db = create_database(positional[2])
-    report = insert_file!(db, positional[1]; strict=strict, time_series=sidecar)
+    out = positional[2]
+    db = create_database(out)
+    report = try
+        insert_file!(db, positional[1]; strict=strict, time_series=sidecar)
+    catch
+        # A failed build leaves no schema-only file to block the next run.
+        close(db)
+        rm(out)
+        rethrow()
+    end
     close(db)
     JSON.print(stdout, SiennaGridDBTools.report_dict(report), 2)
     println(stdout)

@@ -301,8 +301,11 @@ def time_series_entry(conn, schemas_root, spec, schema_dir):
         "unsupported_types": spec["unsupported_types"],
         "id_offset_sql": TIME_SERIES_ID_OFFSET_SQL,
         "store_sql": "INSERT INTO time_series_stores (id_offset, sidecar) VALUES (?, ?)",
-        # The rows past the offset are the ones this document's insert just wrote.
-        "store_rows_sql": "UPDATE time_series_associations SET store_id = ? WHERE id > ?",
+        # Tagged by the ids this document's insert just wrote, given as a JSON array.
+        "store_rows_sql": (
+            "UPDATE time_series_associations SET store_id = ? "
+            "WHERE id IN (SELECT value FROM json_each(?))"
+        ),
         "values_prefix_sql": "UPDATE time_series_stores SET values_prefix = ? WHERE id = ?",
         "exported_stores_sql": (
             "SELECT id, values_prefix FROM time_series_stores "

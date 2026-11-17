@@ -20,6 +20,9 @@ export create_database,
     insert_document!,
     insert_file!,
     InsertReport,
+    get_inserted,
+    get_skipped_fields,
+    get_unsupported,
     GridDBToolsError,
     InsertError
 

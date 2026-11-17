@@ -26,24 +26,44 @@ SAVEPOINT = "sienna_griddb_tools_insert"
 
 
 def as_json_data(obj):
-    """SDK model -> plain dict; plain mappings pass through."""
+    """SDK model -> plain dict with the wire field names; plain mappings pass through."""
     dump = getattr(obj, "model_dump", None)
     if dump is not None:
-        return dump(mode="json")
+        return dump(mode="json", by_alias=True)
     return obj
 
 
 @contextmanager
 def _savepoint(conn):
     _require_foreign_keys(conn)
+    _require_schema_version(conn)
     conn.execute(f"SAVEPOINT {SAVEPOINT}")
     try:
         yield
-    except BaseException:
+    except BaseException as exc:
+        _rollback(conn, exc)
+        raise
+    # RELEASE of the outermost savepoint is the commit: deferred foreign keys fail here.
+    try:
+        conn.execute(f"RELEASE {SAVEPOINT}")
+    except sqlite3.Error as exc:
+        _rollback(conn, exc)
+        raise InsertError(f"the insert fails its commit checks: {exc}") from exc
+
+
+def _rollback(conn, cause):
+    try:
         conn.execute(f"ROLLBACK TO {SAVEPOINT}")
         conn.execute(f"RELEASE {SAVEPOINT}")
-        raise
-    conn.execute(f"RELEASE {SAVEPOINT}")
+    except sqlite3.Error as exc:
+        raise InsertError(f"rollback failed ({exc}) after: {cause}") from cause
+
+
+def _require_schema_version(conn):
+    found = conn.execute("PRAGMA user_version").fetchone()[0]
+    expected = load_manifest()["schema_user_version"]
+    if found != expected:
+        raise InsertError(f"database has user_version {found}; this package writes {expected}")
 
 
 def _require_foreign_keys(conn):
@@ -77,6 +97,13 @@ def _execute(conn, sql, params, what):
     try:
         conn.execute(sql, params)
     except sqlite3.Error as exc:
+        raise InsertError(f"{what}: {exc}") from exc
+
+
+def _json(value, what):
+    try:
+        return canonical_json(value)
+    except EncodeError as exc:
         raise InsertError(f"{what}: {exc}") from exc
 
 
@@ -126,7 +153,7 @@ def _write_row(conn, plan, obj, report, strict):
                 obj["id"],
                 plan["type_name"],
                 attribute["field"],
-                canonical_json(value),
+                _json(value, what),
                 unit,
                 quantity_kind,
             ],
@@ -219,16 +246,26 @@ def _time_series_rows(doc, report, strict, unsupported_ids, owners):
         elif _names_unsupported(row, plan["references"], unsupported_ids):
             report.add_unsupported(plan["section"], 1)
         else:
+            _require_positive_id(row)
             stored.append(row)
     for series_type, n in sorted(counts.items()):
         _unsupported(report, strict, series_type, n, unsupported[series_type])
     return stored
 
 
-def _report_dangling(report, strict, plans, attrs, series):
+def _require_positive_id(row):
+    """A store mints ids from 1; an id below would land on an id already used."""
+    series_id = row.get("association_id")
+    if is_int(series_id) and series_id <= 0:
+        raise InsertError(f"time series association id={series_id}: ids start at 1")
+
+
+def _report_dangling(report, strict, plans, attrs, series, sources):
     """Report payload references that name no association this insert stores; a foreign
-    key cannot reach into JSON, so the insert is the only place that sees them."""
+    key cannot reach into JSON, so the insert is the only place that sees them. Ids are
+    the document's own: a reference to a derived series resolves to its stored source."""
     stored_ids = {int(r["association_id"]) for r in series if is_int(r.get("association_id"))}
+    stored_ids |= {derived for derived, source in sources.items() if source in stored_ids}
     rows = [o for _, objs in plans for o in objs] + attrs
     payloads = [(int(o["id"]), o) for o in rows if isinstance(o, dict) and is_int(o.get("id"))]
     dangling = dangling_references(payloads, stored_ids)
@@ -265,20 +302,21 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
     """Insert a whole SystemDocument in one savepoint. time_series is the HDF5
     sidecar holding its arrays (time_series_storage_file); it is only read. The
     sidecar is a time_series_stores row, and its series ids move past every id stored."""
+    with _savepoint(conn):
+        return _insert_document(conn, doc, strict, time_series)
+
+
+def _insert_document(conn, doc, strict, time_series):
     doc = as_json_data(doc)
     manifest = load_manifest()
     report = InsertReport()
     components = _components(doc)
     ts = manifest["time_series"]
-    # Series ids move past every id stored, and references to a derived series name
-    # its source, which GridDB stores instead.
-    offset = conn.execute(ts["id_offset_sql"]).fetchone()[0]
-    remap = series_remap(derived_sources(_section_rows(doc, ts["section"])), offset)
     plans = []
     unsupported_ids = set()
     owners = {}
     for type_name in sorted(components):
-        objs = [remap_references(as_json_data(o), remap) for o in components[type_name]]
+        objs = [as_json_data(o) for o in components[type_name]]
         ids = [o.get("id") for o in objs if isinstance(o, dict)]
         ids = [i for i in ids if is_int(i)]
         owners.update(dict.fromkeys(ids, (type_name, "Component")))
@@ -294,73 +332,78 @@ def insert_document(conn, doc, *, strict=False, time_series=None):
             _unsupported(report, strict, section, n, reason)
 
     attr_types = _attribute_types(doc)
-    attrs = remap_references(_section_rows(doc, "supplemental_attributes"), remap)
+    attrs = _section_rows(doc, "supplemental_attributes")
     for attr in attrs:
         if attr.get("id") in attr_types:
             owners[attr["id"]] = (attr_types[attr["id"]], "SupplementalAttribute")
-    series = shift_ids(_time_series_rows(doc, report, strict, unsupported_ids, owners), offset)
+    sources = derived_sources(_section_rows(doc, ts["section"]))
+    series = _time_series_rows(doc, report, strict, unsupported_ids, owners)
     missing = values_missing(time_series) if series else None
     if missing is not None:
         _unsupported(report, strict, "time_series_values", len(series), missing)
-    _report_dangling(report, strict, plans, attrs, series)
+    _report_dangling(report, strict, plans, attrs, series, sources)
+    # Read inside the savepoint, so no other writer can store ids past it first. Series
+    # ids move past every id stored, and references to a derived series name its
+    # source, which GridDB stores instead.
+    offset = conn.execute(ts["id_offset_sql"]).fetchone()[0]
+    remap = series_remap(sources, offset)
+    plans = [(plan, [remap_references(o, remap) for o in objs]) for plan, objs in plans]
+    attrs = remap_references(attrs, remap)
+    series = shift_ids(series, offset)
     _require_new_ids(conn, plans, attrs)
     supplemental = manifest["supplemental_attributes"]
-    with _savepoint(conn):
-        seed_vocabulary(conn)
-        for plan, objs in plans:
-            for obj in objs:
-                _write_entity(conn, plan, obj)
-        routed = []
-        for attr in attrs:
-            attr_id = _required_id(attr, "id", "supplemental attribute")
-            if attr_id not in attr_types:
-                raise InsertError(
-                    f"supplemental attribute id={attr_id}: no association names its type"
-                )
-            attr_type = attr_types[attr_id]
-            table = "supplemental_attributes"
-            if attr_type in supplemental["plant_types"]:
-                table = "plants"
-            what = f"{attr_type} id={attr_id}"
-            _execute(
-                conn,
-                "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, ?, ?)",
-                [attr_id, table, attr_type],
-                what,
-            )
-            routed.append((table, attr_type, attr, what))
-        for plan, objs in plans:
-            for obj in objs:
-                _write_row(conn, plan, obj, report, strict)
-        for table, attr_type, attr, what in routed:
-            if table == "plants":
-                value = {k: v for k, v in attr.items() if k not in ("id", "name")}
-                params = [attr["id"], attr["name"], attr_type, canonical_json(value)]
-                _execute(conn, supplemental["plant_sql"], params, what)
-            else:
-                value = {k: v for k, v in attr.items() if k != "id"}
-                params = [attr["id"], attr_type, canonical_json(value)]
-                _execute(conn, supplemental["attribute_sql"], params, what)
-            report.add_inserted(table)
-        for section in manifest["associations"]:
-            name = section["section"]
-            for row in _section_rows(doc, name):
-                # A row naming a component that has no table is not written either.
-                if _names_unsupported(row, section["references"], unsupported_ids):
-                    report.add_unsupported(name, 1)
-                    continue
-                what = f"{name} row {row}"
-                _execute(
-                    conn, section["row_sql"], _params(section["bindings"], row, what), what
-                )
-                report.add_inserted(name)
-        if series:
-            sidecar = None if time_series is None else str(time_series)
-            store_id = conn.execute(ts["store_sql"], [offset, sidecar]).lastrowid
-            insert_associations(conn, ts, series, report)
-            conn.execute(ts["store_rows_sql"], [store_id, offset])
-            if missing is None:
-                export_values(conn, ts, series, time_series, store_id)
+    seed_vocabulary(conn)
+    for plan, objs in plans:
+        for obj in objs:
+            _write_entity(conn, plan, obj)
+    routed = []
+    for attr in attrs:
+        attr_id = _required_id(attr, "id", "supplemental attribute")
+        if attr_id not in attr_types:
+            raise InsertError(f"supplemental attribute id={attr_id}: no association names its type")
+        attr_type = attr_types[attr_id]
+        table = "supplemental_attributes"
+        if attr_type in supplemental["plant_types"]:
+            table = "plants"
+        what = f"{attr_type} id={attr_id}"
+        _execute(
+            conn,
+            "INSERT INTO entities (id, entity_table, entity_type) VALUES (?, ?, ?)",
+            [attr_id, table, attr_type],
+            what,
+        )
+        routed.append((table, attr_type, attr, what))
+    for plan, objs in plans:
+        for obj in objs:
+            _write_row(conn, plan, obj, report, strict)
+    for table, attr_type, attr, what in routed:
+        if table == "plants":
+            value = {k: v for k, v in attr.items() if k not in ("id", "name")}
+            params = [attr["id"], attr["name"], attr_type, _json(value, what)]
+            _execute(conn, supplemental["plant_sql"], params, what)
+        else:
+            value = {k: v for k, v in attr.items() if k != "id"}
+            params = [attr["id"], attr_type, _json(value, what)]
+            _execute(conn, supplemental["attribute_sql"], params, what)
+        report.add_inserted(table)
+    for section in manifest["associations"]:
+        name = section["section"]
+        for row in _section_rows(doc, name):
+            # A row naming a component that has no table is not written either.
+            if _names_unsupported(row, section["references"], unsupported_ids):
+                report.add_unsupported(name, 1)
+                continue
+            what = f"{name} row {row}"
+            _execute(conn, section["row_sql"], _params(section["bindings"], row, what), what)
+            report.add_inserted(name)
+    if series:
+        sidecar = None if time_series is None else str(time_series)
+        store_id = conn.execute(ts["store_sql"], [offset, sidecar]).lastrowid
+        insert_associations(conn, ts, series, report)
+        ids = json.dumps([r["association_id"] for r in series])
+        conn.execute(ts["store_rows_sql"], [store_id, ids])
+        if missing is None:
+            export_values(conn, ts, series, time_series, store_id)
     return report
 
 
@@ -381,20 +424,28 @@ def _beside(path, name):
     return os.path.join(os.path.dirname(os.path.abspath(path)), name) if name else None
 
 
+def _read_json(path):
+    """A document file. NaN and Infinity are not JSON, and GridDB stores neither."""
+
+    def refuse(token):
+        raise InsertError(f"{path}: {token} is not a JSON number")
+
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle, parse_constant=refuse)
+
+
 def insert_file(conn, path, *, strict=False, time_series=None):
     """Insert the document at path (a file or bundle directory) with its sidecar:
     time_series, else its time_series_storage_file. A portfolio's base_system_file
     goes in first, with its own sidecar; both in one savepoint."""
     path = _document_path(path)
-    with open(path, encoding="utf-8") as handle:
-        doc = json.load(handle)
+    doc = _read_json(path)
     report = InsertReport()
     with _savepoint(conn):
         base = _beside(path, doc.get("base_system_file"))
         if base is not None:
             base = _document_path(base)
-            with open(base, encoding="utf-8") as handle:
-                system = json.load(handle)
+            system = _read_json(base)
             sidecar = _beside(base, system.get("time_series_storage_file"))
             report.merge(insert_document(conn, system, strict=strict, time_series=sidecar))
         sidecar = time_series or _beside(path, doc.get("time_series_storage_file"))

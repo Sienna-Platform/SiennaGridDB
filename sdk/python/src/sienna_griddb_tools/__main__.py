@@ -2,6 +2,7 @@
 [--strict] [--time-series <sidecar.h5>]"""
 
 import argparse
+import os
 import sys
 
 from .db import create_database
@@ -24,7 +25,13 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     conn = create_database(args.out)
-    report = insert_file(conn, args.document, strict=args.strict, time_series=args.time_series)
+    try:
+        report = insert_file(conn, args.document, strict=args.strict, time_series=args.time_series)
+    except BaseException:
+        # A failed build leaves no schema-only file to block the next run.
+        conn.close()
+        os.remove(args.out)
+        raise
     conn.close()
     sys.stdout.write(report.to_json())
     return 0

@@ -11,7 +11,12 @@ class EncodeError(ValueError):
 
 
 def canonical_json(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    try:
+        return json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+    except ValueError as exc:
+        raise EncodeError(f"{exc}: GridDB stores finite numbers only") from exc
 
 
 def is_int(value):
@@ -32,6 +37,8 @@ def _int(value):
 def _real(value):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise EncodeError(f"expected a number, got {value!r}")
+    if not math.isfinite(value):
+        raise EncodeError(f"expected a finite number, got {value!r}")
     return float(value)
 
 
