@@ -23,7 +23,7 @@ SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
 # Rows the domain triggers need beyond one per type: two AC and two DC buses for
 # the AC and DC arcs, and four circuits so a three-winding transformer (three
 # distinct circuits) and a two-winding one never share a circuit.
-EXTRA_ROWS = {"ACBus": 2, "DCBus": 2, "Arc": 2, "TransformerCircuit": 4}
+EXTRA_ROWS = {"ACBus": 2, "DCBus": 2, "Arc": 2, "TransformerCircuit": 4, "Area": 2}
 DC_REFERENCES = {("InterconnectingConverter", "dc_bus"), ("TModelHVDCLine", "arc")}
 NOT_GENERATED = {"dynamic_injector"}
 
@@ -152,10 +152,20 @@ def synthetic_document(conn, schemas_path):
                         obj[prop] = ac_buses[1]
                     elif target == "transformer_circuits":
                         obj[prop] = next(circuits)
+                    elif target == "planning_regions" and prop == "to_area":
+                        # An interchange runs between two areas.
+                        obj[prop] = row_ids("Area")[1]
                     elif target in pools:
                         obj[prop] = pools[target]
                     elif target == "entities":
                         # Distinct per column, so from_id <> to_id holds.
                         obj[prop] = ac_buses[n % 2 if prop != "to_id" else 1]
+    # An id array lists rows of its target table; the triggers refuse any other id.
+    for table, cfg in codegen.items():
+        for prop, target in cfg.get("attribute_references", {}).items():
+            listed = [row_ids(c["component"])[0] for c in schema_map[target][:1]]
+            for comp in schema_map[table]:
+                for obj in objects[comp["component"]]:
+                    if prop in obj:
+                        obj[prop] = listed
     return {"components": objects}, tables
-

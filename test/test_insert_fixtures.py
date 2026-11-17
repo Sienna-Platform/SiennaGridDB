@@ -90,6 +90,7 @@ def test_dump_keeps_entity_ids_and_drops_surrogate_ids(tmp_path):
     path = build_database(tmp_path / "d.sqlite")
     conn = sqlite3.connect(str(path))
     conn.execute("INSERT INTO entity_types (name) VALUES ('X')")
+    conn.execute("INSERT INTO entity_type_tables (entity_type, entity_table) VALUES ('X', 't')")
     conn.execute(
         "INSERT INTO entities (id, entity_table, entity_type) VALUES (7, 't', 'X')"
     )

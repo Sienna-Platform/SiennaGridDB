@@ -201,6 +201,9 @@ def test_branch_parameter_columns_store_values(fresh_db):
         make_entity(fresh_db, arc, entity_table="arcs")
         # arc endpoints must be topology-type entities (is_topology = 1).
         fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+        fresh_db.execute(
+            "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+        )
         for eid in (a, b):
             fresh_db.execute(
                 "INSERT INTO entities(id, entity_table, entity_type) "
@@ -294,6 +297,9 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
     arc, a, b = 501, 502, 503
     make_entity(fresh_db, arc, entity_table="arcs")
     fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    fresh_db.execute(
+        "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+    )
     for eid in (a, b):
         fresh_db.execute(
             "INSERT INTO entities(id, entity_table, entity_type) "
@@ -332,6 +338,9 @@ def test_series_compensators_store_bypassed_flag(fresh_db):
     arc, a, b = 601, 602, 603
     make_entity(fresh_db, arc, entity_table="arcs")
     fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    fresh_db.execute(
+        "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+    )
     for eid in (a, b):
         fresh_db.execute(
             "INSERT INTO entities(id, entity_table, entity_type) "
@@ -504,4 +513,3 @@ def test_transformer_tables_magnetizing_shunt_units(fresh_db):
             ("magnetizing_shunt.imag", "Susceptance", "pu"),
             ("magnetizing_shunt.real", "Conductance", "pu"),
         ]
-

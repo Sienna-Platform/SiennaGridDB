@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 13; -- bump on every schema or registry change
+PRAGMA user_version = 14; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -21,6 +21,8 @@ DROP TABLE IF EXISTS attribute_identifiers;
 DROP TABLE IF EXISTS attributes;
 
 DROP TABLE IF EXISTS allowed_units;
+
+DROP TABLE IF EXISTS entity_type_tables;
 
 DROP TABLE IF EXISTS entity_types;
 
@@ -68,10 +70,17 @@ CREATE TABLE entities (
 -- arcs run between is_dc = 1 topologies; everything else, between is_dc = 0.
 CREATE TABLE entity_types (
     name TEXT PRIMARY KEY,
-    is_topology BOOLEAN NOT NULL DEFAULT FALSE,
-    is_dc BOOLEAN NOT NULL DEFAULT FALSE,
+    is_topology INTEGER NOT NULL DEFAULT 0 CHECK (is_topology IN (0, 1)),
+    is_dc INTEGER NOT NULL DEFAULT 0 CHECK (is_dc IN (0, 1)),
     CHECK (is_dc = FALSE OR is_topology = TRUE)
-);
+) strict;
+
+-- The table that holds each entity type's rows. The entities triggers check every
+-- (entity_table, entity_type) pair against it; generated with the vocabulary.
+CREATE TABLE entity_type_tables (
+    entity_type TEXT PRIMARY KEY REFERENCES entity_types (name),
+    entity_table TEXT NOT NULL
+) strict;
 
 CREATE TABLE prime_mover_types (
     id INTEGER PRIMARY KEY,
@@ -132,11 +141,13 @@ CREATE TABLE attributes (
 );
 -- Triggers and views select attributes by name across every entity.
 CREATE INDEX idx_attributes_name ON attributes (name, TYPE);
+-- The unit triggers match names with LOWER(), so names that differ only in case collide.
+CREATE UNIQUE INDEX uq_attributes_entity_lower_name ON attributes (entity_id, lower(name));
 
 -- (TYPE, name) pairs that hold an identifier, not a physical quantity (bus
--- numbers, node references, zone ids). Unit-validation triggers otherwise
--- classify any numeric JSON value as physical and demand a unit; listing the
--- pair here exempts it, instead of inventing a Dimensionless unit for a key.
+-- numbers, node references, zone ids). The unit triggers treat any numeric JSON
+-- value as a physical quantity and require a unit. A listed pair is exempt, so no
+-- key needs an invented Dimensionless unit.
 -- Scoped by TYPE: a name is not an identifier on every component type.
 CREATE TABLE attribute_identifiers (
     TYPE TEXT NOT NULL,
@@ -188,11 +199,10 @@ CREATE TABLE plants (
     json_type TEXT generated always AS (json_type (value)) virtual
 );
 
--- plant and combined-cycle membership are GridDB's own relationships, not a mirror of a
--- store catalog, so there is no store-minted association_id to carry. They get a local
--- surrogate instead: AUTOINCREMENT never reissues an id a delete freed, so a consumer
--- storing one cannot have it later resolve to a different row. The natural key stays
--- UNIQUE, so identity is unchanged by the surrogate.
+-- Plant and combined-cycle membership are GridDB's own relationships. They do not
+-- mirror a store catalog, so they have no store-minted association_id. They get a
+-- local surrogate id instead. AUTOINCREMENT never gives a freed id again, so a stored
+-- id always resolves to the same row. The natural key stays UNIQUE.
 CREATE TABLE plant_associations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     plant_id INTEGER NOT NULL,
@@ -222,8 +232,10 @@ CREATE INDEX idx_combined_cycle_associations_entity ON combined_cycle_associatio
 -- One row per origin store (a document's time series sidecar). Its series ids are
 -- stored as store id + id_offset. values_prefix names the tables of its values'
 -- export, NULL when they were not stored.
+-- AUTOINCREMENT: a deleted store's id, and so its ts_<id>_ table prefix, is never
+-- given to a new store.
 CREATE TABLE time_series_stores (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     id_offset INTEGER NOT NULL CHECK (id_offset >= 0),
     sidecar TEXT,
     values_prefix TEXT UNIQUE
@@ -258,7 +270,7 @@ CREATE TABLE time_series_associations (
     -- Two stores can mint the same id, so the SDKs move each store's ids past every
     -- id already used: id = store id + time_series_stores.id_offset, as infrastore's
     -- own `merge` re-mints ids when copying series between stores.
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT CHECK (id > 0),
     -- The store the row came from; NULL for a row written outside the SDKs.
     store_id INTEGER REFERENCES time_series_stores (id),
     owner_id INTEGER NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
@@ -302,7 +314,7 @@ CREATE TABLE time_series_associations (
         interval_alignment IN ('PERIOD_BEGINNING', 'PERIOD_MIDPOINT', 'PERIOD_ENDING')
     ),
     component_field TEXT,
-    percentiles_json TEXT,
+    percentiles_json TEXT CHECK (json_valid(percentiles_json)),
     -- Three columns describe the stored values at two levels, per the wire
     -- schemas. ONE TIMESTEP: element_type says what a single step's value
     -- means and how it is laid out (a dtype spelling like 'f64', a
@@ -370,6 +382,17 @@ CREATE TABLE feature_sets (
     -- features_hash matches" contract above silently stops matching anything.
     features_hash TEXT NOT NULL CHECK (
         length(features_hash) = 64 AND features_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    -- Exactly the column value_kind names holds the value.
+    CHECK (
+        (value_int IS NOT NULL) + (value_float IS NOT NULL) + (value_bool IS NOT NULL)
+        + (value_str IS NOT NULL) = 1
+        AND CASE value_kind
+            WHEN 'int' THEN value_int IS NOT NULL
+            WHEN 'float' THEN value_float IS NOT NULL
+            WHEN 'bool' THEN value_bool IN (0, 1)
+            ELSE value_str IS NOT NULL
+        END
     ),
     PRIMARY KEY (features_hash, key)
 ) strict;
@@ -449,12 +472,15 @@ CREATE TABLE unit_conventions (
     UNIQUE(table_name, column_name, discriminator_value, discriminator_value_2, quantity_kind)
 ) strict;
 
--- For non-polymorphic columns (no discriminator) enforce one row per column.
--- A table-level UNIQUE can't do this because SQLite treats each NULL
--- discriminator_value as distinct, so guard those rows with a partial index.
+-- SQLite treats NULLs as distinct, so the table-level UNIQUE above does not stop
+-- duplicate rows that leave a discriminator NULL. COALESCE closes that gap: one row
+-- per column without a discriminator, and one per value when only the second is NULL.
 CREATE UNIQUE INDEX uq_unit_conventions_no_discriminator
     ON unit_conventions (table_name, column_name, quantity_kind)
     WHERE discriminator_value IS NULL;
+CREATE UNIQUE INDEX uq_unit_conventions_one_discriminator
+    ON unit_conventions (table_name, column_name, discriminator_value, quantity_kind)
+    WHERE discriminator_value IS NOT NULL AND discriminator_value_2 IS NULL;
 
 -- The attributes unit triggers match on LOWER(column_name) / LOWER(TYPE),
 -- which the plain UNIQUE constraints above cannot serve -- without these the
@@ -766,7 +792,8 @@ CREATE TABLE transmission_interchanges (
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     active_power_flow REAL NOT NULL DEFAULT 0.0,
     from_area INTEGER NOT NULL REFERENCES planning_regions (id) ON DELETE CASCADE,
-    to_area INTEGER NOT NULL REFERENCES planning_regions (id) ON DELETE CASCADE
+    to_area INTEGER NOT NULL REFERENCES planning_regions (id) ON DELETE CASCADE,
+    CHECK (from_area <> to_area)
 ) STRICT;
 CREATE INDEX idx_transmission_interchanges_arc_id ON transmission_interchanges (arc_id);
 CREATE INDEX idx_transmission_interchanges_from_area ON transmission_interchanges (from_area);
@@ -1233,9 +1260,9 @@ CREATE TABLE storage_technologies (
     efficiency TEXT NULL CHECK (json_valid(efficiency)),
     min_discharge_fraction REAL NOT NULL DEFAULT 0.0,
     losses REAL NOT NULL DEFAULT 1.0,
-    capital_costs_charge TEXT NULL,
-    capital_costs_discharge TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
-    capital_costs_energy TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}',
+    capital_costs_charge TEXT NULL CHECK (json_valid(capital_costs_charge)),
+    capital_costs_discharge TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}' CHECK (json_valid(capital_costs_discharge)),
+    capital_costs_energy TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}' CHECK (json_valid(capital_costs_energy)),
     interconnection_cost REAL NOT NULL DEFAULT 0.0,
     operation_costs TEXT NOT NULL DEFAULT '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,"variable":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_costs)),
     financial_data TEXT NOT NULL CHECK (json_valid(financial_data))
@@ -1494,5 +1521,79 @@ VALUES
     ('PTES'),
     ('SIB'),
     ('ZIB');
+
+-- The table of each entity type, for the entities triggers.
+INSERT INTO entity_type_tables (entity_type, entity_table)
+VALUES
+    ('ACBus', 'balancing_topologies'),
+    ('AggregateTransportTechnology', 'transport_technologies'),
+    ('Arc', 'arcs'),
+    ('Area', 'planning_regions'),
+    ('AreaInterchange', 'transmission_interchanges'),
+    ('CombinedCycleBlock', 'plants'),
+    ('CombinedCycleFractional', 'plants'),
+    ('DCBus', 'balancing_topologies'),
+    ('DataSource', 'supplemental_attributes'),
+    ('DemandRequirement', 'demand_technologies'),
+    ('DiscreteControlledACBranch', 'discrete_controlled_ac_branches'),
+    ('EmissionsData', 'supplemental_attributes'),
+    ('EnergyReservoirStorage', 'storage_units'),
+    ('ExistingDevices', 'supplemental_attributes'),
+    ('ExponentialLoad', 'loads'),
+    ('FACTSControlDevice', 'facts_control_devices'),
+    ('FixedAdmittance', 'fixed_admittance'),
+    ('FixedForcedOutage', 'supplemental_attributes'),
+    ('GenericArcImpedance', 'generic_arc_impedances'),
+    ('GeographicInfo', 'supplemental_attributes'),
+    ('GeometricDistributionForcedOutage', 'supplemental_attributes'),
+    ('GroupReserve', 'reserves'),
+    ('HydroDispatch', 'hydro_generators'),
+    ('HydroPowerPlant', 'plants'),
+    ('HydroPumpTurbine', 'hydro_generators'),
+    ('HydroReservoir', 'hydro_reservoirs'),
+    ('HydroTurbine', 'hydro_generators'),
+    ('ImpedanceCorrectionData', 'supplemental_attributes'),
+    ('InterconnectingConverter', 'interconnecting_converters'),
+    ('InterruptiblePowerLoad', 'loads'),
+    ('InterruptibleStandardLoad', 'loads'),
+    ('Line', 'transmission_lines'),
+    ('LoadZone', 'balancing_topologies'),
+    ('MotorLoad', 'loads'),
+    ('NodalACTransportTechnology', 'transport_technologies'),
+    ('NodalHVDCTransportTechnology', 'transport_technologies'),
+    ('OfflineReserve', 'reserves'),
+    ('OnlineReserve', 'reserves'),
+    ('PlannedOutage', 'supplemental_attributes'),
+    ('PointToPointBid', 'point_to_point_bids'),
+    ('PowerLoad', 'loads'),
+    ('ReactivePowerSharing', 'supplemental_attributes'),
+    ('RenewableDispatch', 'renewable_generators'),
+    ('RenewableNonDispatch', 'renewable_generators'),
+    ('RenewablePowerPlant', 'plants'),
+    ('RetirementPotential', 'supplemental_attributes'),
+    ('RetrofitPotential', 'supplemental_attributes'),
+    ('SeriesCompensator', 'series_compensators'),
+    ('ShiftablePowerLoad', 'loads'),
+    ('Source', 'sources'),
+    ('StandardLoad', 'loads'),
+    ('StorageTechnology', 'storage_technologies'),
+    ('Substation', 'supplemental_attributes'),
+    ('SupplyTechnology', 'supply_technologies'),
+    ('SwitchedAdmittance', 'switched_admittance'),
+    ('SynchronousCondenser', 'synchronous_condensers'),
+    ('TModelHVDCLine', 'tmodel_hvdc_lines'),
+    ('ThermalMultiStart', 'thermal_generators'),
+    ('ThermalPowerPlant', 'plants'),
+    ('ThermalStandard', 'thermal_generators'),
+    ('ThreeWindingTransformer', 'three_winding_transformers'),
+    ('TradingHub', 'trading_hubs'),
+    ('TransformerCircuit', 'transformer_circuits'),
+    ('TransmissionInterface', 'transmission_interfaces'),
+    ('TwoTerminalGenericHVDCLine', 'two_terminal_hvdc_lines'),
+    ('TwoTerminalLCCLine', 'two_terminal_hvdc_lines'),
+    ('TwoTerminalVSCLine', 'two_terminal_hvdc_lines'),
+    ('TwoWindingTransformer', 'two_winding_transformers'),
+    ('VirtualParticipant', 'virtual_participants'),
+    ('VoltageDroopControl', 'supplemental_attributes');
 
 -- END GENERATED COMPONENT TABLES

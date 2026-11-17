@@ -188,7 +188,8 @@
         "level_data_type": {},
         "evaporative_loss": {"checks": ["evaporative_loss >= 0"]}
       },
-      "attribute_channel": ["upstream_turbines", "downstream_turbines", "upstream_reservoirs"]
+      "attribute_channel": ["upstream_turbines", "downstream_turbines", "upstream_reservoirs"],
+      "attribute_references": {"upstream_turbines": "hydro_generators", "downstream_turbines": "hydro_generators", "upstream_reservoirs": "hydro_reservoirs"}
     },
     "loads": {
       "columns": {
@@ -274,6 +275,7 @@
     },
     "transmission_interchanges": {
       "interface_member": true,
+      "constraints": ["CHECK (from_area <> to_area)"],
       "comment": [
         "Physical flow limits between areas or balancing topologies, distinct from",
         "transmission_lines: these enforce market-level interchange limits."
@@ -756,9 +758,9 @@
         "efficiency": {},
         "min_discharge_fraction": {},
         "losses": {},
-        "capital_costs_charge": {"sql": "TEXT NULL"},
-        "capital_costs_discharge": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'"},
-        "capital_costs_energy": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'"},
+        "capital_costs_charge": {"sql": "TEXT NULL CHECK (json_valid(capital_costs_charge))"},
+        "capital_costs_discharge": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}' CHECK (json_valid(capital_costs_discharge))"},
+        "capital_costs_energy": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}' CHECK (json_valid(capital_costs_energy))"},
         "interconnection_cost": {"sql": "REAL NOT NULL DEFAULT 0.0"},
         "operation_costs": {"not_null": true, "default": {"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
         "financial_data": {}

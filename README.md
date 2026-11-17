@@ -180,8 +180,9 @@ Two kinds of value sit outside `unit_conventions` entirely:
 - **Time-series values** — the unit lives on `time_series_metadata` (joined by `uuid`), not
   on the row you're reading; see [Time-series units](#time-series-units) below.
 - **Cost JSON payloads** (`operation_cost` / `production_cost`) — carry their own embedded
-  `power_units` key. Triggers require it to be `NATURAL_UNITS`, since the DB stores no base
-  to resolve `COMPONENT_BASE` against.
+  `power_units` key. Triggers reject any value other than `NATURAL_UNITS`, since the DB
+  stores no base to resolve `COMPONENT_BASE` against. A payload without `power_units`
+  passes.
 
 ### Time-series units
 

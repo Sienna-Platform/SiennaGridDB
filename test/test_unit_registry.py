@@ -63,8 +63,8 @@ COMPLETENESS_ALLOWLIST = {
 def insert_attribute(conn, entity_id, name, value, unit=None, quantity_kind=None):
     conn.execute(
         "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_kind) "
-        "VALUES (?, 'test', ?, ?, ?, ?)",
-        (entity_id, name, value, unit, quantity_kind),
+        "VALUES (?, (SELECT entity_type FROM entities WHERE id = ?), ?, ?, ?, ?)",
+        (entity_id, entity_id, name, value, unit, quantity_kind),
     )
 
 
@@ -388,8 +388,9 @@ def _insert_association(
         "initial_timestamp", "resolution", "length", "units", "quantity_kind",
         "unit_system", "uri", "data_hash", "features_hash",
     ]
+    owner = conn.execute("SELECT entity_type FROM entities WHERE id = ?", (owner_id,)).fetchone()
     values = [
-        owner_id, "thing_type", owner_category, "SingleTimeSeries", name,
+        owner_id, owner[0] if owner else "thing_type", owner_category, "SingleTimeSeries", name,
         "2020-01-01T00:00:00", "PT1H", 24, units, quantity_kind,
         unit_system, uri, "01" * 32, "02" * 32,
     ]
@@ -517,9 +518,9 @@ def test_association_owner_category_attribute_domain_enforced(fresh_db):
         match=r"owner_id must exist in supplemental_attributes",
     ):
         _insert_association(fresh_db, 1, owner_category="SupplementalAttribute")
-    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    make_entity(fresh_db, 2, "supplemental_attributes", "GeographicInfo")
     fresh_db.execute(
-        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'GeographicInfo', '{}')"
     )
     _insert_association(fresh_db, 2, owner_category="SupplementalAttribute")
 
@@ -528,18 +529,20 @@ def test_association_owner_category_attribute_accepts_plant(fresh_db):
     """Plant-type attributes live in plants, so a plant owns series as a
     SupplementalAttribute, on insert and update alike."""
     make_entity(fresh_db, 1)
-    make_entity(fresh_db, 3, entity_table="plants")
+    make_entity(fresh_db, 3, "plants", "ThermalPowerPlant")
     fresh_db.execute(
         "INSERT INTO plants(id, name, TYPE, value) VALUES (3, 'p3', 'ThermalPowerPlant', '{}')"
     )
     _insert_association(fresh_db, 3, owner_category="SupplementalAttribute")
     _insert_association(fresh_db, 1, name="other")
     fresh_db.execute(
-        "UPDATE time_series_associations SET owner_id = 3, "
+        "UPDATE time_series_associations SET owner_id = 3, owner_type = 'ThermalPowerPlant', "
         "owner_category = 'SupplementalAttribute' WHERE owner_id = 1"
     )
     with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
-        fresh_db.execute("UPDATE time_series_associations SET owner_id = 1")
+        fresh_db.execute(
+            "UPDATE time_series_associations SET owner_id = 1, owner_type = 'thing_type'"
+        )
 
 
 def test_association_categories_and_hashes_readable_directly(fresh_db):
@@ -640,6 +643,9 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, parameter_units=None):
     make_entity(conn, arc_eid, entity_table="arcs")
     # arc endpoints must be topology-type entities (is_topology = 1).
     conn.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    conn.execute(
+        "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+    )
     for eid in (from_eid, to_eid):
         conn.execute(
             "INSERT INTO entities(id, entity_table, entity_type) "
@@ -1076,11 +1082,11 @@ def insert_supplemental(conn, entity_id, type_name, value):
     )
 
 
-def make_supplemental_entity(conn, entity_id):
+def make_supplemental_entity(conn, entity_id, entity_type="EmissionsData"):
     return make_entity(
         conn, entity_id,
         entity_table="supplemental_attributes",
-        entity_type="EmissionsData",
+        entity_type=entity_type,
     )
 
 
@@ -1201,7 +1207,7 @@ def test_emissions_missing_required_basis_rejected(fresh_db):
 
 
 def test_other_supplemental_types_unaffected(fresh_db):
-    make_supplemental_entity(fresh_db, 1)
+    make_supplemental_entity(fresh_db, 1, "GeographicInfo")
     insert_supplemental(
         fresh_db, 1, "GeographicInfo", '{"geo_json": {}, "mass_unit": "whatever"}'
     )
