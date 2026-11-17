@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 12; -- bump on every schema or registry change
+PRAGMA user_version = 13; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -293,6 +293,9 @@ CREATE TABLE time_series_associations (
     units TEXT,
     quantity_kind TEXT,
     unit_system TEXT,
+    -- The owner's field that a component_base series is a fraction of (e.g.
+    -- base_power). Free-form, as in infrastore: no CHECK against unit_system.
+    per_unit_of TEXT,
     time_reference TEXT,
     -- Where each timestamp sits in the period it represents; descriptive only.
     interval_alignment TEXT NOT NULL DEFAULT 'PERIOD_ENDING' CHECK (
@@ -352,7 +355,7 @@ CREATE TABLE feature_sets (
         'ext', 'features', 'horizon', 'id', 'initial_timestamp', 'interval',
         'interval_alignment',
         'length', 'name', 'owner_category', 'owner_id', 'owner_type',
-        'percentiles', 'quantity_kind', 'resolution', 'scenario_count',
+        'per_unit_of', 'percentiles', 'quantity_kind', 'resolution', 'scenario_count',
         'time_reference', 'time_series_type', 'timestamps', 'timestamps_uri',
         'unit_system', 'units', 'uri'
     )),
@@ -518,6 +521,7 @@ CREATE TABLE thermal_generators (
     prime_mover_type TEXT NOT NULL DEFAULT 'OT' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types(name),
     fuel TEXT NOT NULL DEFAULT 'OTHER' CHECK (fuel IN ('ANTHRACITE_COAL', 'BITUMINOUS_COAL', 'LIGNITE_COAL', 'SUBBITUMINOUS_COAL', 'WASTE_COAL', 'REFINED_COAL', 'SYNTHESIS_GAS_COAL', 'DISTILLATE_FUEL_OIL', 'JET_FUEL', 'KEROSENE', 'PETROLEUM_COKE', 'RESIDUAL_FUEL_OIL', 'PROPANE', 'SYNTHESIS_GAS_PETROLEUM_COKE', 'WASTE_OIL', 'BLAST_FURNACE_GAS', 'NATURAL_GAS', 'OTHER_GAS', 'AG_BYPRODUCT', 'MUNICIPAL_WASTE', 'OTHER_BIOMASS_SOLIDS', 'WOOD_WASTE_SOLIDS', 'OTHER_BIOMASS_LIQUIDS', 'SLUDGE_WASTE', 'BLACK_LIQUOR', 'WOOD_WASTE_LIQUIDS', 'LANDFILL_GAS', 'OTHER_BIOMASS_GAS', 'NUCLEAR', 'WASTE_HEAT', 'TIRE_DERIVED_FUEL', 'COAL', 'GEOTHERMAL', 'OTHER')) REFERENCES fuels(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> balancing_topology) REFERENCES balancing_topologies (id),
     rating REAL NOT NULL CHECK (rating >= 0),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -538,6 +542,7 @@ CREATE TABLE thermal_generators (
 CREATE INDEX idx_thermal_generators_prime_mover_type ON thermal_generators (prime_mover_type);
 CREATE INDEX idx_thermal_generators_fuel ON thermal_generators (fuel);
 CREATE INDEX idx_thermal_generators_balancing_topology ON thermal_generators (balancing_topology);
+CREATE INDEX idx_thermal_generators_remote_regulated_bus ON thermal_generators (remote_regulated_bus);
 
 -- Existing renewable generation units (RenewableDispatch, RenewableNonDispatch).
 -- operation_cost is NULL for RenewableNonDispatch, which has no cost. Its curve is
@@ -550,6 +555,7 @@ CREATE TABLE renewable_generators (
     name TEXT NOT NULL UNIQUE,
     prime_mover_type TEXT NOT NULL CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> balancing_topology) REFERENCES balancing_topologies (id),
     rating REAL NOT NULL CHECK (rating >= 0),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -563,6 +569,7 @@ CREATE TABLE renewable_generators (
 ) STRICT;
 CREATE INDEX idx_renewable_generators_prime_mover_type ON renewable_generators (prime_mover_type);
 CREATE INDEX idx_renewable_generators_balancing_topology ON renewable_generators (balancing_topology);
+CREATE INDEX idx_renewable_generators_remote_regulated_bus ON renewable_generators (remote_regulated_bus);
 
 -- Existing hydro generation units (HydroDispatch, HydroTurbine, HydroPumpTurbine).
 -- HydroTurbine and HydroPumpTurbine fields are NULL for HydroDispatch.
@@ -576,6 +583,7 @@ CREATE TABLE hydro_generators (
     name TEXT NOT NULL UNIQUE,
     prime_mover_type TEXT NOT NULL DEFAULT 'HY' CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> balancing_topology) REFERENCES balancing_topologies (id),
     rating REAL NOT NULL CHECK (rating >= 0),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -599,6 +607,7 @@ CREATE TABLE hydro_generators (
 ) STRICT;
 CREATE INDEX idx_hydro_generators_prime_mover_type ON hydro_generators (prime_mover_type);
 CREATE INDEX idx_hydro_generators_balancing_topology ON hydro_generators (balancing_topology);
+CREATE INDEX idx_hydro_generators_remote_regulated_bus ON hydro_generators (remote_regulated_bus);
 
 -- Existing energy storage units, including PHES and other kinds.
 -- energy_units MWMIN makes duration = energy / power come out in minutes.
@@ -613,6 +622,7 @@ CREATE TABLE storage_units (
     prime_mover_type TEXT NOT NULL CHECK (prime_mover_type IN ('BA', 'BT', 'CA', 'CC', 'CE', 'CP', 'CS', 'CT', 'ES', 'FC', 'FW', 'GT', 'HA', 'HB', 'HK', 'HY', 'IC', 'PS', 'OT', 'ST', 'PVe', 'WT', 'WS')) REFERENCES prime_mover_types(name),
     storage_technology_type TEXT NOT NULL CHECK (storage_technology_type IN ('PTES', 'LIB', 'LAB', 'FLWB', 'SIB', 'ZIB', 'HGS', 'LAES', 'OTHER_CHEM', 'OTHER_MECH', 'OTHER_THERM')) REFERENCES storage_technology_types(name),
     balancing_topology INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> balancing_topology) REFERENCES balancing_topologies (id),
     rating REAL NOT NULL CHECK (rating >= 0),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -638,6 +648,7 @@ CREATE TABLE storage_units (
 CREATE INDEX idx_storage_units_prime_mover_type ON storage_units (prime_mover_type);
 CREATE INDEX idx_storage_units_storage_technology_type ON storage_units (storage_technology_type);
 CREATE INDEX idx_storage_units_balancing_topology ON storage_units (balancing_topology);
+CREATE INDEX idx_storage_units_remote_regulated_bus ON storage_units (remote_regulated_bus);
 
 -- Topological hydro reservoirs. operation_cost is always USD/MWh: level-native
 -- values convert to energy via head_to_volume_factor before costing.
@@ -720,8 +731,8 @@ CREATE INDEX idx_transmission_lines_arc_id ON transmission_lines (arc_id);
 -- Generic series impedance on an arc (PSY GenericArcImpedance). Its own table,
 -- not a transmission_lines variant: r may be negative here (equivalent-network
 -- branches), it has no thermal rating (only an optional operational_flow_limit),
--- and it carries no shunt (b/g) or angle_limits. r/x follow parameter_units as in
--- transmission_lines: COMPONENT_BASE is per-unit on base_power, NATURAL_UNITS is ohm.
+-- and it carries no shunt (b/g) or angle_limits. r/x are always per-unit on
+-- base_power, which records the system base.
 -- Components: GenericArcImpedance
 DROP TABLE IF EXISTS generic_arc_impedances;
 CREATE TABLE generic_arc_impedances (
@@ -730,7 +741,6 @@ CREATE TABLE generic_arc_impedances (
     arc_id INTEGER NOT NULL REFERENCES arcs (id) ON DELETE CASCADE,
     r REAL NOT NULL,
     x REAL NOT NULL,
-    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
@@ -801,8 +811,8 @@ CREATE TABLE transmission_interfaces (
 
 -- Switches and breakers connecting AC buses (PSY DiscreteControlledACBranch).
 -- r/x are always per-unit on base_power -- this component has no
--- natural-units option in PSY, unlike transmission_lines. rating follows
--- power_units, like transmission_lines.continuous_rating.
+-- natural-units option in PSY, unlike transmission_lines. rating, rating_b and
+-- rating_c follow power_units, like transmission_lines.continuous_rating.
 -- Components: DiscreteControlledACBranch
 -- Not stored: available, active_power_flow, reactive_power_flow
 DROP TABLE IF EXISTS discrete_controlled_ac_branches;
@@ -813,6 +823,8 @@ CREATE TABLE discrete_controlled_ac_branches (
     r REAL NOT NULL CHECK (r >= 0),
     x REAL NOT NULL CHECK (x >= 0),
     rating REAL NOT NULL CHECK (rating >= 0),
+    rating_b REAL NULL CHECK (rating_b >= 0),
+    rating_c REAL NULL CHECK (rating_c >= 0),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     discrete_branch_type TEXT NOT NULL DEFAULT 'OTHER' CHECK (discrete_branch_type IN ('SWITCH', 'BREAKER', 'OTHER')),
@@ -822,11 +834,11 @@ CREATE TABLE discrete_controlled_ac_branches (
 ) STRICT;
 CREATE INDEX idx_discrete_controlled_ac_branches_arc_id ON discrete_controlled_ac_branches (arc_id);
 
--- Series compensator (PSY SeriesCompensator): a series capacitor or reactor, a
--- TCSC, or an SSSC on one AC arc. x is negative for a capacitor. r/x/reactance_limits
--- follow parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);
--- power_units governs the power-family columns. DISPATCHABLE and ACTIVE_POWER_FLOW
--- require reactance_limits; ACTIVE_POWER_FLOW also requires active_power_flow_setpoint.
+-- Fixed series compensator (PSY SeriesCompensator): a series capacitor or reactor
+-- with constant r and x on one AC arc. x is negative for a capacitor. r/x follow
+-- parameter_units (COMPONENT_BASE: per-unit on base_power; NATURAL_UNITS: ohm);
+-- power_units governs the power-family columns. bypassed = 1 shorts the device
+-- into a zero-impedance tie; r and x keep its in-service impedance.
 -- Components: SeriesCompensator
 DROP TABLE IF EXISTS series_compensators;
 CREATE TABLE series_compensators (
@@ -836,9 +848,7 @@ CREATE TABLE series_compensators (
     continuous_rating REAL NOT NULL CHECK (continuous_rating >= 0),
     r REAL NOT NULL CHECK (r >= 0),
     x REAL NOT NULL,
-    control_mode TEXT NOT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('FIXED', 'BYPASSED', 'DISPATCHABLE', 'ACTIVE_POWER_FLOW')),
-    reactance_limits TEXT NULL CHECK (json_valid(reactance_limits)),
-    active_power_flow_setpoint REAL NULL,
+    bypassed INTEGER NOT NULL DEFAULT 0 CHECK (bypassed IN (0, 1)),
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -847,9 +857,7 @@ CREATE TABLE series_compensators (
     reactive_power_flow REAL NOT NULL DEFAULT 0.0,
     rating_b REAL NULL,
     rating_c REAL NULL,
-    operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit)),
-    CHECK (control_mode NOT IN ('DISPATCHABLE', 'ACTIVE_POWER_FLOW') OR reactance_limits IS NOT NULL),
-    CHECK (control_mode <> 'ACTIVE_POWER_FLOW' OR active_power_flow_setpoint IS NOT NULL)
+    operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
 CREATE INDEX idx_series_compensators_arc_id ON series_compensators (arc_id);
 
@@ -870,7 +878,8 @@ CREATE TABLE transformer_circuits (
     x REAL NOT NULL DEFAULT 0.0,
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     control_objective TEXT NOT NULL DEFAULT 'UNDEFINED' CHECK (control_objective IN ('UNDEFINED', 'VOLTAGE_DISABLED', 'REACTIVE_POWER_FLOW_DISABLED', 'ACTIVE_POWER_FLOW_DISABLED', 'CONTROL_OF_DC_LINE_DISABLED', 'ASYMMETRIC_ACTIVE_POWER_FLOW_DISABLED', 'FIXED', 'VOLTAGE', 'REACTIVE_POWER_FLOW', 'ACTIVE_POWER_FLOW', 'CONTROL_OF_DC_LINE', 'ASYMMETRIC_ACTIVE_POWER_FLOW')),
-    regulated_bus_number INTEGER NOT NULL DEFAULT 0,
+    regulated_bus INTEGER NULL REFERENCES balancing_topologies (id),
+    regulated_bus_orientation TEXT NOT NULL DEFAULT 'UNDEFINED' CHECK (regulated_bus_orientation IN ('UNDEFINED', 'FROM', 'TO')),
     number_of_tap_positions INTEGER NOT NULL DEFAULT 33,
     rating REAL NOT NULL CHECK (rating >= 0),
     rating_b REAL NULL CHECK (rating_b >= 0),
@@ -889,6 +898,7 @@ CREATE TABLE transformer_circuits (
     operational_flow_limit TEXT NULL CHECK (json_valid(operational_flow_limit))
 ) STRICT;
 CREATE INDEX idx_transformer_circuits_arc_id ON transformer_circuits (arc_id);
+CREATE INDEX idx_transformer_circuits_regulated_bus ON transformer_circuits (regulated_bus);
 
 -- Two-winding transformer (PSY TwoWindingTransformer); series data lives on
 -- the referenced circuit. magnetizing_shunt is a complex admittance as JSON
@@ -948,7 +958,7 @@ CREATE INDEX idx_three_winding_transformers_star_bus ON three_winding_transforme
 -- Both terminals are AC buses, DC side internal -- unlike tmodel_hvdc_lines,
 -- which runs between DC buses for multi-terminal networks.
 -- Components: TwoTerminalGenericHVDCLine, TwoTerminalLCCLine, TwoTerminalVSCLine
--- Attributes: loss, r, power_transfer_setpoint, current_transfer_setpoint, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, inverter_bridges, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, control_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_delay_angle, rectifier_capacitor_reactance, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_extinction_angle, inverter_capacitor_reactance, g, dc_current, reactive_power_from, dc_control_from, ac_control_from, dc_power_setpoint_from, dc_voltage_setpoint_from, power_factor_setpoint_from, ac_voltage_setpoint_from, rated_ac_voltage_from, converter_loss_from, max_dc_current_from, power_factor_weighting_fraction_from, voltage_limits_from, dc_voltage_droop_from, reactive_power_to, dc_control_to, ac_control_to, dc_power_setpoint_to, dc_voltage_setpoint_to, power_factor_setpoint_to, ac_voltage_setpoint_to, rated_ac_voltage_to, converter_loss_to, max_dc_current_to, power_factor_weighting_fraction_to, voltage_limits_to, dc_voltage_droop_to, rated_dc_voltage, remote_bus_control_from, remote_bus_control_to
+-- Attributes: loss, r, power_transfer_setpoint, current_transfer_setpoint, scheduled_dc_voltage, rectifier_bridges, rectifier_delay_angle_limits, rectifier_rc, rectifier_xc, rectifier_base_voltage, inverter_bridges, inverter_extinction_angle_limits, inverter_rc, inverter_xc, inverter_base_voltage, control_mode, switch_mode_voltage, compounding_resistance, min_compounding_voltage, rectifier_transformer_ratio, rectifier_tap_setting, rectifier_tap_limits, rectifier_tap_step, rectifier_delay_angle, rectifier_capacitor_reactance, inverter_transformer_ratio, inverter_tap_setting, inverter_tap_limits, inverter_tap_step, inverter_extinction_angle, inverter_capacitor_reactance, g, dc_current, reactive_power_from, dc_control_from, ac_control_from, dc_power_setpoint_from, dc_voltage_setpoint_from, power_factor_setpoint_from, rated_ac_voltage_from, converter_loss_from, max_dc_current_from, power_factor_weighting_fraction_from, voltage_limits_from, dc_voltage_droop_from, reactive_power_to, dc_control_to, ac_control_to, dc_power_setpoint_to, dc_voltage_setpoint_to, power_factor_setpoint_to, rated_ac_voltage_to, converter_loss_to, max_dc_current_to, power_factor_weighting_fraction_to, voltage_limits_to, dc_voltage_droop_to, rated_dc_voltage, remote_regulated_bus_from, remote_regulated_bus_to
 DROP TABLE IF EXISTS two_terminal_hvdc_lines;
 CREATE TABLE two_terminal_hvdc_lines (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
@@ -1002,6 +1012,7 @@ CREATE TABLE synchronous_condensers (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> bus) REFERENCES balancing_topologies (id),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     reactive_power REAL NOT NULL DEFAULT 0.0,
     rating REAL NOT NULL CHECK (rating > 0),
@@ -1011,6 +1022,7 @@ CREATE TABLE synchronous_condensers (
     active_power_losses REAL NOT NULL DEFAULT 0.0 CHECK (active_power_losses >= 0)
 ) STRICT;
 CREATE INDEX idx_synchronous_condensers_bus ON synchronous_condensers (bus);
+CREATE INDEX idx_synchronous_condensers_remote_regulated_bus ON synchronous_condensers (remote_regulated_bus);
 
 -- Fixed shunt admittance (PSY FixedAdmittance): Y as conductance (y_g) and
 -- susceptance (y_b). admittance_units is NATURAL_UNITS (siemens) or
@@ -1043,6 +1055,7 @@ CREATE TABLE switched_admittance (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> bus) REFERENCES balancing_topologies (id),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     admittance_units TEXT NOT NULL DEFAULT 'COMPONENT_MVAR' CHECK (admittance_units IN ('NATURAL_UNITS', 'COMPONENT_MVAR')),
     Y_increase TEXT NULL CHECK (json_valid(Y_increase)),
@@ -1050,11 +1063,11 @@ CREATE TABLE switched_admittance (
     number_of_steps TEXT NULL CHECK (json_valid(number_of_steps)),
     solved_admittance REAL NULL,
     control_mode TEXT NOT NULL DEFAULT 'FIXED' CHECK (control_mode IN ('UNDEFINED', 'FIXED', 'DISCRETE_VOLTAGE', 'CONTINUOUS_VOLTAGE', 'DISCRETE_REACTIVE_PLANT', 'DISCRETE_REACTIVE_VSC', 'DISCRETE_ADMITTANCE_REMOTE', 'DISCRETE_REACTIVE_FACTS')),
-    regulated_bus_number INTEGER NOT NULL DEFAULT 0,
     voltage_limits TEXT NULL CHECK (json_valid(voltage_limits)),
     reactive_power_range_limits TEXT NULL CHECK (json_valid(reactive_power_range_limits))
 ) STRICT;
 CREATE INDEX idx_switched_admittance_bus ON switched_admittance (bus);
+CREATE INDEX idx_switched_admittance_remote_regulated_bus ON switched_admittance (remote_regulated_bus);
 
 -- Thevenin equivalent source (PSY Source). r_th/x_th follow parameter_units: pu on
 -- base_power, or natural-units ohm; COMPONENT_BASE is the default since PSY
@@ -1069,6 +1082,7 @@ CREATE TABLE sources (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> bus) REFERENCES balancing_topologies (id),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     base_voltage REAL NULL CHECK (base_voltage > 0),
     base_power REAL NOT NULL CHECK (base_power > 0),
@@ -1085,6 +1099,7 @@ CREATE TABLE sources (
     operation_cost TEXT NOT NULL DEFAULT '{"ancillary_service_offers":[],"cost_type":"IMPORTEXPORT","energy_export_weekly_limit":1000000.0,"energy_import_weekly_limit":1000000.0,"export_offer_curves":null,"import_offer_curves":null}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('IMPORTEXPORT', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES'))
 ) STRICT;
 CREATE INDEX idx_sources_bus ON sources (bus);
+CREATE INDEX idx_sources_remote_regulated_bus ON sources (remote_regulated_bus);
 
 -- Interconnecting power converter (PSY InterconnectingConverter), an AC<->DC
 -- bus converter. bus is the AC side, dc_bus the DC side; the domain of each is
@@ -1098,12 +1113,12 @@ CREATE TABLE interconnecting_converters (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> bus) REFERENCES balancing_topologies (id),
     dc_bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
     dc_control TEXT NOT NULL DEFAULT 'DC_VOLTAGE' CHECK (dc_control IN ('DC_POWER', 'DC_VOLTAGE', 'DC_VOLTAGE_DROOP')),
     ac_control TEXT NOT NULL DEFAULT 'AC_REACTIVE_POWER' CHECK (ac_control IN ('AC_REACTIVE_POWER', 'AC_VOLTAGE')),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
-    remote_bus_control INTEGER NULL CHECK (remote_bus_control >= 1),
     power_factor_weighting_fraction REAL NOT NULL DEFAULT 1.0 CHECK (power_factor_weighting_fraction >= 0),
     voltage_limits TEXT NOT NULL DEFAULT '{"max":999.9,"min":0.0}' CHECK (json_valid(voltage_limits)),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
@@ -1114,16 +1129,15 @@ CREATE TABLE interconnecting_converters (
     dc_power_setpoint REAL NULL,
     dc_voltage_setpoint REAL NULL,
     power_factor_setpoint REAL NULL CHECK (power_factor_setpoint >= -1.0) CHECK (power_factor_setpoint <= 1.0),
-    ac_voltage_setpoint REAL NULL,
     CHECK (bus <> dc_bus)
 ) STRICT;
 CREATE INDEX idx_interconnecting_converters_bus ON interconnecting_converters (bus);
+CREATE INDEX idx_interconnecting_converters_remote_regulated_bus ON interconnecting_converters (remote_regulated_bus);
 CREATE INDEX idx_interconnecting_converters_dc_bus ON interconnecting_converters (dc_bus);
 
--- FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly
--- per parameter_units (COMPONENT_BASE: pu on bus base_voltage, the native external form;
--- NATURAL_UNITS: kV). power_units is a second, independent discriminator governing
--- max_reactive_power (COMPONENT_BASE: pu; NATURAL_UNITS: MVAr).
+-- FACTS control device (PSY FACTSControlDevice). The voltage target is the
+-- voltage_setpoint of the regulated bus (remote_regulated_bus, or bus when NULL).
+-- power_units governs max_reactive_power (COMPONENT_BASE: pu; NATURAL_UNITS: MVAr).
 -- Components: FACTSControlDevice
 -- Not stored: dynamic_injector
 DROP TABLE IF EXISTS facts_control_devices;
@@ -1131,19 +1145,18 @@ CREATE TABLE facts_control_devices (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     bus INTEGER NOT NULL REFERENCES balancing_topologies (id) ON DELETE CASCADE,
-    voltage_setpoint REAL NOT NULL,
-    parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
+    remote_regulated_bus INTEGER NULL CHECK (remote_regulated_bus <> bus) REFERENCES balancing_topologies (id),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     max_reactive_power REAL NOT NULL DEFAULT 9999.0 CHECK (max_reactive_power >= 0),
     shunt_control_type TEXT NOT NULL DEFAULT 'STATCOM' CHECK (shunt_control_type IN ('SVC', 'STATCOM')),
-    regulated_bus_number INTEGER NOT NULL DEFAULT 0,
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     control_mode TEXT NULL CHECK (control_mode IN ('OOS', 'NML', 'BYP')),
     max_shunt_current REAL NOT NULL,
     reactive_power_required REAL NOT NULL
 ) STRICT;
 CREATE INDEX idx_facts_control_devices_bus ON facts_control_devices (bus);
+CREATE INDEX idx_facts_control_devices_remote_regulated_bus ON facts_control_devices (remote_regulated_bus);
 
 -- Balancing topologies for the system: buses (ACBus, DCBus) or larger aggregated
 -- regions (LoadZone). load_zone and area reference other rows. load_zone is a
@@ -1163,6 +1176,7 @@ CREATE TABLE balancing_topologies (
     bustype TEXT NULL CHECK (bustype IN ('PQ', 'PV', 'REF', 'ISOLATED', 'SLACK')),
     angle REAL NULL,
     magnitude REAL NULL,
+    voltage_setpoint REAL NULL CHECK (voltage_setpoint > 0),
     voltage_limits TEXT NULL CHECK (json_valid(voltage_limits)),
     load_zone INTEGER NULL REFERENCES balancing_topologies (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 ) STRICT;

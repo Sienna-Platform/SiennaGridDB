@@ -22,8 +22,8 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 42
-EXPECTED_ALLOWED_UNITS = 67
-EXPECTED_UNIT_CONVENTIONS = 569
+EXPECTED_ALLOWED_UNITS = 68
+EXPECTED_UNIT_CONVENTIONS = 560
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -1285,7 +1285,6 @@ def test_flexible_basis_columns_registered(db):
     expected = {
         ("sources", "r_th"): {"COMPONENT_BASE", "NATURAL_UNITS"},
         ("sources", "x_th"): {"COMPONENT_BASE", "NATURAL_UNITS"},
-        ("facts_control_devices", "voltage_setpoint"): {"COMPONENT_BASE", "NATURAL_UNITS"},
         # Transformer circuits mirror transmission_lines: pu on the component base
         # or natural-units ohm, per the row's parameter_units.
         ("transformer_circuits", "r"): {"COMPONENT_BASE", "NATURAL_UNITS"},
@@ -1420,7 +1419,6 @@ def test_interconnecting_converter_setpoints_one_quantity_each(db):
         ("dc_power_setpoint", "COMPONENT_BASE", "ActivePower", "pu"),
         ("dc_power_setpoint", "NATURAL_UNITS", "ActivePower", "MW"),
         ("dc_voltage_setpoint", None, "Voltage", "kV"),
-        ("ac_voltage_setpoint", None, "Voltage", "kV"),
         ("power_factor_setpoint", None, "PowerFactor", "1"),
     }
 

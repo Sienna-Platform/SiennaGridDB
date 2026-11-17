@@ -147,6 +147,9 @@ def synthetic_document(conn, schemas_path):
                         obj[prop] = row_ids("LoadZone")[0]
                     elif (name, prop) in DC_REFERENCES:
                         obj[prop] = dc_arc["id"] if target == "arcs" else dc_buses[0]
+                    elif prop == "remote_regulated_bus":
+                        # A device cannot regulate its own bus remotely.
+                        obj[prop] = ac_buses[1]
                     elif target == "transformer_circuits":
                         obj[prop] = next(circuits)
                     elif target in pools:

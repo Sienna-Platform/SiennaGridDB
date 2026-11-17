@@ -439,7 +439,7 @@ equals the manifest's `schema_user_version`.
   Two sidecars can mint the same series ids, so each document's ids, and every payload reference to them, move past the ids already stored: GridDB id = store id + `id_offset`. The first document keeps its ids.
   After each export, the SDK rebuilds `time_series_export_series` and `time_series_export_values`, which unite every store's export, then creates the views in `schema/time_series_views.sql`: `time_series_values` joins the values to the associations by id alone, with each row's `store_id`; `orphaned_time_series` lists exported series no association names.
   `views.sql` leaves them out, because a view over a missing table makes `ALTER TABLE ... RENAME COLUMN` fail.
-  Without a sidecar, with a sidecar file that does not exist, or without infrastore 0.16.0 or later, the values are reported under `time_series_values`.
+  Without a sidecar, with a sidecar file that does not exist, or without infrastore 0.17.0 or later, the values are reported under `time_series_values`.
   The TypeScript runtime has no infrastore binding, so it reports the values under `time_series_values`.
 - **Not supported yet.** `voltage_control_associations`, `ext`, the portfolio sections above, and the component types `schema_map.json` excludes are reported, not written.
   So is an association or time series row that names a component of such a type.

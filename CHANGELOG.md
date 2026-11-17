@@ -6,13 +6,36 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
+Built from SiennaSchemas v0.5.0.
+
 ### Schema
 
-- `PRAGMA user_version = 12`.
+- `PRAGMA user_version = 13`.
+- A regulated bus is a bus ID (SiennaSchemas #108). A nullable `remote_regulated_bus` column,
+  a foreign key to `balancing_topologies`, replaces `regulated_bus_number` and
+  `remote_bus_control` on the devices that regulate voltage. It cannot equal the device's own
+  bus. `transformer_circuits` gets `regulated_bus` and `regulated_bus_orientation`. On
+  `two_terminal_hvdc_lines`, `remote_regulated_bus_from` and `remote_regulated_bus_to` are
+  attributes, and their bus cannot be deleted.
+- The AC voltage setpoint is on the bus (SiennaSchemas #101, #102):
+  `balancing_topologies.voltage_setpoint`, in pu of `base_voltage`. It is gone from
+  `facts_control_devices` (with its `parameter_units`), `interconnecting_converters` and the
+  VSC attributes.
+- `series_compensators` is a fixed device (SiennaSchemas #124): a `bypassed` 0/1 column replaces
+  `control_mode`, `reactance_limits` and `active_power_flow_setpoint`.
+- `discrete_controlled_ac_branches` gets `rating_b` and `rating_c` (SiennaSchemas #111).
+- `generic_arc_impedances` drops `parameter_units`: `r` and `x` are always pu (SiennaSchemas #126).
+- `time_series_associations.per_unit_of`, and `per_unit_of` is a reserved feature key
+  (SiennaSchemas #112, infrastore 0.17).
 - A portfolio has no `financial_data` section: SiennaSchemas moves its discount, inflation and
   interest rates into each technology's `financial_data` column, and the base year to the
   consuming model. The insert SDKs no longer report the section.
 - `storage_technologies.storage_tech` defaults to `OTHER_CHEM`, following the schema.
+
+### SDKs
+
+- The time series extensions need InfraStore 0.17 (Julia `InfraStore = "0.17"`, Python
+  `infrastore>=0.17.0`).
 
 ## [0.4.0] - 2026-11-02
 
