@@ -745,6 +745,7 @@ def test_series_stores_per_unit_of(fresh_db):
 
 def test_user_version_encodes_the_schema_release(fresh_db):
     tag = (SCHEMA_DIR.parent / ".schema-version").read_text().strip()
-    major, minor, patch = (int(part) for part in tag.lstrip("v").split("."))
+    # Same parse as bump_version.py: a pre-release suffix (v0.6.0-rc.1) is ignored.
+    major, minor, patch = (int(part) for part in re.match(r"v(\d+)\.(\d+)\.(\d+)", tag).groups())
     found = fresh_db.execute("PRAGMA user_version").fetchone()[0]
     assert found == major * 10000 + minor * 100 + patch
