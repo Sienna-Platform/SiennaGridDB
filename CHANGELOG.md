@@ -6,12 +6,11 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-11-16
-
-Built from SiennaSchemas v0.5.0. `PRAGMA user_version = 13`.
+Built from SiennaSchemas v0.5.0.
 
 ### Schema
 
+- `PRAGMA user_version = 13`.
 - A regulated bus is a bus ID (SiennaSchemas #108). A nullable `remote_regulated_bus` column,
   a foreign key to `balancing_topologies`, replaces `regulated_bus_number` and
   `remote_bus_control` on the devices that regulate voltage. It cannot equal the device's own
@@ -215,8 +214,7 @@ consumer. Every later schema or registry change bumps it from here.
 - 14 of 52 tables are not `STRICT`, so declared numeric columns on those tables accept
   text.
 
-[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.4.0...v0.5.0
+[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.1.0...v0.2.0
