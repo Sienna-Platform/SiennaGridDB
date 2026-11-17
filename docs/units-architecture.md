@@ -44,7 +44,8 @@ erDiagram
     allowed_units }o..o{ time_series_associations : "validates registered kinds"
     unit_basis_rules }o..o{ unit_conventions : "quantity_kind match, not FK"
     entities ||--o{ attributes : has
-    time_series_associations ||--o{ static_time_series : "values for (by uri)"
+    time_series_stores ||--o{ time_series_associations : "origin of"
+    time_series_associations ||--o| time_series_export_series : "values for (by id)"
     entities ||--o{ time_series_associations : owns
 
     quantity_kinds {
@@ -95,10 +96,16 @@ erDiagram
         text data_hash
         text features_hash
     }
-    static_time_series {
-        text uri
-        int timestep
-        real value
+    time_series_stores {
+        int id
+        int id_offset
+        text values_prefix
+    }
+    time_series_export_series {
+        int store_id
+        text partition_name
+        int id
+        int array_id
     }
 ```
 
@@ -141,7 +148,7 @@ privilege model, so `verify_unit_registry.py` is what actually catches tampering
 
 ## 4. Time series: unit-per-association, not unit-per-column
 
-A time series column can't have one fixed unit — the same `static_time_series` table holds load,
+A time series column can't have one fixed unit — the same exported values tables hold load,
 wind, price, and reserve data. So the unit lives on the association row, exactly where infrastore's
 catalog puts it (`units`, `quantity_kind`, `unit_system`):
 
@@ -150,36 +157,47 @@ sequenceDiagram
     participant App as Writer
     participant Assoc as time_series_associations
     participant Reg as allowed_units
-    participant Data as static_time_series
+    participant Data as infrastore export (ts_<store>_ tables)
 
-    App->>Assoc: INSERT (owner, name, units, quantity_kind, uri, ...)
+    App->>Assoc: INSERT (id, owner, name, units, quantity_kind, uri, ...)
     Assoc->>Reg: trigger checks units against allowed_units when quantity_kind is registered
     Reg-->>Assoc: OK or ABORT
-    App->>Data: INSERT (uri, timestep, value)
-    Data->>Assoc: trigger checks uri exists on some association
-    Assoc-->>Data: OK or ABORT
+    App->>Data: export_sqlite(store, db, table_prefix="ts_<store id>_")
+    Note over Assoc,Data: the exported series id is the association id; time_series_values joins them
 ```
 
 Alongside those, `id` — the table's `INTEGER PRIMARY KEY AUTOINCREMENT` — carries the store-minted
-id, mirroring infrastore's own declaration verbatim. It is not decoration: a time-series-backed
+id plus its store's `id_offset`, mirroring infrastore's own declaration. It is not decoration: a time-series-backed
 cost payload names its series by this number, spelled `association_id` on the wire — a
 `TIME_SERIES_*` function data's `association_id`, `FuelCurve.fuel_cost_time_series`,
 `MarketBidTimeSeriesCost.start_up_association_id`, and the two `*_association_id` fields on the
 incremental and average-rate curves. `association_id` is not a second column, only this one's wire
 spelling. `AUTOINCREMENT` is what makes it safe to carry: SQLite never reissues an id a delete
 freed, so a stored reference either still resolves to the same row or fails outright — never
-silently landing on a different series that later reused the same number. The id is meaningful
-only against its origin store; aggregating rows from more than one store means re-minting ids on
-import, exactly as infrastore's own `merge` does.
+silently landing on a different series that later reused the same number. A store-minted id is
+meaningful only against its origin store, so the SDKs re-mint on import, as infrastore's own `merge`
+does: each sidecar is a `time_series_stores` row, and its ids and every payload reference to them
+move past every id the table ever held. The first document keeps its ids.
 
 `quantity_kind` is deliberately free-form, mirroring infrastore: composite economic quantities
 ($/MWh, MMBtu/MWh) must not require a vocabulary migration. The guard fires only when a row uses a
 REGISTERED quantity-type name with an unregistered (or missing) unit — a typo on a known quantity
-is a defect, not new vocabulary. Dense values are located by `uri` (the SiennaSchemas wire form's
-required locator; here it keys `static_time_series` directly): inserts are rejected until some
-association declares the `uri`, so associations load first and arrays shared by many associations
-are stored once. The association's optional `data_hash` is an integrity hash of the array, not the
-key.
+is a defect, not new vocabulary.
+
+The values are one infrastore SQLite export per store, written into the GridDB file under the prefix `ts_<store id>_` (`time_series_stores.values_prefix`): per partition an `_arrays`, `_values` and `_series` table, and the views `ts_<store id>_all_values`, `_all_series` and `_all_arrays`.
+Each distinct array is stored once per store. The SDK exports the rows with their re-minted ids, so an exported series id is the association id and joins `time_series_associations.id`.
+After each export the SDK rebuilds `time_series_export_series` and `time_series_export_values` as a `UNION ALL` over every exported store, the way infrastore's own `all_` views unite its partitions.
+`time_series_values` joins them, with UTC timestamps; `orphaned_time_series` lists exported series no association names any more, since the export's tables have no foreign key into GridDB.
+The SDK creates both views from `schema/time_series_views.sql` after it copies the export in, so a database without an export has no view over a missing table.
+A `DeterministicSingleTimeSeries` is not stored: it is a view over its `SingleTimeSeries`' array, which a consumer derives again.
+
+The SDKs write the export through a private file.
+infrastore's `export_sqlite` opens its own connection to the database it writes, so it cannot join the savepoint the SDK holds open for the document.
+Nor can it safely write to a file the SDK has open: infrastore bundles its own SQLite, and two SQLite copies in one process do not see each other's locks (sqlite.org, "How To Corrupt An SQLite Database File", 2.2.1).
+An export into the GridDB file during an open savepoint is not blocked; it commits its tables outside the savepoint and can leave the SDK's connection failing with `disk I/O error`.
+So the SDK opens a copy of the sidecar with an in-memory catalog, has infrastore export to a temporary file, and copies that file's tables, rows, indexes and views into the GridDB file inside the document's savepoint.
+A failure anywhere then rolls back the whole document, values included, at the cost of the copy: about 1.3 s for an ERCOT DAM document with 345,671 series.
+Writing through the caller's transaction (infrastore #106, item 1) would remove the copy.
 
 ## 5. Basis: per-unit vs. natural units, and where the base number lives
 
@@ -336,7 +354,7 @@ the producing store, which holds the vector itself.
 **Where the catalog and the SiennaSchemas wire form diverge, the wire form wins.** The schemas
 (`TimeSeries/*.json`) require `uri` (the dense-data locator) and `element_shape`, and declare
 `data_hash` an optional content hash; infrastore's catalog has no `uri` and requires `data_hash`.
-GridDB follows the schemas: `uri` is NOT NULL and keys `static_time_series`, `element_shape` is
+GridDB follows the schemas: `uri` is NOT NULL, `element_shape` is
 NOT NULL (default `'[]'` = scalar), `data_hash` is nullable. A row deserializing into a store that
 demands a hash computes it from the dense values at ingest.
 

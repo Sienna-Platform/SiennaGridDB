@@ -9,6 +9,7 @@ module SiennaGridDBTools
 
 import DBInterface
 import JSON
+import SHA
 import SQLite
 
 export create_database,
@@ -17,7 +18,11 @@ export create_database,
     insert_component!,
     insert_components!,
     insert_document!,
+    insert_file!,
     InsertReport,
+    get_inserted,
+    get_skipped_fields,
+    get_unsupported,
     GridDBToolsError,
     InsertError
 
@@ -30,5 +35,6 @@ include("encode.jl")
 include("manifest.jl")
 include("db.jl")
 include("insert.jl")
+include("time_series.jl")
 
 end

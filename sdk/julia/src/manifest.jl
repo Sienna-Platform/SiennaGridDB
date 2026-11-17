@@ -38,6 +38,23 @@ struct AssociationPlan
     references::Vector{String}
 end
 
+struct TimeSeriesPlan
+    section::String
+    row_sql::String
+    bindings::Vector{Binding}
+    references::Vector{String}
+    feature_sql::String
+    unsupported_types::Dict{String, String}
+    id_offset_sql::String
+    store_sql::String
+    store_rows_sql::String
+    values_prefix_sql::String
+    exported_stores_sql::String
+    table_prefix::String
+    export_views::Dict{String, String}
+    views_sql::Vector{String}
+end
+
 struct Manifest
     schema_user_version::Int
     vocabulary::Dict{String, Any}
@@ -47,11 +64,15 @@ struct Manifest
     plant_sql::String
     supplemental_attribute_sql::String
     associations::Vector{AssociationPlan}
+    time_series::TimeSeriesPlan
     unsupported_sections::Dict{String, String}
 end
 
-parse_bindings(raw) =
-    Binding[Binding(String.(split(b["path"], '.')), ENCODINGS[b["encode"]]) for b in raw]
+function parse_bindings(raw)
+    return Binding[
+        Binding(String.(split(b["path"], '.')), ENCODINGS[b["encode"]]) for b in raw
+    ]
+end
 
 unit_field_name(::Nothing) = ""
 unit_field_name(name::AbstractString) = String(name)
@@ -104,6 +125,23 @@ function parse_manifest(raw::AbstractDict)
             String.(a["references"]),
         ) for a in raw["associations"]
     ]
+    ts = raw["time_series"]
+    time_series = TimeSeriesPlan(
+        ts["section"],
+        ts["row_sql"],
+        parse_bindings(ts["bindings"]),
+        String.(ts["references"]),
+        ts["feature_sql"],
+        Dict{String, String}(ts["unsupported_types"]),
+        ts["id_offset_sql"],
+        ts["store_sql"],
+        ts["store_rows_sql"],
+        ts["values_prefix_sql"],
+        ts["exported_stores_sql"],
+        ts["table_prefix"],
+        Dict{String, String}(ts["export_views"]),
+        String.(ts["views_sql"]),
+    )
     return Manifest(
         raw["schema_user_version"],
         raw["vocabulary"],
@@ -113,6 +151,7 @@ function parse_manifest(raw::AbstractDict)
         supplemental["plant_sql"],
         supplemental["attribute_sql"],
         associations,
+        time_series,
         Dict{String, String}(raw["unsupported_sections"]),
     )
 end

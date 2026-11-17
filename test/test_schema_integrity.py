@@ -1,7 +1,6 @@
 """Schema-integrity guards outside the unit registry: the entity supertype
-triggers on discrete_controlled_ac_branches and the transformer tables, the
-transformer enum/pairwise CHECK constraints, and the static_time_series
-(uuid, timestep) uniqueness contract."""
+triggers on discrete_controlled_ac_branches and the transformer tables, and the
+transformer enum/pairwise CHECK constraints."""
 
 import json
 import re
@@ -145,7 +144,8 @@ _ENTITY_TABLE_IDS = [case[0] for case in _ENTITY_TABLE_CASES]
 def test_requires_matching_entity(fresh_db, table, entity_type, insert_row):
     """The supertype guard: a row cannot be parented by an entities row whose
     entity_table points at a different subtype table."""
-    make_entity(fresh_db, 99, "transmission_lines", entity_type)
+    other = "arcs" if table != "arcs" else "transmission_lines"
+    make_entity(fresh_db, 99, other)
     with pytest.raises(sqlite3.IntegrityError, match=f"entity_table {table}"):
         insert_row(fresh_db, 99)
 
@@ -344,38 +344,13 @@ def test_feature_set_key_check_matches_wire_reservation(db):
     )
 
 
-def test_static_time_series_rejects_duplicate_timepoint(fresh_db):
-    """One value per (uri, timestep): a loader double-insert must fail loudly
-    instead of silently duplicating timepoints."""
-    make_entity(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO time_series_associations("
-        "owner_id, owner_type, owner_category, time_series_type, name, "
-        "initial_timestamp, resolution, length, uri, features_hash) "
-        "VALUES (1, 'thing_type', 'Component', 'SingleTimeSeries', 'load', '2020-01-01T00:00:00', 'PT1H', 2, "
-        "'static:load', ?)",
-        ("0b" * 32,),
-    )
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 0, 1.5)"
-    )
-    with pytest.raises(sqlite3.IntegrityError, match="timestep"):
-        fresh_db.execute(
-            "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 0, 2.5)"
-        )
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load', 1, 2.5)"
-    )
-
-
 def test_supplemental_attribute_association_identity_unique(fresh_db):
-    """Identity is the (component_id, attribute_id) pair (infrastore mirror);
-    the denormalized type labels are not part of it, so re-attaching the same
-    attribute under a different type spelling must still be rejected."""
-    make_entity(fresh_db, 1)
-    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    """Identity is the (component_id, attribute_id) pair (infrastore mirror):
+    attaching the same attribute to the same component again is rejected."""
+    make_entity(fresh_db, 1, "thermal_generators", "ThermalStandard")
+    make_entity(fresh_db, 2, "supplemental_attributes", "GeographicInfo")
     fresh_db.execute(
-        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'GeographicInfo', '{}')"
     )
     fresh_db.execute(
         "INSERT INTO supplemental_attribute_associations("
@@ -386,7 +361,7 @@ def test_supplemental_attribute_association_identity_unique(fresh_db):
         fresh_db.execute(
             "INSERT INTO supplemental_attribute_associations("
             "component_id, component_type, attribute_id, attribute_type) "
-            "VALUES (1, 'OtherSpelling', 2, 'OtherType')"
+            "VALUES (1, 'ThermalStandard', 2, 'GeographicInfo')"
         )
 
 
@@ -394,7 +369,7 @@ def _attach(conn, attribute_id, attribute_type):
     conn.execute(
         "INSERT INTO supplemental_attribute_associations("
         "component_id, component_type, attribute_id, attribute_type) "
-        "VALUES (1, 'ThermalStandard', ?, ?)",
+        "VALUES (1, (SELECT entity_type FROM entities WHERE id = 1), ?, ?)",
         (attribute_id, attribute_type),
     )
 
@@ -421,7 +396,7 @@ def test_supplemental_attribute_association_accepts_plant(fresh_db):
 
 def test_supplemental_attribute_association_accepts_supplemental_attribute(fresh_db):
     make_entity(fresh_db, 1)
-    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    make_entity(fresh_db, 2, "supplemental_attributes", "Substation")
     fresh_db.execute(
         "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'Substation', '{}')"
     )
@@ -434,15 +409,18 @@ def test_supplemental_attribute_association_rejects_non_attribute(fresh_db):
     make_entity(fresh_db, 1)
     make_entity(fresh_db, 2)
     with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
-        _attach(fresh_db, 2, "Substation")
+        _attach(fresh_db, 2, "thing_type")
 
 
 def test_supplemental_attribute_association_update_rejects_non_attribute(fresh_db):
     make_entity(fresh_db, 1)
     _plant(fresh_db)
     _attach(fresh_db, 3, "CombinedCycleBlock")
+    make_entity(fresh_db, 4)
     with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
-        fresh_db.execute("UPDATE supplemental_attribute_associations SET attribute_id = 1")
+        fresh_db.execute(
+            "UPDATE supplemental_attribute_associations SET attribute_id = 4, attribute_type = 'thing_type'"
+        )
 
 
 def test_deleting_plant_removes_its_associations(fresh_db):
@@ -581,13 +559,22 @@ IDENTIFIER_CASES = [
 
 
 def _attr_owner(conn, entity_type):
-    make_entity(conn, 1, "attribute_owner", entity_type)
+    (table,) = conn.execute(
+        "SELECT entity_table FROM entity_type_tables WHERE entity_type = ?", (entity_type,)
+    ).fetchone()
+    make_entity(conn, 1, table, entity_type)
     return 1
+
+
+# An id array lists rows of its target table, so the listed 8901 must exist there.
+ID_ARRAY_TARGETS = {"upstream_turbines": ("hydro_generators", "HydroTurbine")}
 
 
 @pytest.mark.parametrize("name, entity_type", IDENTIFIER_CASES)
 def test_identifier_attribute_needs_no_unit(fresh_db, name, entity_type):
     owner = _attr_owner(fresh_db, entity_type)
+    if name in ID_ARRAY_TARGETS:
+        make_entity(fresh_db, 8901, *ID_ARRAY_TARGETS[name])
     fresh_db.execute(
         "INSERT INTO attributes(entity_id, TYPE, name, value) VALUES (?, ?, ?, '8901')",
         (owner, entity_type, name),
@@ -618,12 +605,14 @@ def test_identifier_exemption_is_scoped_by_type(fresh_db):
 
 def test_identifier_exemption_survives_update(fresh_db):
     owner = _attr_owner(fresh_db, "HydroReservoir")
+    make_entity(fresh_db, 2, "hydro_generators", "HydroTurbine")
+    make_entity(fresh_db, 3, "hydro_generators", "HydroTurbine")
     fresh_db.execute(
         "INSERT INTO attributes(entity_id, TYPE, name, value) "
-        "VALUES (?, 'HydroReservoir', 'upstream_turbines', '[1]')",
+        "VALUES (?, 'HydroReservoir', 'upstream_turbines', '[2]')",
         (owner,),
     )
-    fresh_db.execute("UPDATE attributes SET value = '[2]' WHERE name = 'upstream_turbines'")
+    fresh_db.execute("UPDATE attributes SET value = '[3]' WHERE name = 'upstream_turbines'")
 
 
 def test_dc_flag_requires_topology_type(fresh_db):
@@ -634,6 +623,11 @@ def test_dc_flag_requires_topology_type(fresh_db):
         )
 
 
+
+
+def test_rename_column_works_before_any_time_series_export(fresh_db):
+    """No view reads the ts_all_* tables an export creates: ALTER TABLE re-checks every view."""
+    fresh_db.execute("ALTER TABLE plants RENAME COLUMN name TO plant_name")
 
 
 # Parents that are never deleted: the sealed registry and the type vocabulary.
@@ -719,3 +713,31 @@ def test_scenarios_series_requires_scenario_count(fresh_db):
     make_entity(fresh_db, 1, "loads", "PowerLoad")
     with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
         _series(fresh_db, 1, "PowerLoad", series_type="Scenarios")
+
+
+def test_remote_regulated_bus_is_another_existing_bus(fresh_db):
+    """remote_regulated_bus names a bus other than the device's own, and that bus
+    cannot be deleted while a device regulates it."""
+    own, remote = make_bus(fresh_db, 1, "own"), make_bus(fresh_db, 2, "remote")
+    insert = (
+        "INSERT INTO switched_admittance(id, name, bus, remote_regulated_bus, Y_increase) "
+        "VALUES (?, ?, ?, ?, '[]')"
+    )
+    for eid in (10, 11, 12):
+        make_entity(fresh_db, eid, "switched_admittance", "SwitchedAdmittance")
+    fresh_db.execute(insert, (10, "sa", own, remote))
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        fresh_db.execute(insert, (11, "self", own, own))
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        fresh_db.execute(insert, (12, "missing", own, 999))
+    with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+        fresh_db.execute("DELETE FROM balancing_topologies WHERE id = ?", (remote,))
+
+
+def test_series_stores_per_unit_of(fresh_db):
+    make_entity(fresh_db, 1, "loads", "PowerLoad")
+    _series(fresh_db, 1, "PowerLoad")
+    fresh_db.execute("UPDATE time_series_associations SET per_unit_of = 'max_active_power'")
+    assert fresh_db.execute("SELECT per_unit_of FROM time_series_associations").fetchone() == (
+        "max_active_power",
+    )

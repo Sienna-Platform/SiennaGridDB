@@ -1,0 +1,418 @@
+import json
+import shutil
+
+import pytest
+from test_insert import count, golden
+
+import sienna_griddb_tools as griddb
+from sienna_griddb_tools.encode import features_hash
+
+
+@pytest.fixture
+def conn(tmp_path):
+    c = griddb.create_database(str(tmp_path / "t.sqlite"))
+    yield c
+    c.close()
+
+
+def thermal(doc):
+    return doc["components"]["ThermalStandard"][0]
+
+
+def series(owner, association_id, **fields):
+    row = {
+        "association_id": association_id,
+        "owner_id": owner["id"],
+        "owner_type": "ThermalStandard",
+        "owner_category": "Component",
+        "time_series_type": "SingleTimeSeries",
+        "name": "max_active_power",
+        "features": {"scenario": "base", "year": 2030},
+        "uri": "/arrays/a",
+        "element_type": "f64",
+        "element_shape": [],
+        "initial_timestamp": "2030-01-01T00:00:00",
+        "resolution": "PT1H",
+        "length": 24,
+    }
+    return {**row, **fields}
+
+
+def test_associations_and_feature_sets_are_stored(conn):
+    doc = golden()
+    gen = thermal(doc)
+    doc["time_series_associations"] = [
+        series(gen, 7),
+        series(gen, 8, name="min_active_power"),
+    ]
+    report = griddb.insert_document(conn, doc)
+    assert report.inserted["time_series_associations"] == 2
+    row = conn.execute(
+        "SELECT owner_id, name, features_hash FROM time_series_associations WHERE id = 7"
+    ).fetchone()
+    expected_hash = features_hash({"scenario": "base", "year": 2030})
+    assert row == (gen["id"], "max_active_power", expected_hash)
+    # Both rows share one feature set, stored once.
+    features = conn.execute(
+        "SELECT key, value_kind, value_int, value_str FROM feature_sets ORDER BY key"
+    ).fetchall()
+    assert features == [("scenario", "str", None, "base"), ("year", "int", 2030, None)]
+
+
+def test_interval_alignment_defaults_to_period_ending(conn):
+    doc = golden()
+    gen = thermal(doc)
+    doc["time_series_associations"] = [
+        series(gen, 7),
+        series(gen, 8, name="b", interval_alignment="PERIOD_BEGINNING"),
+    ]
+    griddb.insert_document(conn, doc)
+    rows = conn.execute(
+        "SELECT interval_alignment FROM time_series_associations ORDER BY id"
+    ).fetchall()
+    assert rows == [("PERIOD_ENDING",), ("PERIOD_BEGINNING",)]
+
+
+def test_mislabelled_owner_raises(conn):
+    doc = golden()
+    doc["time_series_associations"] = [
+        series(thermal(doc), 7, owner_type="RenewableDispatch")
+    ]
+    with pytest.raises(griddb.InsertError, match="is ThermalStandard"):
+        griddb.insert_document(conn, doc)
+    assert count(conn, "entities") == 0
+
+
+def test_series_of_an_unsupported_owner_is_reported(conn):
+    doc = golden()
+    doc["components"]["AGC"] = [{"id": 9001, "name": "agc"}]
+    doc["time_series_associations"] = [
+        series({"id": 9001}, 7, owner_type="AGC"),
+        series(thermal(doc), 8),
+    ]
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["time_series_associations"] == 1
+    assert count(conn, "time_series_associations") == 1
+
+
+def test_unsupported_series_type_is_reported_and_strict_raises(conn):
+    doc = golden()
+    row = series(thermal(doc), 7, time_series_type="NonSequentialTimeSeries")
+    for key in ("initial_timestamp", "resolution"):
+        row.pop(key)
+    doc["time_series_associations"] = [row]
+    doc.pop("ext")
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["NonSequentialTimeSeries"] == 1
+    assert count(conn, "time_series_associations") == 0
+    with pytest.raises(griddb.InsertError, match="timestamps_uri"):
+        griddb.insert_document(conn, doc, strict=True)
+
+
+def test_a_plant_owns_series_as_a_supplemental_attribute(conn):
+    doc = golden()
+    gen = thermal(doc)
+    plant = {"id": 9100, "name": "plant1"}
+    doc["supplemental_attributes"].append(plant)
+    doc["supplemental_attribute_associations"].append(
+        {
+            "component_id": gen["id"],
+            "component_type": "ThermalStandard",
+            "attribute_id": plant["id"],
+            "attribute_type": "ThermalPowerPlant",
+        }
+    )
+    owner = {"owner_type": "ThermalPowerPlant", "owner_category": "SupplementalAttribute"}
+    doc["time_series_associations"] = [series(plant, 7, **owner)]
+    griddb.insert_document(conn, doc)
+    assert count(conn, "time_series_associations") == 1
+
+
+def fuel_cost_series(doc):
+    """A golden thermal whose fuel cost is the series 7, with a DeterministicSingleTimeSeries
+    8 derived from it: same array, owner, name and features, plus forecast windows."""
+    gen = thermal(doc)
+    cost = gen["operation_cost"]["variable_operation_cost"]
+    cost.update(
+        {"variable_cost_type": "FUEL", "fuel_cost": None, "fuel_cost_time_series": 8}
+    )
+    derived = series(
+        gen,
+        8,
+        time_series_type="DeterministicSingleTimeSeries",
+        horizon="PT24H",
+        interval="PT24H",
+        count=1,
+    )
+    doc["time_series_associations"] = [series(gen, 7, name="fuel_cost"), derived]
+    derived["name"] = "fuel_cost"
+    doc.pop("ext")
+    return gen
+
+
+def test_deterministic_single_time_series_is_reported_and_strict_raises(conn):
+    doc = golden()
+    fuel_cost_series(doc)
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["DeterministicSingleTimeSeries"] == 1
+    assert conn.execute("SELECT id FROM time_series_associations").fetchall() == [(7,)]
+    with pytest.raises(griddb.InsertError, match="transform_single_time_series"):
+        griddb.insert_document(conn, doc, strict=True)
+
+
+def test_a_reference_to_a_derived_series_points_at_its_source(conn):
+    doc = golden()
+    gen = fuel_cost_series(doc)
+    griddb.insert_document(conn, doc)
+    stored = conn.execute(
+        "SELECT operation_cost FROM thermal_generators WHERE id = ?", (gen["id"],)
+    ).fetchone()[0]
+    assert '"fuel_cost_time_series":7' in stored.replace(" ", "")
+    assert conn.execute("SELECT * FROM dangling_time_series_references").fetchall() == []
+    # The caller's document is left as it was.
+    assert gen["operation_cost"]["variable_operation_cost"]["fuel_cost_time_series"] == 8
+
+
+def test_a_reference_no_stored_series_has_is_reported_and_strict_raises(conn):
+    doc = golden()
+    gen = fuel_cost_series(doc)
+    # The payload names 8, but the document holds no series.
+    doc["time_series_associations"] = []
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["dangling_time_series_references"] == 1
+    assert conn.execute("SELECT association_id FROM dangling_time_series_references").fetchall() == [(8,)]
+    first = f"first: entity {gen['id']} fuel_cost_time_series=8"
+    with pytest.raises(griddb.InsertError, match=first):
+        griddb.insert_document(conn, doc, strict=True)
+
+
+def test_remap_references_copies_only_what_changes():
+    from sienna_griddb_tools.time_series import remap_references
+
+    untouched = {"curve": [1, 2], "association_id": 3}
+    node = {"a": untouched, "b": [{"fuel_cost_time_series": 8}], "c": 8}
+    remap = {8: 7}.get
+    out = remap_references(node, lambda ref: remap(ref, ref))
+    assert out == {"a": untouched, "b": [{"fuel_cost_time_series": 7}], "c": 8}
+    assert out["a"] is untouched
+    assert node["b"][0]["fuel_cost_time_series"] == 8
+    assert remap_references(untouched, lambda ref: remap(ref, ref)) is untouched
+    assert remap_references(node, None) is node
+
+
+def sidecar_document(tmp_path):
+    """The golden document with two series of its first thermal stored in a real
+    infrastore sidecar; a deleted series leaves a gap so ids are not 1..n."""
+    infrastore = pytest.importorskip("infrastore")
+    np = pytest.importorskip("numpy")
+    from datetime import datetime, timedelta, timezone
+
+    doc = golden()
+    gen = thermal(doc)
+    path = str(tmp_path / "ts.h5")
+    store = infrastore.Store.create(path)
+    t0, hour = datetime(2030, 1, 1, tzinfo=timezone.utc), timedelta(hours=1)
+    component = infrastore.OwnerCategory.Component
+
+    def add(name, values, **kwargs):
+        series = infrastore.SingleTimeSeries(t0, hour, np.array(values, dtype=float), name)
+        return store.add_time_series(
+            gen["id"], "ThermalStandard", component, series, **kwargs
+        )
+
+    gone = add("scratch", [0.0])
+    add("max_active_power", [1.0, 2.0, 3.0], features={"year": 2030})
+    add("min_active_power", [0.5, 0.5, 0.5])
+    store.remove_by_ids([gone])
+    doc["time_series_associations"] = json.loads(
+        store.export_time_series_associations_openapi()
+    )
+    store.close()
+    doc.pop("ext")
+    return doc, path
+
+
+def test_values_are_infrastore_export_keyed_by_association_id(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    values = conn.execute(
+        "SELECT association_id, name, timestamp, value FROM time_series_values "
+        "ORDER BY association_id, timestamp"
+    ).fetchall()
+    ids = {r["name"]: r["association_id"] for r in doc["time_series_associations"]}
+    assert sorted(ids.values()) == [2, 3]
+    assert values == [
+        (ids["max_active_power"], "max_active_power", "2030-01-01T00:00:00.000Z", 1.0),
+        (ids["max_active_power"], "max_active_power", "2030-01-01T01:00:00.000Z", 2.0),
+        (ids["max_active_power"], "max_active_power", "2030-01-01T02:00:00.000Z", 3.0),
+        (ids["min_active_power"], "min_active_power", "2030-01-01T00:00:00.000Z", 0.5),
+        (ids["min_active_power"], "min_active_power", "2030-01-01T01:00:00.000Z", 0.5),
+        (ids["min_active_power"], "min_active_power", "2030-01-01T02:00:00.000Z", 0.5),
+    ]
+    assert conn.execute("SELECT * FROM orphaned_time_series").fetchall() == []
+
+
+def test_values_without_a_sidecar_are_reported_and_strict_raises(conn, tmp_path):
+    doc, _ = sidecar_document(tmp_path)
+    report = griddb.insert_document(conn, doc)
+    assert report.unsupported["time_series_values"] == 2
+    assert count(conn, "time_series_associations") == 2
+    with pytest.raises(griddb.InsertError, match="no time series sidecar"):
+        griddb.insert_document(conn, doc, strict=True)
+
+
+def test_a_missing_sidecar_is_reported_by_path_and_strict_raises(conn, tmp_path):
+    doc, _ = sidecar_document(tmp_path)
+    gone = str(tmp_path / "gone.h5")
+    report = griddb.insert_document(conn, doc, time_series=gone)
+    assert report.unsupported["time_series_values"] == 2
+    with pytest.raises(griddb.InsertError, match=r"gone.h5 not found"):
+        griddb.insert_document(conn, doc, strict=True, time_series=gone)
+
+
+def test_the_cli_reports_a_named_sidecar_that_is_missing(tmp_path, capsys):
+    from sienna_griddb_tools.__main__ import main
+
+    doc, _ = sidecar_document(tmp_path)
+    doc["time_series_storage_file"] = "gone.h5"
+    path = tmp_path / "doc.json"
+    path.write_text(json.dumps(doc))
+    assert main(["build", str(path), str(tmp_path / "out.sqlite")]) == 0
+    assert json.loads(capsys.readouterr().out)["unsupported"]["time_series_values"] == 2
+    with pytest.raises(griddb.InsertError, match=r"gone.h5 not found"):
+        main(["build", str(path), str(tmp_path / "strict.sqlite"), "--strict"])
+
+
+def test_deleting_an_owner_leaves_its_values_orphaned(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    conn.execute("DELETE FROM entities WHERE id = ?", (thermal(doc)["id"],))
+    assert len(conn.execute("SELECT * FROM orphaned_time_series").fetchall()) == 2
+
+
+def test_a_second_store_minting_the_same_ids_lands_past_the_first(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    gen = thermal(doc)
+    # A second store minted the same ids (2 and 3); its plant references series 2.
+    rows = [{**r, "name": r["name"] + "_2"} for r in doc["time_series_associations"]]
+    second = {
+        "components": {},
+        "supplemental_attributes": [{"id": 9200, "name": "p", "fuel_cost_time_series": 2}],
+        "supplemental_attribute_associations": [
+            {
+                "component_id": gen["id"],
+                "component_type": "ThermalStandard",
+                "attribute_id": 9200,
+                "attribute_type": "ThermalPowerPlant",
+            }
+        ],
+        "time_series_associations": rows,
+    }
+    griddb.insert_document(conn, second, time_series=sidecar)
+    stores = conn.execute(
+        "SELECT id, id_offset, values_prefix FROM time_series_stores ORDER BY id"
+    ).fetchall()
+    assert stores == [(1, 0, "ts_1_"), (2, 3, "ts_2_")]
+    values = conn.execute(
+        "SELECT association_id, store_id, count(*) FROM time_series_values GROUP BY 1, 2"
+    ).fetchall()
+    assert values == [(2, 1, 3), (3, 1, 3), (5, 2, 3), (6, 2, 3)]
+    plant = conn.execute("SELECT value FROM plants WHERE id = 9200").fetchone()[0]
+    assert json.loads(plant)["fuel_cost_time_series"] == 5
+    assert conn.execute("SELECT count(*) FROM orphaned_time_series").fetchone()[0] == 0
+
+
+def portfolio_bundle(tmp_path):
+    """PSIP's directory form: portfolio.json and its sidecar, with the base system in
+    base_system/. The portfolio's series reuse the base system's ids."""
+    doc, sidecar = sidecar_document(tmp_path)
+    bundle = tmp_path / "bundle"
+    (bundle / "base_system").mkdir(parents=True)
+    shutil.copyfile(sidecar, bundle / "time_series.h5")
+    shutil.copyfile(sidecar, bundle / "base_system" / "time_series.h5")
+    doc["time_series_storage_file"] = "time_series.h5"
+    (bundle / "base_system" / "system.json").write_text(json.dumps(doc))
+    rows = [{**r, "name": r["name"] + "_2"} for r in doc["time_series_associations"]]
+    portfolio = {
+        "base_system_file": "base_system",
+        "time_series_storage_file": "time_series.h5",
+        "aggregation": "PowerSystems.Area",
+        "components": {},
+        "time_series_associations": rows,
+    }
+    (bundle / "portfolio.json").write_text(json.dumps(portfolio))
+    return bundle
+
+
+def test_a_portfolio_file_brings_its_base_system_first(conn, tmp_path):
+    report = griddb.insert_file(conn, portfolio_bundle(tmp_path))
+    assert report.inserted["time_series_associations"] == 4
+    assert report.unsupported["aggregation"] == 1
+    values = conn.execute(
+        "SELECT store_id, count(*) FROM time_series_values GROUP BY 1"
+    ).fetchall()
+    assert values == [(1, 6), (2, 6)]
+
+
+def test_a_failing_portfolio_rolls_back_its_base_system(conn, tmp_path):
+    bundle = portfolio_bundle(tmp_path)
+    (bundle / "time_series.h5").write_bytes(b"not hdf5")
+    with pytest.raises(griddb.InsertError, match="time series sidecar"):
+        griddb.insert_file(conn, bundle / "portfolio.json")
+    assert count(conn, "entities") == 0
+
+
+def test_the_cli_builds_a_portfolio_bundle(tmp_path, capsys):
+    from sienna_griddb_tools.__main__ import main
+
+    out = tmp_path / "out.sqlite"
+    assert main(["build", str(portfolio_bundle(tmp_path)), str(out)]) == 0
+    assert json.loads(capsys.readouterr().out)["inserted"]["time_series_associations"] == 4
+
+
+def test_ids_already_stored_are_named(conn):
+    griddb.insert_document(conn, golden())
+    with pytest.raises(griddb.InsertError, match="ids are already in the database"):
+        griddb.insert_document(conn, golden())
+
+
+def test_an_association_id_below_one_raises(conn):
+    doc = golden()
+    doc["time_series_associations"] = [series(thermal(doc), 0)]
+    with pytest.raises(griddb.InsertError, match="ids start at 1"):
+        griddb.insert_document(conn, doc)
+    assert count(conn, "entities") == 0
+
+
+def test_a_dangling_reference_names_the_documents_own_id(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    gen = thermal(doc)
+    # Stored past offset 3, the plant's 7 would read 10; the report names the 7.
+    second = {
+        "components": {},
+        "supplemental_attributes": [{"id": 9200, "name": "p", "fuel_cost_time_series": 7}],
+        "supplemental_attribute_associations": [
+            {
+                "component_id": gen["id"],
+                "component_type": "ThermalStandard",
+                "attribute_id": 9200,
+                "attribute_type": "ThermalPowerPlant",
+            }
+        ],
+        "time_series_associations": [],
+    }
+    with pytest.raises(griddb.InsertError, match="fuel_cost_time_series=7"):
+        griddb.insert_document(conn, second, strict=True)
+
+
+def test_each_store_tags_only_its_own_rows(conn, tmp_path):
+    doc, sidecar = sidecar_document(tmp_path)
+    griddb.insert_document(conn, doc, time_series=sidecar)
+    rows = [{**r, "name": r["name"] + "_2"} for r in doc["time_series_associations"]]
+    griddb.insert_document(conn, {"components": {}, "time_series_associations": rows}, time_series=sidecar)
+    tags = conn.execute(
+        "SELECT id, store_id FROM time_series_associations ORDER BY id"
+    ).fetchall()
+    assert tags == [(2, 1), (3, 1), (5, 2), (6, 2)]

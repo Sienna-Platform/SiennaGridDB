@@ -1,17 +1,35 @@
 # SiennaGridDB
 
-Schema for the SQL database for Power Systems Analysis Applications
+CRUD SDKs that store SiennaSchemas objects in a SQLite database and read them back, in
+four languages.
 
 > [!IMPORTANT]
 > This schema requires SQLite 3.45+ for jsonb support, with no earlier version targeted.
 
 ## What this repository ships
 
-The product is **SQL**, not a Python package. `schema/` holds the four files that build a
-database — `schema.sql` (tables), `triggers.sql` (integrity), `unit_registry.sql`
-(the generated, sha256-sealed unit vocabulary) and `views.sql` — and `scripts/` holds the
-Python tooling that generates and verifies them. Nothing here is importable; the
-`pyproject.toml` exists to set up the dev environment and host the linter config.
+The goal is **CRUD SDKs**: create, read, update and delete SiennaSchemas objects
+(systems, portfolios, their time series) in a GridDB database. The SDKs speak the
+schemas, not SQL; the database is their storage format.
+
+| Language | Package | Status |
+|---|---|---|
+| Python | [`sdk/python`](sdk/python/README.md) | create (insert) |
+| Julia | [`sdk/julia`](sdk/julia/README.md) | create (insert) |
+| TypeScript | [`sdk/typescript`](sdk/typescript/README.md) | create (insert); no time series values |
+| Rust | — | planned |
+
+Read, update and delete come next, in all four languages.
+
+This repository is **not a general interface to the database**. It does not offer a
+query builder, an ORM or arbitrary SQL access. Anything outside the SDKs' CRUD calls
+— ad hoc queries, analytics, bulk edits — uses SQLite directly, against the tables and
+views documented below, and the SDKs make no promise about data written that way.
+
+The SDKs write to the schema in `schema/`: `schema.sql` (tables), `triggers.sql`
+(integrity), `unit_registry.sql` (the generated, sha256-sealed unit vocabulary) and
+`views.sql`. `scripts/` holds the Python tooling that generates and verifies the schema
+and the insert manifest the SDKs read.
 
 A release is a tarball attached to a `v*` GitHub Release, containing `schema/`,
 `scripts/`, `README.md`, `CHANGELOG.md`, `LICENSE` and `.justfile` under a single top-level directory:
@@ -26,7 +44,7 @@ just new-db                     # or the four sqlite3 calls below
 
 Read this before building on it:
 
-- **Create-only.** There is no migration path. `schema/schema.sql` opens by dropping every
+- **No migration path.** `schema/schema.sql` opens by dropping every
   table, so it builds a new database and must never be applied to one holding data.
   `PRAGMA user_version` is bumped on every schema change. The insert SDKs read it: they open
   only a database whose `user_version` matches the schema they write, and refuse any other.
@@ -162,8 +180,9 @@ Two kinds of value sit outside `unit_conventions` entirely:
 - **Time-series values** — the unit lives on `time_series_metadata` (joined by `uuid`), not
   on the row you're reading; see [Time-series units](#time-series-units) below.
 - **Cost JSON payloads** (`operation_cost` / `production_cost`) — carry their own embedded
-  `power_units` key. Triggers require it to be `NATURAL_UNITS`, since the DB stores no base
-  to resolve `COMPONENT_BASE` against.
+  `power_units` key. Triggers reject any value other than `NATURAL_UNITS`, since the DB
+  stores no base to resolve `COMPONENT_BASE` against. A payload without `power_units`
+  passes.
 
 ### Time-series units
 
@@ -381,9 +400,10 @@ Both were run against a database built from `schema/schema.sql` + `triggers.sql`
 
 ## Insert SDKs
 
-`sdk/` holds three small packages that insert Sienna OpenAPI SDK objects into a GridDB
-database: [`sdk/python`](sdk/python/README.md), [`sdk/julia`](sdk/julia/README.md), and
-[`sdk/typescript`](sdk/typescript/README.md). None of them contains mapping logic. Each
+`sdk/` holds the CRUD SDKs. Today they implement create: they insert Sienna OpenAPI SDK
+objects into a GridDB database: [`sdk/python`](sdk/python/README.md),
+[`sdk/julia`](sdk/julia/README.md), and [`sdk/typescript`](sdk/typescript/README.md).
+None of them contains mapping logic. Each
 one interprets `schema/insert_manifest.json`, which `scripts/generate_insert_manifest.py`
 builds from `schema_map.json`, `sql_codegen_map.json`, `schema/insert_config.json`, the
 SiennaSchemas components, and the DDL itself. Every INSERT a runtime can issue is written
@@ -393,7 +413,11 @@ The release tarball holds the schema only. Use the SDKs from a clone at the rele
 one reads the manifest of its own checkout and opens only a database whose `user_version`
 equals the manifest's `schema_user_version`.
 
+- **Files and portfolios.** `insert_file` (Julia `insert_file!`, TypeScript `insertFile`) and the CLIs' `build` take a document file or a bundle directory holding one `.json` document.
+  A portfolio's `base_system_file` goes in first, then the portfolio, in one transaction; each document's sidecar is its own `time_series_storage_file`, resolved next to it.
+  The same code inserts a system and a portfolio: the manifest maps every component type, and a portfolio's sections with no table (`requirements_associations`, `investment_schedule`, `aggregation`) are reported, one per object.
 - **Ids.** An SDK object's `id` becomes its `entities.id` unchanged.
+  A document whose ids are already stored fails, naming how many: a portfolio must number its own components above its base system's.
 - **Every field has a home.** `sql_codegen_map.json` places every property of a supported
   component, or manifest generation fails. A decomposed property maps each of its columns
   to a JSON path in the same file. A field the schemas do not define is counted in the
@@ -404,14 +428,33 @@ equals the manifest's `schema_user_version`.
   exemption.
 - **Costs.** Cost payloads must be in `NATURAL_UNITS`; the triggers reject anything else,
   and the runtimes do not convert.
-- **Not supported yet.** `time_series_associations`, `voltage_control_associations`,
-  `ext`, and the component types `schema_map.json` excludes are reported, not written.
-  So is an association row that names a component of such a type.
+- **Time series.** The three runtimes write each `time_series_associations` row and its feature set.
+  `features_hash` is infrastore's hash of the feature map (`crates/infrastore-core/src/hash.rs`), checked against `test/features_hash_vectors.json`.
+  A feature written as `2030.0` hashes as a Float. The TypeScript runtime keeps that only for a document it parsed itself (`insertFile`, or `parseJson`); an object built in code hashes `2030` as an Int.
+  A row that names its owner with another type or category raises.
+  A `NonSequentialTimeSeries` is reported, not written: GridDB has no column for its `timestamps_uri`.
+  A `DeterministicSingleTimeSeries` is reported, not written: it is a view over its `SingleTimeSeries`' array, which a consumer derives again with `transform_single_time_series!`.
+  A reference to one (an `association_id`, a `*_association_id` or a `fuel_cost_time_series`) is written as its source's id: the series with the same owner, name, features and `uri`.
+  A reference that names no stored association (a reported series, or one the document does not hold) is reported under `dangling_time_series_references`, and strict raises. The view of the same name lists them in the file.
+  Their values come from the document's HDF5 sidecar (`time_series_storage_file`, or `time_series=` / `--time-series`): the Python or Julia SDK has infrastore export them as its SQLite tables under a prefix of their own, in the same transaction as the rest of the document.
+  Each sidecar is a `time_series_stores` row, and its export's prefix is `ts_<store id>_`.
+  Two sidecars can mint the same series ids, so each document's ids, and every payload reference to them, move past the ids already stored: GridDB id = store id + `id_offset`. The first document keeps its ids.
+  After each export, the SDK rebuilds `time_series_export_series` and `time_series_export_values`, which unite every store's export, then creates the views in `schema/time_series_views.sql`: `time_series_values` joins the values to the associations by id alone, with each row's `store_id`; `orphaned_time_series` lists exported series no association names.
+  `views.sql` leaves them out, because a view over a missing table makes `ALTER TABLE ... RENAME COLUMN` fail.
+  Without a sidecar, with a sidecar file that does not exist, or without infrastore 0.17.0 or later, the values are reported under `time_series_values`.
+  The TypeScript runtime has no infrastore binding, so it reports the values under `time_series_values`.
+- **Not supported yet.** `voltage_control_associations`, `ext`, the portfolio sections above, and the component types `schema_map.json` excludes are reported, not written.
+  So is an association or time series row that names a component of such a type.
 - **Parity.** `test/prepare_fixtures.py` generates the case14 golden inputs and expected
   outputs on the fly into the gitignored `test/fixtures/insert/`; fixtures are never
   checked in. The Python runtime produces the expected outputs; CI builds a database
   from the inputs with the Julia and TypeScript runtimes and requires identical
   canonical dumps (`scripts/check_insert_parity.py`).
+- **Canonical JSON.** Every runtime, and the generated JSON defaults, write JSON text in
+  RFC 8785 (JCS) form: keys in UTF-16 code-unit order, numbers as ECMAScript writes them
+  (`1.0` is `1`, `1e16` is `10000000000000000`), no whitespace. So the same document
+  stores the same bytes from any runtime, and the parity dumps compare that text as
+  stored. `test/canonical_json_vectors.json` holds every implementation to it.
 - **Schema files.** The runtimes read `schema/` directly, so nothing is copied by hand.
   The Python package links each file from `schema/`, and the Julia package reads the
   repository's `schema/` directory. The TypeScript `build` script copies the files into

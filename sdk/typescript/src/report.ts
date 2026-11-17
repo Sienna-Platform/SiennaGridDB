@@ -16,6 +16,15 @@ export class InsertReport {
     this.unsupported[key] = (this.unsupported[key] ?? 0) + n;
   }
 
+  merge(other: InsertReport): void {
+    for (const [k, n] of Object.entries(other.inserted)) this.addInserted(k, n);
+    for (const [t, fields] of Object.entries(other.skipped_fields)) {
+      const mine = (this.skipped_fields[t] ??= {});
+      for (const [f, n] of Object.entries(fields)) mine[f] = (mine[f] ?? 0) + n;
+    }
+    for (const [k, n] of Object.entries(other.unsupported)) this.addUnsupported(k, n);
+  }
+
   toJSON(): object {
     return {
       inserted: sortKeys(this.inserted),

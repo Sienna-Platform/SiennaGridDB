@@ -1,19 +1,29 @@
+import { createHash } from "node:crypto";
 import { EncodeError, type JsonObject } from "./errors.js";
 
-export type Encoding = "int" | "real" | "text" | "bool" | "json";
+export type Encoding = "int" | "real" | "text" | "bool" | "json" | "features_hash";
 export type SqlValue = bigint | number | string | null;
 
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(sortDeep(value));
 }
 
+// JSON.stringify writes NaN and Infinity as null; GridDB stores finite numbers only.
 function sortDeep(value: unknown): unknown {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new EncodeError(`expected a finite number, got ${value}`);
+  }
   if (Array.isArray(value)) return value.map(sortDeep);
   if (value !== null && typeof value === "object") {
     const o = value as JsonObject;
     return Object.fromEntries(Object.keys(o).sort().map((k) => [k, sortDeep(o[k])]));
   }
   return value;
+}
+
+/** A JSON object: not null, not an array. */
+export function isObject(value: unknown): value is JsonObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**
@@ -32,6 +42,7 @@ const ENCODERS: Record<Encoding, (v: unknown) => SqlValue> = {
   },
   real: (v) => {
     if (typeof v !== "number") throw new EncodeError(`expected a number, got ${JSON.stringify(v)}`);
+    if (!Number.isFinite(v)) throw new EncodeError(`expected a finite number, got ${v}`);
     return v;
   },
   text: (v) => {
@@ -45,6 +56,10 @@ const ENCODERS: Record<Encoding, (v: unknown) => SqlValue> = {
     return v ? 1 : 0;
   },
   json: (v) => canonicalJson(v),
+  features_hash: (v) => {
+    if (!isObject(v)) throw new EncodeError(`expected a feature map, got ${JSON.stringify(v)}`);
+    return featuresHash(v);
+  },
 };
 
 export function encode(encoding: Encoding, value: unknown): SqlValue {
@@ -66,4 +81,80 @@ export function valueAt(obj: JsonObject, path: string): unknown {
 
 export function isNull(value: unknown): boolean {
   return value === null || value === undefined;
+}
+
+function u64(n: number | bigint): Buffer {
+  const b = Buffer.alloc(8);
+  b.writeBigUInt64LE(BigInt(n));
+  return b;
+}
+
+// JSON.parse turns 2030.0 into 2030. parseJson records, per parsed object, the keys whose
+// number token has a fraction or exponent, so a feature map hashes them as Float.
+const floatTokens = new WeakMap<object, Set<string>>();
+
+type Reviver = (this: object, key: string, value: unknown, context?: { source?: string }) => unknown;
+
+/** JSON.parse that keeps 2030.0 a Float in feature maps (needs JSON.parse source text access). */
+export function parseJson(text: string): unknown {
+  const reviver: Reviver = function (key, value, context) {
+    const source = context?.source;
+    if (typeof value === "number" && source !== undefined && /[.eE]/.test(source)) {
+      const keys = floatTokens.get(this) ?? new Set<string>();
+      keys.add(key);
+      floatTokens.set(this, keys);
+    }
+    return value;
+  };
+  return (JSON.parse as (text: string, reviver: Reviver) => unknown)(text, reviver);
+}
+
+/**
+ * The kind features[key] hashes as. A number parsed by parseJson from a token like 2030.0 is
+ * "float"; any other safe integer is "int", since an object built in code cannot tell 1.0 from 1.
+ */
+export function featureKind(features: JsonObject, key: string): string {
+  const value = features[key];
+  if (typeof value === "boolean") return "bool";
+  if (typeof value === "number") {
+    if (Number.isSafeInteger(value) && !floatTokens.get(features)?.has(key)) return "int";
+    return "float";
+  }
+  if (typeof value === "string") return "str";
+  return typeof value;
+}
+
+function featureBytes(features: JsonObject, key: string): Buffer {
+  const value = features[key];
+  const kind = featureKind(features, key);
+  if (kind === "bool") return Buffer.from([0x62, value ? 1 : 0]);
+  if (kind === "int") {
+    const b = Buffer.alloc(9, 0x69);
+    b.writeBigInt64LE(BigInt(value as number), 1);
+    return b;
+  }
+  if (kind === "float") {
+    // Any NaN hashes as Rust's f64::NAN bit pattern.
+    const b = Buffer.alloc(9, 0x66);
+    if (Number.isNaN(value)) b.writeBigUInt64LE(0x7ff8000000000000n, 1);
+    else b.writeDoubleLE(value as number, 1);
+    return b;
+  }
+  if (typeof value === "string") {
+    const raw = Buffer.from(value, "utf8");
+    return Buffer.concat([Buffer.from("s"), u64(raw.length), raw]);
+  }
+  throw new EncodeError(`expected an int, float, bool or string feature, got ${JSON.stringify(value)}`);
+}
+
+/**
+ * infrastore's features_hash (crates/infrastore-core/src/hash.rs), lowercase hex. Keys go in
+ * UTF-8 byte order. Numbers hash as featureKind says.
+ */
+export function featuresHash(features: JsonObject): string {
+  const keys = Object.keys(features).map((k) => [k, Buffer.from(k, "utf8")] as const);
+  keys.sort((a, b) => Buffer.compare(a[1], b[1]));
+  const hash = createHash("sha256").update("features\0").update(u64(keys.length));
+  for (const [key, raw] of keys) hash.update(u64(raw.length)).update(raw).update(featureBytes(features, key));
+  return hash.digest("hex");
 }

@@ -25,6 +25,13 @@ export interface ComponentPlan {
   knownFields: Set<string>;
 }
 export interface AssociationPlan { section: string; row_sql: string; bindings: Binding[]; references: string[] }
+export interface TimeSeriesPlan extends AssociationPlan {
+  feature_sql: string;
+  unsupported_types: Record<string, string>;
+  id_offset_sql: string;
+  store_sql: string;
+  store_rows_sql: string;
+}
 export interface Manifest {
   schema_user_version: number;
   vocabulary: {
@@ -35,6 +42,7 @@ export interface Manifest {
   attribute_sql: string;
   supplemental_attributes: { plant_types: string[]; plant_sql: string; attribute_sql: string };
   associations: AssociationPlan[];
+  time_series: TimeSeriesPlan;
   unsupported_sections: Record<string, string>;
 }
 

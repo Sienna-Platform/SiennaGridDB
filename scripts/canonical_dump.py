@@ -3,9 +3,9 @@
 
 Every user table except the sealed unit registry, non-hidden columns only. A table's
 `id` is dropped when it is a local surrogate (not a foreign key to entities), since
-runtimes may assign surrogates in a different order. JSON text is parsed and
-re-rendered with sorted keys and every number as a float, so `1` and `1.0` compare
-equal. Rows are sorted.
+runtimes may assign surrogates in a different order. JSON text stays as stored: every
+runtime writes the same RFC 8785 text, so a difference in it is a parity failure. Rows
+are sorted.
 
     python3 scripts/canonical_dump.py DB [--out FILE]
 """
@@ -22,25 +22,6 @@ REGISTRY_TABLES = {
     "unit_conventions",
     "unit_management_metadata",
 }
-
-
-def _floats(value):
-    if isinstance(value, bool) or value is None or isinstance(value, str):
-        return value
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, list):
-        return [_floats(v) for v in value]
-    return {k: _floats(v) for k, v in value.items()}
-
-
-def normalize(value):
-    if isinstance(value, str) and value[:1] in ("{", "["):
-        try:
-            return json.dumps(_floats(json.loads(value)), sort_keys=True)
-        except ValueError:
-            return value
-    return value
 
 
 def keeps_id(conn, table):
@@ -71,7 +52,7 @@ def dump(path):
             if r[6] == 0 and (r[1] != "id" or keep_id)
         ]
         rows = conn.execute(f"SELECT {', '.join(cols)} FROM {table}").fetchall()
-        norm = [[normalize(v) for v in row] for row in rows]
+        norm = [list(row) for row in rows]
         norm.sort(key=lambda r: json.dumps(r, sort_keys=True))
         out[table] = {"columns": cols, "rows": norm}
     conn.close()

@@ -1,19 +1,35 @@
 import Database from "better-sqlite3";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { Connection } from "./db.js";
 import { seedVocabulary } from "./db.js";
-import { canonicalJson, encode, isInt, isNull, valueAt, type SqlValue } from "./encode.js";
+import { canonicalJson, encode, isInt, isNull, isObject, parseJson, valueAt, type SqlValue } from "./encode.js";
 import {
   EncodeError,
   InsertError,
   describe,
   type JsonObject,
 } from "./errors.js";
-import { loadManifest, type Binding, type ComponentPlan } from "./manifest.js";
+import { loadManifest, type Binding, type ComponentPlan, type TimeSeriesPlan } from "./manifest.js";
 import { InsertReport } from "./report.js";
+import {
+  danglingReferences,
+  derivedSources,
+  featureRows,
+  remapReferences,
+  seriesRemap,
+  shiftIds,
+  requireOwnerLabel,
+  type Dangling,
+} from "./time_series.js";
 
 const SAVEPOINT = "sienna_griddb_tools_insert";
 
-export interface InsertOptions { strict?: boolean }
+export interface InsertOptions {
+  strict?: boolean;
+  /** The document's HDF5 sidecar, recorded on its time_series_stores row; never read. */
+  timeSeries?: string;
+}
 
 // The caller's connection may have foreign keys off. The PRAGMA does nothing inside an
 // open transaction, so read it back.
@@ -32,17 +48,56 @@ function requiredId(row: JsonObject, key: string, what: string): number {
   return value;
 }
 
-function withSavepoint(db: Connection, f: () => void): void {
+function requireSchemaVersion(db: Connection): void {
+  const found = db.pragma("user_version", { simple: true }) as number;
+  const expected = loadManifest().schema_user_version;
+  if (found !== expected) {
+    throw new InsertError(`database has user_version ${found}; this package writes ${expected}`);
+  }
+}
+
+function withSavepoint<T>(db: Connection, f: () => T): T {
   requireForeignKeys(db);
+  requireSchemaVersion(db);
   db.exec(`SAVEPOINT ${SAVEPOINT}`);
+  let result: T;
   try {
-    f();
+    result = f();
   } catch (err) {
-    db.exec(`ROLLBACK TO ${SAVEPOINT}`);
-    db.exec(`RELEASE ${SAVEPOINT}`);
+    rollback(db, err);
     throw err;
   }
-  db.exec(`RELEASE ${SAVEPOINT}`);
+  // RELEASE of the outermost savepoint is the commit: deferred foreign keys fail here.
+  try {
+    db.exec(`RELEASE ${SAVEPOINT}`);
+  } catch (err) {
+    rollback(db, err);
+    throw withCause(new InsertError(`the insert fails its commit checks: ${(err as Error).message}`), err);
+  }
+  return result;
+}
+
+function rollback(db: Connection, cause: unknown): void {
+  try {
+    db.exec(`ROLLBACK TO ${SAVEPOINT}`);
+    db.exec(`RELEASE ${SAVEPOINT}`);
+  } catch (err) {
+    const message = `rollback failed (${(err as Error).message}) after: ${(cause as Error).message}`;
+    throw withCause(new InsertError(message), cause);
+  }
+}
+
+function withCause(err: Error, cause: unknown): Error {
+  err.cause = cause;
+  return err;
+}
+
+function jsonText(value: unknown, what: string): string {
+  try {
+    return canonicalJson(value);
+  } catch (err) {
+    throw wrap(err, what);
+  }
 }
 
 function wrap(err: unknown, what: string): unknown {
@@ -118,7 +173,7 @@ function writeRow(
     run(
       db,
       loadManifest().attribute_sql,
-      [BigInt(obj.id as number), plan.typeName, attr.field, canonicalJson(value), arm?.unit ?? null, arm?.quantity_kind ?? null],
+      [BigInt(obj.id as number), plan.typeName, attr.field, jsonText(value, what), arm?.unit ?? null, arm?.quantity_kind ?? null],
       what,
     );
   }
@@ -129,7 +184,7 @@ function writeRow(
 
 // Every document entry is a JSON object; anything else is schema-invalid input.
 function requireObject(entry: unknown, what: string): void {
-  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+  if (!isObject(entry)) {
     throw new InsertError(`${what} ${JSON.stringify(entry)}: not an object`);
   }
 }
@@ -187,13 +242,129 @@ export function insertComponent(
   return insertComponents(db, typeName, [obj], opts);
 }
 
+// Whether a reference names a component the insert does not write; ids follow the int
+// encoder's rule, so any other value reaches the encoder and fails there.
+function namesUnsupported(row: JsonObject, references: string[], ids: Set<number>): boolean {
+  return references.some((r) => {
+    const id = valueAt(row, r);
+    return isInt(id) && ids.has(id);
+  });
+}
+
+// The association rows to insert, after reporting the ones GridDB cannot store; owners
+// maps each id the document holds to its [owner_type, owner_category].
+function timeSeriesRows(
+  doc: JsonObject,
+  report: InsertReport,
+  strict: boolean,
+  unsupportedIds: Set<number>,
+  owners: Map<number, [string, string]>,
+): JsonObject[] {
+  const plan = loadManifest().time_series;
+  const rows = sectionRows(doc, plan.section);
+  for (const row of rows) requireOwnerLabel(row, owners);
+  const counts = new Map<string, number>();
+  const stored: JsonObject[] = [];
+  for (const row of rows) {
+    const seriesType = String(row.time_series_type);
+    if (Object.hasOwn(plan.unsupported_types, seriesType)) {
+      counts.set(seriesType, (counts.get(seriesType) ?? 0) + 1);
+    } else if (namesUnsupported(row, plan.references, unsupportedIds)) {
+      report.addUnsupported(plan.section, 1);
+    } else {
+      requirePositiveId(row);
+      stored.push(row);
+    }
+  }
+  for (const seriesType of [...counts.keys()].sort()) {
+    unsupported(report, strict, seriesType, counts.get(seriesType)!, plan.unsupported_types[seriesType]);
+  }
+  return stored;
+}
+
+// Association rows, then each feature set the first time its hash appears.
+function insertAssociations(db: Connection, plan: TimeSeriesPlan, rows: JsonObject[], report: InsertReport) {
+  const hashAt = plan.bindings.findIndex((b) => b.encode === "features_hash");
+  const featuresSeen = new Set<string>();
+  for (const row of rows) {
+    const what = `time series association id=${String(row.association_id)}`;
+    const values = params(plan.bindings, row, what);
+    run(db, plan.row_sql, values, what);
+    const hash = values[hashAt] as string;
+    if (!featuresSeen.has(hash)) {
+      featuresSeen.add(hash);
+      for (const f of featureRows(hash, row.features as JsonObject)) run(db, plan.feature_sql, f, what);
+    }
+    report.addInserted(plan.section);
+  }
+}
+
+// A foreign key cannot reach into JSON, so the insert is the only place that sees a payload
+// reference to an association it does not store.
+// A store mints ids from 1; an id below would land on an id already used.
+function requirePositiveId(row: JsonObject): void {
+  const id = row.association_id;
+  if (isInt(id) && id <= 0) throw new InsertError(`time series association id=${id}: ids start at 1`);
+}
+
+// Ids are the document's own: a reference to a derived series resolves to its stored source.
+function reportDangling(
+  report: InsertReport,
+  strict: boolean,
+  plans: [ComponentPlan, JsonObject[]][],
+  attrs: JsonObject[],
+  series: JsonObject[],
+  sources: Map<number, number>,
+) {
+  const storedIds = new Set(series.map((r) => r.association_id).filter(isInt));
+  for (const [derived, source] of sources) if (storedIds.has(source)) storedIds.add(derived);
+  const rows = [...plans.flatMap(([, objs]) => objs), ...attrs];
+  const payloads = rows.filter((o) => isObject(o) && isInt(o.id)).map((o): [number, unknown] => [o.id as number, o]);
+  const dangling = danglingReferences(payloads, storedIds);
+  if (dangling.length === 0) return;
+  const [entityId, key, ref] = dangling.reduce((a, b) => (compareDangling(a, b) <= 0 ? a : b));
+  const reason = `no stored time series association has the id (first: entity ${entityId} ${key}=${ref})`;
+  unsupported(report, strict, "dangling_time_series_references", dangling.length, reason);
+}
+
+function compareDangling(a: Dangling, b: Dangling): number {
+  if (a[0] !== b[0]) return a[0] - b[0];
+  if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1;
+  return a[2] - b[2];
+}
+
+/** Rows in a list section; a non-empty object or scalar is one. */
 function sectionSize(value: unknown): number {
   if (Array.isArray(value)) return value.length;
-  if (value !== null && typeof value === "object") return Object.keys(value).length;
-  return 0;
+  if (value !== null && typeof value === "object") return Object.keys(value).length > 0 ? 1 : 0;
+  return value ? 1 : 0;
+}
+
+/**
+ * The insert's entity ids must miss the ones stored, so a portfolio numbers its own above
+ * its base system's; the UNIQUE failure alone would not say why.
+ */
+function requireNewIds(db: Connection, plans: [ComponentPlan, JsonObject[]][], attrs: JsonObject[]): void {
+  const ids = [...plans.flatMap(([, objs]) => objs), ...attrs]
+    .map((o) => (isObject(o) ? o.id : undefined))
+    .filter(isInt);
+  const taken = db
+    .prepare("SELECT id FROM entities WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id")
+    .pluck()
+    .all(JSON.stringify(ids)) as number[];
+  if (taken.length > 0) {
+    throw new InsertError(
+      `${taken.length} ids are already in the database (first: ${taken[0]}): a document's ids ` +
+        "must miss the stored ones, so a portfolio numbers its own above its base system's",
+    );
+  }
 }
 
 export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOptions = {}): InsertReport {
+  return withSavepoint(db, () => insertDocumentRows(db, doc, opts));
+}
+
+function insertDocumentRows(db: Connection, doc: JsonObject, opts: InsertOptions): InsertReport {
   const strict = opts.strict ?? false;
   const m = loadManifest();
   const report = new InsertReport();
@@ -205,10 +376,14 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   // Ids follow the int encoder's rule, so any other value reaches the encoder and fails there.
   // A non-object entry (schema-invalid) has no id and is only counted.
   const unsupportedIds = new Set<number>();
+  const owners = new Map<number, [string, string]>();
   for (const typeName of Object.keys(components).sort()) {
-    const plan = planFor(typeName, components[typeName].length, report, strict);
-    if (plan) plans.push([plan, components[typeName]]);
-    else for (const obj of components[typeName]) if (isInt(obj?.id)) unsupportedIds.add(obj.id);
+    const objs = components[typeName];
+    const ids = objs.map((o) => o?.id).filter(isInt);
+    for (const id of ids) owners.set(id, [typeName, "Component"]);
+    const plan = planFor(typeName, objs.length, report, strict);
+    if (plan) plans.push([plan, objs]);
+    else for (const id of ids) unsupportedIds.add(id);
   }
   plans.sort((a, b) => a[0].rank - b[0].rank || (a[0].typeName < b[0].typeName ? -1 : 1));
   for (const section of Object.keys(m.unsupported_sections).sort()) {
@@ -219,12 +394,33 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
   for (const a of sectionRows(doc, "supplemental_attribute_associations")) {
     attrTypes.set(requiredId(a, "attribute_id", "supplemental_attribute_associations row"), a.attribute_type as string);
   }
+  const rawAttrs = sectionRows(doc, "supplemental_attributes");
+  for (const attr of rawAttrs) {
+    const attrType = attrTypes.get(attr.id as number);
+    if (attrType !== undefined) owners.set(attr.id as number, [attrType, "SupplementalAttribute"]);
+  }
+  const sources = derivedSources(sectionRows(doc, m.time_series.section));
+  const rawSeries = timeSeriesRows(doc, report, strict, unsupportedIds, owners);
+  if (rawSeries.length > 0) {
+    const reason = "the TypeScript SDK has no infrastore binding to read the time series sidecar";
+    unsupported(report, strict, "time_series_values", rawSeries.length, reason);
+  }
+  reportDangling(report, strict, plans, rawAttrs, rawSeries, sources);
+  // Read inside the savepoint, so no other writer can store ids past it first. Series ids
+  // move past every id stored, and references to a derived series name its source, which
+  // GridDB stores instead.
+  const offset = Number(db.prepare(m.time_series.id_offset_sql).pluck().get());
+  const remap = seriesRemap(sources, offset);
+  for (const entry of plans) entry[1] = entry[1].map((o) => remapReferences(o, remap));
+  const attrs = remapReferences(rawAttrs, remap);
+  const series = shiftIds(rawSeries, offset);
+  requireNewIds(db, plans, attrs);
   const supp = m.supplemental_attributes;
-  withSavepoint(db, () => {
+  {
     seedVocabulary(db);
     for (const [plan, objs] of plans) for (const obj of objs) writeEntity(db, plan, obj);
     const routed: [string, string, JsonObject, string][] = [];
-    for (const attr of sectionRows(doc, "supplemental_attributes")) {
+    for (const attr of attrs) {
       const id = requiredId(attr, "id", "supplemental attribute");
       const attrType = attrTypes.get(id);
       if (attrType === undefined) {
@@ -245,18 +441,17 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
       const id = BigInt(attr.id as number);
       if (table === "plants") {
         const { id: _id, name, ...rest } = attr;
-        run(db, supp.plant_sql, [id, name as string, attrType, canonicalJson(rest)], what);
+        run(db, supp.plant_sql, [id, name as string, attrType, jsonText(rest, what)], what);
       } else {
         const { id: _id, ...rest } = attr;
-        run(db, supp.attribute_sql, [id, attrType, canonicalJson(rest)], what);
+        run(db, supp.attribute_sql, [id, attrType, jsonText(rest, what)], what);
       }
       report.addInserted(table);
     }
     for (const section of m.associations) {
       for (const row of sectionRows(doc, section.section)) {
         // A row naming a component that has no table is not written either.
-        const refs = section.references.map((r) => valueAt(row, r));
-        if (refs.some((id) => isInt(id) && unsupportedIds.has(id))) {
+        if (namesUnsupported(row, section.references, unsupportedIds)) {
           report.addUnsupported(section.section, 1);
           continue;
         }
@@ -265,6 +460,51 @@ export function insertDocument(db: Connection, doc: JsonObject, opts: InsertOpti
         report.addInserted(section.section);
       }
     }
+    if (series.length > 0) {
+      const ts = m.time_series;
+      const sidecar = opts.timeSeries ?? null;
+      const storeId = BigInt(prepared(db, ts.store_sql).run(BigInt(offset), sidecar).lastInsertRowid);
+      insertAssociations(db, ts, series, report);
+      const ids = JSON.stringify(series.map((r) => r.association_id));
+      prepared(db, ts.store_rows_sql).run(storeId, ids);
+    }
+  }
+  return report;
+}
+
+/** A document file, or the one .json document in a bundle directory (PSIP writes a portfolio's base system as base_system/system.json). */
+function documentPath(path: string): string {
+  if (!statSync(path).isDirectory()) return path;
+  const docs = readdirSync(path).filter((f) => f.endsWith(".json")).sort();
+  if (docs.length !== 1) throw new InsertError(`${path}: expected one .json document, found ${docs.length}`);
+  return join(path, docs[0]);
+}
+
+const readDocument = (path: string): JsonObject => parseJson(readFileSync(path, "utf-8")) as JsonObject;
+
+/**
+ * Insert the document at path (a file or bundle directory). A portfolio's base_system_file,
+ * resolved next to it, goes in first; both in one savepoint. The sidecars are not read: this
+ * runtime has no infrastore binding.
+ */
+export function insertFile(db: Connection, path: string, opts: InsertOptions = {}): InsertReport {
+  const docPath = documentPath(path);
+  const doc = readDocument(docPath);
+  const report = new InsertReport();
+  withSavepoint(db, () => {
+    if (typeof doc.base_system_file === "string" && doc.base_system_file !== "") {
+      const base = documentPath(resolve(dirname(docPath), doc.base_system_file));
+      const system = readDocument(base);
+      report.merge(insertDocument(db, system, { ...opts, timeSeries: beside(base, system.time_series_storage_file) }));
+    }
+    const timeSeries = opts.timeSeries ?? beside(docPath, doc.time_series_storage_file);
+    report.merge(insertDocument(db, doc, { ...opts, timeSeries }));
   });
   return report;
+}
+
+/** A sidecar a document names by basename, resolved next to it. */
+function beside(path: string, name: unknown): string | undefined {
+  if (typeof name !== "string" || name === "") return undefined;
+  return resolve(dirname(path), name);
 }

@@ -41,14 +41,25 @@ def make_entity(
     conn,
     entity_id,
     entity_table="thing",
-    entity_type="thing_type",
+    entity_type=None,
     is_topology=0,
     is_dc=0,
 ):
-    """Insert an entity (and its type) so FK-bearing rows can reference it."""
+    """Insert an entity (and its type) so FK-bearing rows can reference it. Without a
+    type, the entity takes a type of entity_table, or a test type made for that table."""
+    if entity_type is None:
+        row = conn.execute(
+            "SELECT min(entity_type) FROM entity_type_tables WHERE entity_table = ?",
+            (entity_table,),
+        ).fetchone()
+        entity_type = row[0] or f"{entity_table}_type"
     conn.execute(
         "INSERT OR IGNORE INTO entity_types(name, is_topology, is_dc) VALUES (?, ?, ?)",
         (entity_type, is_topology, is_dc),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO entity_type_tables(entity_type, entity_table) VALUES (?, ?)",
+        (entity_type, entity_table),
     )
     conn.execute(
         "INSERT INTO entities(id, entity_table, entity_type) VALUES (?, ?, ?)",

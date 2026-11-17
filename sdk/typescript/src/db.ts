@@ -14,8 +14,14 @@ function versionAtLeast(found: string, min: number[]): boolean {
   return true;
 }
 
-function connect(path: string): Connection {
-  const db = new Database(path);
+function connect(path: string, create: boolean): Connection {
+  let db: Connection;
+  try {
+    // fileMustExist: a mistyped path fails instead of leaving an empty database behind.
+    db = new Database(path, { fileMustExist: !create });
+  } catch (err) {
+    throw new GridDBToolsError(`${path}: ${(err as Error).message}`);
+  }
   const found = db.prepare("SELECT sqlite_version() AS v").get() as { v: string };
   if (!versionAtLeast(found.v, [3, 45, 0])) {
     db.close();
@@ -29,7 +35,7 @@ function connect(path: string): Connection {
 }
 
 export function openDatabase(path: string): Connection {
-  const db = connect(path);
+  const db = connect(path, false);
   const found = db.pragma("user_version", { simple: true }) as number;
   const expected = loadManifest().schema_user_version;
   if (found !== expected) {
@@ -58,7 +64,7 @@ export function createDatabase(path: string): Connection {
   if (existsSync(path)) {
     throw new GridDBToolsError(`${path} already exists; createDatabase never overwrites`);
   }
-  const db = connect(path);
+  const db = connect(path, true);
   for (const name of SCHEMA_FILES) db.exec(dataText(name));
   seedVocabulary(db);
   return db;

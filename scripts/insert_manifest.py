@@ -10,12 +10,14 @@ foreign keys -- no DDL parsing). generate_insert_manifest.py is the CLI.
 import graphlib
 import json
 import os
+import sqlite3
 
 from _common import load_json, sql_literal
 from check_units_sync import build_db
 from generate_sql_schema import (
     attribute_rows,
     load_units_index,
+    resolve_ref,
     schema_doc,
     sql_type_for,
     vocabulary,
@@ -23,6 +25,26 @@ from generate_sql_schema import (
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_DIR = os.path.join(REPO_ROOT, "schema")
+# Each store's values are infrastore's SQLite export under this prefix plus "<store id>_".
+TIME_SERIES_TABLE_PREFIX = "ts_"
+# One arm per exported store; the SDKs rebuild each view as the UNION ALL of the arms,
+# which time_series_views.sql reads.
+TIME_SERIES_EXPORT_VIEWS = {
+    "time_series_export_series": (
+        "SELECT {store_id} AS store_id, partition_name, array_id, id, owner_id, name, "
+        'time_reference FROM "{prefix}all_series"'
+    ),
+    "time_series_export_values": (
+        "SELECT {store_id} AS store_id, partition_name, array_id, timestamp, issue_time, "
+        'percentile, scenario, value FROM "{prefix}all_values"'
+    ),
+}
+# The SDKs move a document's series ids past this, every id the table ever held.
+TIME_SERIES_ID_OFFSET_SQL = (
+    "SELECT max(coalesce((SELECT seq FROM sqlite_sequence "
+    "WHERE name = 'time_series_associations'), 0), "
+    "coalesce((SELECT max(id) FROM time_series_associations), 0))"
+)
 
 ENCODING_BY_KIND = {
     "integer": "int",
@@ -80,6 +102,10 @@ def attribute_plan(name, comp, prop_name, prop, schemas_root, units_index, unit_
         for c in convs
     }
     return {"field": prop_name, "unit_field": unit_field, "arms": arms, "exempt": bool(owners)}
+
+
+def fk_columns(conn, table):
+    return {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{table}')")}
 
 
 def compute_ranks(conn, tables):
@@ -206,9 +232,89 @@ def association_entry(conn, schemas_root, section, rel_file):
         for p in names
     ]
     row_sql = f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join('?' for _ in names)})"
-    fk_columns = {row[3] for row in conn.execute(f"PRAGMA foreign_key_list('{section}')")}
-    references = [p for p in names if p in fk_columns]
+    fk = fk_columns(conn, section)
+    references = [p for p in names if p in fk]
     return {"section": section, "row_sql": row_sql, "bindings": bindings, "references": references}
+
+
+def resolved_encoding(prop, schemas_root, rel_file):
+    """A wire property's encoding, following $refs down to plain string types."""
+    while "$ref" in prop:
+        prop, rel_file = resolve_ref(schemas_root, prop["$ref"], rel_file)
+    return ENCODING_BY_KIND[sql_type_for(prop, schemas_root, rel_file)[0]]
+
+
+def time_series_views(schema_dir):
+    """The CREATE VIEW statements over infrastore's export, one per entry."""
+    statements, pending = [], ""
+    with open(os.path.join(schema_dir, "time_series_views.sql"), encoding="utf-8") as f:
+        for line in f:
+            pending += line
+            if sqlite3.complete_statement(pending):
+                statements.append(pending.strip())
+                pending = ""
+    return statements
+
+
+def time_series_entry(conn, schemas_root, spec, schema_dir):
+    """Association INSERT over the union of the storable series types' wire
+    properties, plus the feature-set INSERT the SDKs pair with it and the views
+    they create after copying the export in."""
+    section = spec["section"]
+    columns = table_columns(conn, section)
+    props = {}
+    defaults = {}
+    for branch in schema_doc(schemas_root, spec["file"])["oneOf"]:
+        node, rel_file = resolve_ref(schemas_root, branch["$ref"], spec["file"])
+        if node["properties"]["time_series_type"]["const"] in spec["unsupported_types"]:
+            continue
+        for name, prop in node["properties"].items():
+            props.setdefault(name, (prop, rel_file))
+            defaults.setdefault(name, set()).add(json.dumps(prop.get("default")))
+    by_column = {}
+    for name, (prop, rel_file) in props.items():
+        column = spec["columns"].get(name, name)
+        if column not in columns:
+            raise ManifestError(f"{section}: wire property {name} has no column")
+        encoding = spec["encodings"].get(name) or resolved_encoding(prop, schemas_root, rel_file)
+        value = spec["placeholders"].get(name, "?")
+        # A default the series types disagree on, like time_series_type's, is none.
+        default = default_literal(prop if len(defaults[name]) == 1 else {}, columns[column])
+        if default is not None:
+            value = f"COALESCE({value}, {default})"
+        by_column[column] = ({"path": name, "encode": encoding}, value)
+    names = [c for c in columns if c in by_column]
+    values = [by_column[c][1] for c in names]
+    bindings = [by_column[c][0] for c in names]
+    fk = fk_columns(conn, section)
+    return {
+        "section": section,
+        "row_sql": f"INSERT INTO {section} ({', '.join(names)}) VALUES ({', '.join(values)})",
+        "bindings": bindings,
+        "references": [b["path"] for b, c in zip(bindings, names) if c in fk],
+        # DO NOTHING on the key only: OR IGNORE would also swallow the reserved-key CHECK.
+        "feature_sql": (
+            "INSERT INTO feature_sets (features_hash, key, value_kind, value_int, "
+            "value_float, value_bool, value_str) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (features_hash, key) DO NOTHING"
+        ),
+        "unsupported_types": spec["unsupported_types"],
+        "id_offset_sql": TIME_SERIES_ID_OFFSET_SQL,
+        "store_sql": "INSERT INTO time_series_stores (id_offset, sidecar) VALUES (?, ?)",
+        # Tagged by the ids this document's insert just wrote, given as a JSON array.
+        "store_rows_sql": (
+            "UPDATE time_series_associations SET store_id = ? "
+            "WHERE id IN (SELECT value FROM json_each(?))"
+        ),
+        "values_prefix_sql": "UPDATE time_series_stores SET values_prefix = ? WHERE id = ?",
+        "exported_stores_sql": (
+            "SELECT id, values_prefix FROM time_series_stores "
+            "WHERE values_prefix IS NOT NULL ORDER BY id"
+        ),
+        "table_prefix": TIME_SERIES_TABLE_PREFIX,
+        "export_views": TIME_SERIES_EXPORT_VIEWS,
+        "views_sql": time_series_views(schema_dir),
+    }
 
 
 def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
@@ -231,6 +337,9 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
         association_entry(conn, schemas_path, section, rel_file)
         for section, rel_file in config["association_sections"]
     ]
+    time_series = time_series_entry(conn, schemas_path, config["time_series"], schema_dir)
+    for sql in (time_series["row_sql"], time_series["feature_sql"]):
+        conn.execute("EXPLAIN " + sql, [None] * sql.count("?"))
     return {
         "schema_user_version": conn.execute("PRAGMA user_version").fetchone()[0],
         "vocabulary": vocabulary(inputs["config"], components, schemas_path),
@@ -247,6 +356,7 @@ def build_manifest(schemas_path, schema_dir=SCHEMA_DIR):
             ),
         },
         "associations": associations,
+        "time_series": time_series,
         "unsupported_sections": config["unsupported_sections"],
     }
 

@@ -46,6 +46,7 @@
         "prime_mover_type": {"references": "prime_mover_types(name)"},
         "fuel": {"references": "fuels(name)"},
         "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> balancing_topology"]},
         "rating": {"checks": ["rating >= 0"]},
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
@@ -77,6 +78,7 @@
         "name": {},
         "prime_mover_type": {"references": "prime_mover_types(name)"},
         "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> balancing_topology"]},
         "rating": {"checks": ["rating >= 0"]},
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
@@ -101,6 +103,7 @@
         "name": {},
         "prime_mover_type": {"default": "HY", "references": "prime_mover_types(name)"},
         "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> balancing_topology"]},
         "rating": {"checks": ["rating >= 0"]},
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
@@ -139,6 +142,7 @@
         "prime_mover_type": {"references": "prime_mover_types(name)"},
         "storage_technology_type": {"references": "storage_technology_types(name)"},
         "bus": {"column": "balancing_topology", "references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> balancing_topology"]},
         "rating": {"checks": ["rating >= 0"]},
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
@@ -184,7 +188,8 @@
         "level_data_type": {},
         "evaporative_loss": {"checks": ["evaporative_loss >= 0"]}
       },
-      "attribute_channel": ["upstream_turbines", "downstream_turbines", "upstream_reservoirs"]
+      "attribute_channel": ["upstream_turbines", "downstream_turbines", "upstream_reservoirs"],
+      "attribute_references": {"upstream_turbines": "hydro_generators", "downstream_turbines": "hydro_generators", "upstream_reservoirs": "hydro_reservoirs"}
     },
     "loads": {
       "columns": {
@@ -244,8 +249,33 @@
         "angle_limits": {}
       }
     },
+    "generic_arc_impedances": {
+      "interface_member": true,
+      "arc_domain": "AC",
+      "comment": [
+        "Generic series impedance on an arc (PSY GenericArcImpedance). Its own table,",
+        "not a transmission_lines variant: r may be negative here (equivalent-network",
+        "branches), it has no thermal rating (only an optional operational_flow_limit),",
+        "and it carries no shunt (b/g) or angle_limits. r/x are always per-unit on",
+        "base_power, which records the system base."
+      ],
+      "columns": {
+        "id": {},
+        "name": {},
+        "arc": {"column": "arc_id", "references": "arcs (id) ON DELETE CASCADE"},
+        "r": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "x": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
+        "base_power": {"checks": ["base_power > 0"]},
+        "power_units": {},
+        "available": {"default": 1},
+        "active_power_flow": {"default": 0.0},
+        "reactive_power_flow": {"default": 0.0},
+        "operational_flow_limit": {}
+      }
+    },
     "transmission_interchanges": {
       "interface_member": true,
+      "constraints": ["CHECK (from_area <> to_area)"],
       "comment": [
         "Physical flow limits between areas or balancing topologies, distinct from",
         "transmission_lines: these enforce market-level interchange limits."
@@ -339,8 +369,8 @@
       "comment": [
         "Switches and breakers connecting AC buses (PSY DiscreteControlledACBranch).",
         "r/x are always per-unit on base_power -- this component has no",
-        "natural-units option in PSY, unlike transmission_lines. rating follows",
-        "power_units, like transmission_lines.continuous_rating."
+        "natural-units option in PSY, unlike transmission_lines. rating, rating_b and",
+        "rating_c follow power_units, like transmission_lines.continuous_rating."
       ],
       "columns": {
         "id": {},
@@ -349,6 +379,8 @@
         "r": {"checks": ["r >= 0"], "unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
         "x": {"checks": ["x >= 0"], "unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "arc_id->arcs.from_id->balancing_topologies.base_voltage"}},
         "rating": {"checks": ["rating >= 0"]},
+        "rating_b": {"checks": ["rating_b >= 0"]},
+        "rating_c": {"checks": ["rating_c >= 0"]},
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
         "discrete_branch_type": {},
@@ -377,7 +409,8 @@
         "x": {"unit_base": {"base_power_ref": "base_power", "base_voltage_ref": "base_voltage_primary"}},
         "parameter_units": {},
         "control_objective": {},
-        "regulated_bus_number": {},
+        "regulated_bus": {"references": "balancing_topologies (id)"},
+        "regulated_bus_orientation": {},
         "number_of_tap_positions": {},
         "rating": {"checks": ["rating >= 0"]},
         "rating_b": {"checks": ["rating_b >= 0"]},
@@ -474,7 +507,8 @@
         "reactive_power_limits_to": {},
         "operational_flow_limit": {}
       },
-      "attribute_channel": ["loss", "r", "power_transfer_setpoint", "current_transfer_setpoint", "scheduled_dc_voltage", "rectifier_bridges", "rectifier_delay_angle_limits", "rectifier_rc", "rectifier_xc", "rectifier_base_voltage", "inverter_bridges", "inverter_extinction_angle_limits", "inverter_rc", "inverter_xc", "inverter_base_voltage", "control_mode", "switch_mode_voltage", "compounding_resistance", "min_compounding_voltage", "rectifier_transformer_ratio", "rectifier_tap_setting", "rectifier_tap_limits", "rectifier_tap_step", "rectifier_delay_angle", "rectifier_capacitor_reactance", "inverter_transformer_ratio", "inverter_tap_setting", "inverter_tap_limits", "inverter_tap_step", "inverter_extinction_angle", "inverter_capacitor_reactance", "g", "dc_current", "reactive_power_from", "dc_control_from", "ac_control_from", "dc_power_setpoint_from", "dc_voltage_setpoint_from", "power_factor_setpoint_from", "ac_voltage_setpoint_from", "rated_ac_voltage_from", "converter_loss_from", "max_dc_current_from", "power_factor_weighting_fraction_from", "voltage_limits_from", "dc_voltage_droop_from", "reactive_power_to", "dc_control_to", "ac_control_to", "dc_power_setpoint_to", "dc_voltage_setpoint_to", "power_factor_setpoint_to", "ac_voltage_setpoint_to", "rated_ac_voltage_to", "converter_loss_to", "max_dc_current_to", "power_factor_weighting_fraction_to", "voltage_limits_to", "dc_voltage_droop_to", "rated_dc_voltage", "remote_bus_control_from", "remote_bus_control_to"]
+      "attribute_channel": ["loss", "r", "power_transfer_setpoint", "current_transfer_setpoint", "scheduled_dc_voltage", "rectifier_bridges", "rectifier_delay_angle_limits", "rectifier_rc", "rectifier_xc", "rectifier_base_voltage", "inverter_bridges", "inverter_extinction_angle_limits", "inverter_rc", "inverter_xc", "inverter_base_voltage", "control_mode", "switch_mode_voltage", "compounding_resistance", "min_compounding_voltage", "rectifier_transformer_ratio", "rectifier_tap_setting", "rectifier_tap_limits", "rectifier_tap_step", "rectifier_delay_angle", "rectifier_capacitor_reactance", "inverter_transformer_ratio", "inverter_tap_setting", "inverter_tap_limits", "inverter_tap_step", "inverter_extinction_angle", "inverter_capacitor_reactance", "g", "dc_current", "reactive_power_from", "dc_control_from", "ac_control_from", "dc_power_setpoint_from", "dc_voltage_setpoint_from", "power_factor_setpoint_from", "rated_ac_voltage_from", "converter_loss_from", "max_dc_current_from", "power_factor_weighting_fraction_from", "voltage_limits_from", "dc_voltage_droop_from", "reactive_power_to", "dc_control_to", "ac_control_to", "dc_power_setpoint_to", "dc_voltage_setpoint_to", "power_factor_setpoint_to", "rated_ac_voltage_to", "converter_loss_to", "max_dc_current_to", "power_factor_weighting_fraction_to", "voltage_limits_to", "dc_voltage_droop_to", "rated_dc_voltage", "remote_regulated_bus_from", "remote_regulated_bus_to"],
+      "attribute_references": {"remote_regulated_bus_from": "balancing_topologies", "remote_regulated_bus_to": "balancing_topologies"}
     },
     "tmodel_hvdc_lines": {
       "interface_member": true,
@@ -512,6 +546,7 @@
         "id": {},
         "name": {},
         "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> bus"]},
         "available": {"default": 1},
         "reactive_power": {"default": 0.0},
         "rating": {"checks": ["rating > 0"]},
@@ -553,6 +588,7 @@
         "id": {},
         "name": {},
         "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> bus"]},
         "available": {"default": 1},
         "admittance_units": {},
         "Y_increase": {},
@@ -560,7 +596,6 @@
         "number_of_steps": {},
         "solved_admittance": {},
         "control_mode": {},
-        "regulated_bus_number": {},
         "voltage_limits": {"unit_base": {"base_voltage_ref": "bus->balancing_topologies.base_voltage"}},
         "reactive_power_range_limits": {}
       },
@@ -579,6 +614,7 @@
         "id": {},
         "name": {},
         "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> bus"]},
         "available": {"default": 1},
         "base_voltage": {"checks": ["base_voltage > 0"]},
         "base_power": {"checks": ["base_power > 0"]},
@@ -607,12 +643,12 @@
         "id": {},
         "name": {},
         "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> bus"]},
         "dc_bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
         "dc_control": {"not_null": true, "default": "DC_VOLTAGE"},
         "ac_control": {"not_null": true, "default": "AC_REACTIVE_POWER"},
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
-        "remote_bus_control": {"checks": ["remote_bus_control >= 1"]},
         "power_factor_weighting_fraction": {"checks": ["power_factor_weighting_fraction >= 0"]},
         "voltage_limits": {},
         "available": {"default": 1},
@@ -622,8 +658,7 @@
         "reactive_power_limits": {},
         "dc_power_setpoint": {},
         "dc_voltage_setpoint": {},
-        "power_factor_setpoint": {},
-        "ac_voltage_setpoint": {}
+        "power_factor_setpoint": {}
       },
       "attribute_channel": ["dc_current", "max_dc_current", "loss_function", "dc_voltage_droop", "rated_dc_voltage", "rated_ac_voltage"],
       "skip": ["dynamic_injector"],
@@ -631,22 +666,19 @@
     },
     "facts_control_devices": {
       "comment": [
-        "FACTS control device (PSY FACTSControlDevice). voltage_setpoint is stored flexibly",
-        "per parameter_units (COMPONENT_BASE: pu on bus base_voltage, the native external form;",
-        "NATURAL_UNITS: kV). power_units is a second, independent discriminator governing",
-        "max_reactive_power (COMPONENT_BASE: pu; NATURAL_UNITS: MVAr)."
+        "FACTS control device (PSY FACTSControlDevice). The voltage target is the",
+        "voltage_setpoint of the regulated bus (remote_regulated_bus, or bus when NULL).",
+        "power_units governs max_reactive_power (COMPONENT_BASE: pu; NATURAL_UNITS: MVAr)."
       ],
       "columns": {
         "id": {},
         "name": {},
         "bus": {"references": "balancing_topologies (id) ON DELETE CASCADE"},
-        "voltage_setpoint": {"unit_base": {"base_voltage_ref": "bus->balancing_topologies.base_voltage"}},
-        "voltage_setpoint_units": {"column": "parameter_units"},
+        "remote_regulated_bus": {"references": "balancing_topologies (id)", "checks": ["remote_regulated_bus <> bus"]},
         "base_power": {"checks": ["base_power > 0"]},
         "power_units": {},
         "max_reactive_power": {"checks": ["max_reactive_power >= 0"]},
         "shunt_control_type": {},
-        "regulated_bus_number": {},
         "available": {"default": 1},
         "control_mode": {},
         "max_shunt_current": {},
@@ -671,6 +703,7 @@
         "bustype": {},
         "angle": {},
         "magnitude": {},
+        "voltage_setpoint": {"checks": ["voltage_setpoint > 0"]},
         "voltage_limits": {},
         "load_zone": {"references": "balancing_topologies (id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"}
       },
@@ -725,9 +758,9 @@
         "efficiency": {},
         "min_discharge_fraction": {},
         "losses": {},
-        "capital_costs_charge": {"sql": "TEXT NULL"},
-        "capital_costs_discharge": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'"},
-        "capital_costs_energy": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\": \"INPUT_OUTPUT\", \"function_data\": {\"function_type\": \"LINEAR\", \"proportional_term\": 0, \"constant_term\": 0}}'"},
+        "capital_costs_charge": {"sql": "TEXT NULL CHECK (json_valid(capital_costs_charge))"},
+        "capital_costs_discharge": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}' CHECK (json_valid(capital_costs_discharge))"},
+        "capital_costs_energy": {"sql": "TEXT NOT NULL DEFAULT '{\"curve_type\":\"INPUT_OUTPUT\",\"function_data\":{\"constant_term\":0,\"function_type\":\"LINEAR\",\"proportional_term\":0}}' CHECK (json_valid(capital_costs_energy))"},
         "interconnection_cost": {"sql": "REAL NOT NULL DEFAULT 0.0"},
         "operation_costs": {"not_null": true, "default": {"cost_type": "THERMAL", "fixed": 0, "shut_down": 0, "start_up": 0, "variable": {"variable_cost_type": "COST", "power_units": "NATURAL_UNITS", "value_curve": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}, "vom_cost": {"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}}}},
         "financial_data": {}

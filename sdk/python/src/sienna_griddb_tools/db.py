@@ -1,6 +1,7 @@
 """Create, open, and seed GridDB databases."""
 
 import os
+import pathlib
 import sqlite3
 
 from .errors import GridDBToolsError
@@ -10,12 +11,20 @@ MIN_SQLITE = (3, 45, 0)
 SCHEMA_FILES = ("schema.sql", "triggers.sql", "unit_registry.sql", "views.sql")
 
 
-def _connect(path):
+def _connect(path, *, create):
     if sqlite3.sqlite_version_info < MIN_SQLITE:
         raise GridDBToolsError(
             f"SQLite {sqlite3.sqlite_version} is older than the required 3.45.0"
         )
-    conn = sqlite3.connect(path, isolation_level=None)
+    if create:
+        conn = sqlite3.connect(path, isolation_level=None)
+    else:
+        # mode=rw: a mistyped path fails instead of leaving an empty database behind.
+        uri = pathlib.Path(path).absolute().as_uri() + "?mode=rw"
+        try:
+            conn = sqlite3.connect(uri, uri=True, isolation_level=None)
+        except sqlite3.OperationalError as exc:
+            raise GridDBToolsError(f"{path}: {exc}") from exc
     conn.execute("PRAGMA foreign_keys = ON")
     # A document inserts in one savepoint, so every row opens a statement journal;
     # on disk that file I/O dominates the insert. Set at open: no temp tables yet.
@@ -24,7 +33,7 @@ def _connect(path):
 
 
 def open_database(path):
-    conn = _connect(path)
+    conn = _connect(path, create=False)
     found = conn.execute("PRAGMA user_version").fetchone()[0]
     expected = load_manifest()["schema_user_version"]
     if found != expected:
@@ -57,7 +66,7 @@ def create_database(path):
         raise FileExistsError(
             f"{path} already exists; create_database never overwrites"
         )
-    conn = _connect(path)
+    conn = _connect(path, create=True)
     for name in SCHEMA_FILES:
         conn.executescript(data_text(name))
     seed_vocabulary(conn)

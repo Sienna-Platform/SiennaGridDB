@@ -1,0 +1,367 @@
+feature_row(hash, key, v::Bool) = Any[hash, key, "bool", missing, missing, Int(v), missing]
+feature_row(hash, key, v::Integer) =
+    Any[hash, key, "int", Int64(v), missing, missing, missing]
+function feature_row(hash, key, v::AbstractFloat)
+    return Any[hash, key, "float", missing, Float64(v), missing, missing]
+end
+function feature_row(hash, key, v::AbstractString)
+    return Any[hash, key, "str", missing, missing, missing, String(v)]
+end
+
+# A row whose owner the document holds names that owner's type and category; a
+# mislabel is invalid data, like a dangling reference.
+function require_owner_label(row::AbstractDict, owners::Dict{Int, Tuple{String, String}})
+    owner = get(row, "owner_id", nothing)
+    (is_int_value(owner) && haskey(owners, Int(owner))) || return nothing
+    held = owners[Int(owner)]
+    label = (get(row, "owner_type", nothing), get(row, "owner_category", nothing))
+    if label != held
+        what = "time series association id=$(get(row, "association_id", nothing))"
+        is = "owner_id $owner is $(held[1]) ($(held[2]))"
+        throw(InsertError("$what: $is, not $(label[1]) ($(label[2]))"))
+    end
+    return nothing
+end
+
+"""
+The association rows to insert, after reporting the ones GridDB cannot store:
+unsupported series types and rows naming a component in `unsupported_ids`. `owners`
+maps each id the document holds to its `(owner_type, owner_category)`.
+"""
+function storable_time_series(
+    doc::AbstractDict,
+    report::InsertReport,
+    strict::Bool,
+    unsupported_ids::Set{Int},
+    owners::Dict{Int, Tuple{String, String}},
+)
+    plan = manifest().time_series
+    rows = section_rows(doc, plan.section)
+    foreach(row -> require_owner_label(row, owners), rows)
+    counts = Dict{String, Int}()
+    stored = Any[]
+    for row in rows
+        series_type = get(row, "time_series_type", "")
+        if haskey(plan.unsupported_types, series_type)
+            counts[series_type] = get(counts, series_type, 0) + 1
+        elseif names_unsupported(row, plan.references, unsupported_ids)
+            add_unsupported!(report, plan.section, 1)
+        else
+            require_positive_id(row)
+            push!(stored, row)
+        end
+    end
+    for series_type in sort!(collect(keys(counts)))
+        reason = plan.unsupported_types[series_type]
+        mark_unsupported!(report, strict, series_type, counts[series_type], reason)
+    end
+    return stored
+end
+
+"""
+Association rows, then each feature set the first time its hash appears.
+"""
+function insert_associations!(
+    cache::StatementCache,
+    plan::TimeSeriesPlan,
+    rows::Vector{Any},
+    report::InsertReport,
+)
+    hash_at = findfirst(b -> is_features_hash(b.encoding), plan.bindings)
+    features_seen = Set{String}()
+    for row in rows
+        what = "time series association id=$(get(row, "association_id", nothing))"
+        params = bound_params(plan.bindings, row, what)
+        run_sql(cache, plan.row_sql, params, what)
+        hash = params[hash_at]::String
+        if !(hash in features_seen)
+            push!(features_seen, hash)
+            for (key, value) in row["features"]
+                run_sql(cache, plan.feature_sql, feature_row(hash, key, value), what)
+            end
+        end
+        add_inserted!(report, plan.section)
+    end
+    return nothing
+end
+
+is_features_hash(::FeaturesHashEncoding) = true
+is_features_hash(::Encoding) = false
+
+const DERIVED = "DeterministicSingleTimeSeries"
+
+# A store mints ids from 1; an id below would land on an id already used.
+function require_positive_id(row::AbstractDict)
+    id = get(row, "association_id", nothing)
+    if is_int_value(id) && Int(id) <= 0
+        throw(InsertError("time series association id=$id: ids start at 1"))
+    end
+    return nothing
+end
+
+function series_key(row::AbstractDict)
+    return (
+        get(row, "owner_id", nothing),
+        get(row, "owner_category", nothing),
+        get(row, "name", nothing),
+        feature_key(get(row, "features", nothing)),
+        get(row, "uri", nothing),
+    )
+end
+
+# Tells 1, 1.0 and true apart, as features_hash does. A non-map fails at the encoder.
+function feature_key(d::AbstractDict)
+    return sort!(
+        Tuple{String, DataType, Any}[(String(k), typeof(v), v) for (k, v) in d];
+        by=first,
+    )
+end
+feature_key(_) = Tuple{String, DataType, Any}[]
+
+"""
+`DeterministicSingleTimeSeries` id => its `SingleTimeSeries` id. A derived series is a
+view over its source's array: same owner, name, features and uri.
+"""
+function derived_sources(rows)
+    sources = Dict(
+        series_key(r) => get(r, "association_id", nothing) for
+        r in rows if get(r, "time_series_type", nothing) == "SingleTimeSeries"
+    )
+    derived = Dict{Int, Int}()
+    for r in rows
+        get(r, "time_series_type", nothing) == DERIVED || continue
+        source = get(sources, series_key(r), nothing)
+        id = get(r, "association_id", nothing)
+        if is_int_value(source) && is_int_value(id)
+            derived[Int(id)] = Int(source)
+        end
+    end
+    return derived
+end
+
+function is_reference(key::AbstractString)
+    return key in ("association_id", "fuel_cost_time_series") ||
+           endswith(key, "_association_id")
+end
+
+"""
+A document's series id to the one GridDB stores: a derived series' names its source, and
+every id moves past `offset`.
+"""
+struct SeriesRemap
+    sources::Dict{Int, Int}
+    offset::Int
+end
+(r::SeriesRemap)(ref::Int) = get(r.sources, ref, ref) + r.offset
+is_identity(r::SeriesRemap) = isempty(r.sources) && iszero(r.offset)
+
+"""
+The association rows with their ids moved past `offset`; any other id reaches the
+encoder and fails there.
+"""
+function shift_ids(rows::Vector{Any}, offset::Int)
+    if iszero(offset)
+        return rows
+    end
+    return Any[shifted_row(r, offset) for r in rows]
+end
+
+function shifted_row(row::AbstractDict, offset::Int)
+    id = get(row, "association_id", nothing)
+    is_int_value(id) || return row
+    out = Dict{String, Any}(row)
+    out["association_id"] = Int(id) + offset
+    return out
+end
+
+"""
+`node` with each time series reference (the keys `dangling_time_series_references` reads)
+replaced by `remap(id)`. A dict or vector is copied only when something inside it
+changes; the caller's stays as it was.
+"""
+function remap_references(node::Union{AbstractDict, AbstractVector}, remap::SeriesRemap)
+    out = node
+    is_identity(remap) && return out
+    for (k, v) in pairs(node)
+        new = remapped(k, v, remap)
+        new === v && continue
+        if out === node
+            out = widened_copy(node)
+        end
+        out[k] = new
+    end
+    return out
+end
+remap_references(node, ::SeriesRemap) = node
+
+widened_copy(node::AbstractDict) = Dict{String, Any}(node)
+widened_copy(node::AbstractVector) = Vector{Any}(node)
+
+"""
+`(entity id, key, id)` for each time series reference that names no id in `stored_ids`.
+`payloads` holds `(entity id, payload)` for every row the insert writes.
+"""
+function dangling_references(payloads::Vector{Tuple{Int, Any}}, stored_ids::Set{Int})
+    found = Tuple{Int, String, Int}[]
+    for (entity_id, payload) in payloads
+        collect_dangling!(found, entity_id, payload, stored_ids)
+    end
+    return found
+end
+
+function collect_dangling!(found, entity_id::Int, node::AbstractDict, stored_ids::Set{Int})
+    for (k, v) in node
+        collect_dangling!(found, entity_id, String(k), v, stored_ids)
+    end
+    return found
+end
+function collect_dangling!(
+    found,
+    entity_id::Int,
+    node::AbstractVector,
+    stored_ids::Set{Int},
+)
+    for v in node
+        collect_dangling!(found, entity_id, v, stored_ids)
+    end
+    return found
+end
+collect_dangling!(found, ::Int, _, ::Set{Int}) = found
+
+function collect_dangling!(found, entity_id::Int, key::String, v, stored_ids::Set{Int})
+    if is_reference(key) && is_int_value(v)
+        if !(Int(v) in stored_ids)
+            push!(found, (entity_id, key, Int(v)))
+        end
+        return found
+    end
+    return collect_dangling!(found, entity_id, v, stored_ids)
+end
+
+function remapped(key::AbstractString, v, remap::SeriesRemap)
+    if is_reference(key) && is_int_value(v)
+        new = remap(Int(v))
+        if new == v
+            return v
+        end
+        return new
+    end
+    return remap_references(v, remap)
+end
+remapped(_, v, remap::SeriesRemap) = remap_references(v, remap)
+
+"""
+    export_values(f, sidecar, rows, prefix)
+
+Write the rows' arrays from the HDF5 `sidecar`, which is only ever read, as infrastore's
+SQLite export under `prefix` to a temporary file, and call `f` with its path. Defined
+by the InfraStore extension.
+"""
+function export_values end
+
+function infrastore_loaded()
+    return !isnothing(Base.get_extension(@__MODULE__, :SiennaGridDBToolsInfraStoreExt))
+end
+
+"""
+Whether this session can store the values from `sidecar`; `values_missing_reason` says
+why not.
+"""
+values_storable(::Nothing) = false
+values_storable(sidecar::AbstractString) = isfile(sidecar) && infrastore_loaded()
+
+values_missing_reason(::Nothing) = "no time series sidecar given"
+function values_missing_reason(sidecar::AbstractString)
+    isfile(sidecar) || return "time series sidecar $sidecar not found"
+    return "load InfraStore.jl to read the time series sidecar"
+end
+
+"""
+Rebuild the views uniting every exported store, one UNION ALL arm per store.
+"""
+function unite_exports!(db::SQLite.DB, plan::TimeSeriesPlan)
+    stores =
+        [(r.id, r.values_prefix) for r in DBInterface.execute(db, plan.exported_stores_sql)]
+    for (name, arm) in plan.export_views
+        arms = join(
+            (
+                replace(arm, "{store_id}" => string(id), "{prefix}" => p) for
+                (id, p) in stores
+            ),
+            " UNION ALL ",
+        )
+        DBInterface.execute(db, "DROP VIEW IF EXISTS \"$name\"")
+        DBInterface.execute(db, "CREATE VIEW \"$name\" AS $arms")
+    end
+    return nothing
+end
+
+"""
+infrastore's export, written into `db` inside the caller's transaction: its tables with
+their rows, then their indexes and views, then GridDB's views over it.
+"""
+function copy_export!(
+    db::SQLite.DB,
+    path::AbstractString,
+    plan::TimeSeriesPlan,
+    store_id::Int,
+    prefix::String,
+)
+    src = SQLite.DB(path)
+    try
+        # sqlite_% objects (sqlite_sequence, sqlite_stat1) are SQLite's own and cannot be created.
+        sql = "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY rowid"
+        objects = [(r.type, r.name, r.sql) for r in DBInterface.execute(src, sql)]
+        for (kind, name, ddl) in objects
+            kind == "table" || continue
+            DBInterface.execute(db, ddl)
+            info =
+                DBInterface.execute(src, "SELECT name FROM pragma_table_info(?)", (name,))
+            columns = [Symbol(r.name) for r in info]
+            rows = DBInterface.execute(src, "SELECT * FROM \"$name\"")
+            marks = join(fill("?", length(columns)), ", ")
+            stmt = SQLite.Stmt(db, "INSERT INTO \"$name\" VALUES ($marks)")
+            try
+                for row in rows
+                    DBInterface.execute(stmt, Any[getproperty(row, c) for c in columns])
+                end
+            finally
+                DBInterface.close!(stmt)
+            end
+        end
+        for (kind, _, ddl) in objects
+            kind == "table" || DBInterface.execute(db, ddl)
+        end
+        DBInterface.execute(db, plan.values_prefix_sql, (prefix, store_id))
+        unite_exports!(db, plan)
+        foreach(sql -> DBInterface.execute(db, sql), plan.views_sql)
+    finally
+        close(src)
+    end
+    return nothing
+end
+
+# InfraStore exports through its own connection and bundled SQLite, so it can neither join
+# the document's savepoint nor safely write to `db`'s file. It writes a temporary file that
+# copy_export! brings in, keeping the document atomic.
+is_sqlite_error(::SQLite.SQLiteException) = true
+is_sqlite_error(_) = false
+
+function store_values!(
+    db::SQLite.DB,
+    plan::TimeSeriesPlan,
+    rows::Vector{Any},
+    sidecar,
+    store_id::Int,
+)
+    prefix = "$(plan.table_prefix)$(store_id)_"
+    export_values(sidecar, rows, prefix) do path
+        try
+            copy_export!(db, path, plan, store_id, prefix)
+        catch e
+            is_sqlite_error(e) || rethrow()
+            throw(InsertError("time series values: $(sprint(showerror, e))"))
+        end
+    end
+    return nothing
+end

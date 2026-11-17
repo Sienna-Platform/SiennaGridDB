@@ -201,6 +201,9 @@ def test_branch_parameter_columns_store_values(fresh_db):
         make_entity(fresh_db, arc, entity_table="arcs")
         # arc endpoints must be topology-type entities (is_topology = 1).
         fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+        fresh_db.execute(
+            "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+        )
         for eid in (a, b):
             fresh_db.execute(
                 "INSERT INTO entities(id, entity_table, entity_type) "
@@ -240,7 +243,7 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     """r/x are first-class discrete_controlled_ac_branches columns (pu -- this
     component has no natural-units option in PSY, unlike transmission_lines),
     registered in unit_conventions with no discriminator. rating is stored
-    flexibly per power_units, asserted separately below. base_power is the
+    flexibly per power_units, as are rating_b and rating_c, asserted below. base_power is the
     component base r/x are per-unitized against, mirroring transmission_lines."""
     cols = {
         row[1]: row[2]
@@ -278,6 +281,10 @@ def test_discrete_controlled_ac_branches_columns_and_units(fresh_db):
     } == {
         ("rating", "COMPONENT_BASE"): ("ApparentPower", "pu"),
         ("rating", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
+        ("rating_b", "COMPONENT_BASE"): ("ApparentPower", "pu"),
+        ("rating_b", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
+        ("rating_c", "COMPONENT_BASE"): ("ApparentPower", "pu"),
+        ("rating_c", "NATURAL_UNITS"): ("ApparentPower", "MVA"),
         ("operational_flow_limit", "COMPONENT_BASE"): ("ActivePower", "pu"),
         ("operational_flow_limit", "NATURAL_UNITS"): ("ActivePower", "MW"),
     }
@@ -290,6 +297,9 @@ def test_discrete_controlled_ac_branches_store_and_reject_invalid(fresh_db):
     arc, a, b = 501, 502, 503
     make_entity(fresh_db, arc, entity_table="arcs")
     fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    fresh_db.execute(
+        "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+    )
     for eid in (a, b):
         fresh_db.execute(
             "INSERT INTO entities(id, entity_table, entity_type) "
@@ -328,6 +338,9 @@ def test_series_compensators_store_bypassed_flag(fresh_db):
     arc, a, b = 601, 602, 603
     make_entity(fresh_db, arc, entity_table="arcs")
     fresh_db.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    fresh_db.execute(
+        "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+    )
     for eid in (a, b):
         fresh_db.execute(
             "INSERT INTO entities(id, entity_table, entity_type) "
@@ -500,4 +513,3 @@ def test_transformer_tables_magnetizing_shunt_units(fresh_db):
             ("magnetizing_shunt.imag", "Susceptance", "pu"),
             ("magnetizing_shunt.real", "Conductance", "pu"),
         ]
-

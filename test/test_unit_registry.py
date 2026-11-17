@@ -22,8 +22,8 @@ from conftest import SCHEMA_DIR, SCRIPTS_DIR, load_schemas_json, make_entity
 
 # Expected seed row counts (current sealed state).
 EXPECTED_QUANTITY_TYPES = 42
-EXPECTED_ALLOWED_UNITS = 67
-EXPECTED_UNIT_CONVENTIONS = 554
+EXPECTED_ALLOWED_UNITS = 68
+EXPECTED_UNIT_CONVENTIONS = 560
 
 VERIFY_SCRIPT = SCRIPTS_DIR / "verify_unit_registry.py"
 REGISTRY_SQL = SCHEMA_DIR / "unit_registry.sql"
@@ -43,8 +43,6 @@ SEALED_TABLES = [
 COMPLETENESS_ALLOWLIST = {
     ("storage_technologies", "region"),
     ("supply_technologies", "region"),
-    # structural value columns; units live on time_series_associations for series data
-    ("static_time_series", "value"),
     # structural value column; units live in attribute conventions for supplemental attrs
     ("supplemental_attributes", "value"),
     # structural TYPE+value JSON store (like supplemental_attributes); no fixed unit
@@ -65,8 +63,8 @@ COMPLETENESS_ALLOWLIST = {
 def insert_attribute(conn, entity_id, name, value, unit=None, quantity_kind=None):
     conn.execute(
         "INSERT INTO attributes(entity_id, type, name, value, unit, quantity_kind) "
-        "VALUES (?, 'test', ?, ?, ?, ?)",
-        (entity_id, name, value, unit, quantity_kind),
+        "VALUES (?, (SELECT entity_type FROM entities WHERE id = ?), ?, ?, ?, ?)",
+        (entity_id, entity_id, name, value, unit, quantity_kind),
     )
 
 
@@ -381,18 +379,20 @@ def _insert_association(
     owner_category="Component",
     name="load",
     assoc_id=None,
+    unit_system=None,
 ):
     # id is the store-minted id (AUTOINCREMENT); left to auto-assign unless a
     # test needs a specific value (e.g. to force a collision).
     columns = [
         "owner_id", "owner_type", "owner_category", "time_series_type", "name",
         "initial_timestamp", "resolution", "length", "units", "quantity_kind",
-        "uri", "data_hash", "features_hash",
+        "unit_system", "uri", "data_hash", "features_hash",
     ]
+    owner = conn.execute("SELECT entity_type FROM entities WHERE id = ?", (owner_id,)).fetchone()
     values = [
-        owner_id, "thing_type", owner_category, "SingleTimeSeries", name,
+        owner_id, owner[0] if owner else "thing_type", owner_category, "SingleTimeSeries", name,
         "2020-01-01T00:00:00", "PT1H", 24, units, quantity_kind,
-        uri, "01" * 32, "02" * 32,
+        unit_system, uri, "01" * 32, "02" * 32,
     ]
     if assoc_id is not None:
         columns.insert(0, "id")
@@ -403,42 +403,6 @@ def _insert_association(
         f"VALUES ({placeholders})",
         values,
     )
-
-
-def test_static_time_series_without_association_rejected(fresh_db):
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match=r"static_time_series\.uri must exist in time_series_associations",
-    ):
-        fresh_db.execute(
-            "INSERT INTO static_time_series(uri, timestep, value) "
-            "VALUES ('static:load-1', 0, 1.0)"
-        )
-
-
-def test_static_time_series_with_association_accepted(fresh_db):
-    make_entity(fresh_db, 1)
-    _insert_association(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load-1', 0, 1.0)"
-    )
-    (count,) = fresh_db.execute(
-        "SELECT COUNT(*) FROM static_time_series WHERE uri = 'static:load-1'"
-    ).fetchone()
-    assert count == 1
-
-
-def test_static_time_series_update_uri_to_orphan_rejected(fresh_db):
-    make_entity(fresh_db, 1)
-    _insert_association(fresh_db, 1)
-    fresh_db.execute(
-        "INSERT INTO static_time_series(uri, timestep, value) VALUES ('static:load-1', 0, 1.0)"
-    )
-    with pytest.raises(
-        sqlite3.IntegrityError,
-        match=r"static_time_series\.uri must exist in time_series_associations",
-    ):
-        fresh_db.execute("UPDATE static_time_series SET uri = 'static:orphan'")
 
 
 def test_association_data_hash_optional(fresh_db):
@@ -475,6 +439,27 @@ def test_association_registered_quantity_kind_missing_unit_rejected(fresh_db):
         match=r"registered .quantity_kind, unit. pair",
     ):
         _insert_association(fresh_db, 1, units=None, quantity_kind="ActivePower")
+
+
+def test_association_per_unit_missing_unit_accepted(fresh_db):
+    """A COMPONENT_BASE series is per-unit: quantity_kind alone says what it
+    measures, as PSY writes max_active_power."""
+    make_entity(fresh_db, 1)
+    _insert_association(
+        fresh_db, 1, quantity_kind="ActivePower", unit_system="component_base"
+    )
+
+
+def test_association_per_unit_bad_unit_rejected(fresh_db):
+    make_entity(fresh_db, 1)
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match=r"registered .quantity_kind, unit. pair",
+    ):
+        _insert_association(
+            fresh_db, 1, units="bananas", quantity_kind="ActivePower",
+            unit_system="component_base",
+        )
 
 
 def test_association_registered_pair_accepted(fresh_db):
@@ -533,11 +518,31 @@ def test_association_owner_category_attribute_domain_enforced(fresh_db):
         match=r"owner_id must exist in supplemental_attributes",
     ):
         _insert_association(fresh_db, 1, owner_category="SupplementalAttribute")
-    make_entity(fresh_db, 2, entity_table="supplemental_attributes")
+    make_entity(fresh_db, 2, "supplemental_attributes", "GeographicInfo")
     fresh_db.execute(
-        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'geo', '{}')"
+        "INSERT INTO supplemental_attributes(id, TYPE, value) VALUES (2, 'GeographicInfo', '{}')"
     )
     _insert_association(fresh_db, 2, owner_category="SupplementalAttribute")
+
+
+def test_association_owner_category_attribute_accepts_plant(fresh_db):
+    """Plant-type attributes live in plants, so a plant owns series as a
+    SupplementalAttribute, on insert and update alike."""
+    make_entity(fresh_db, 1)
+    make_entity(fresh_db, 3, "plants", "ThermalPowerPlant")
+    fresh_db.execute(
+        "INSERT INTO plants(id, name, TYPE, value) VALUES (3, 'p3', 'ThermalPowerPlant', '{}')"
+    )
+    _insert_association(fresh_db, 3, owner_category="SupplementalAttribute")
+    _insert_association(fresh_db, 1, name="other")
+    fresh_db.execute(
+        "UPDATE time_series_associations SET owner_id = 3, owner_type = 'ThermalPowerPlant', "
+        "owner_category = 'SupplementalAttribute' WHERE owner_id = 1"
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="supplemental_attributes or plants"):
+        fresh_db.execute(
+            "UPDATE time_series_associations SET owner_id = 1, owner_type = 'thing_type'"
+        )
 
 
 def test_association_categories_and_hashes_readable_directly(fresh_db):
@@ -638,6 +643,9 @@ def _insert_line(conn, entity_id, r=0.1, x=0.2, parameter_units=None):
     make_entity(conn, arc_eid, entity_table="arcs")
     # arc endpoints must be topology-type entities (is_topology = 1).
     conn.execute("INSERT OR IGNORE INTO entity_types(name, is_topology) VALUES ('bus', 1)")
+    conn.execute(
+        "INSERT OR IGNORE INTO entity_type_tables VALUES ('bus', 'balancing_topologies')"
+    )
     for eid in (from_eid, to_eid):
         conn.execute(
             "INSERT INTO entities(id, entity_table, entity_type) "
@@ -1074,11 +1082,11 @@ def insert_supplemental(conn, entity_id, type_name, value):
     )
 
 
-def make_supplemental_entity(conn, entity_id):
+def make_supplemental_entity(conn, entity_id, entity_type="EmissionsData"):
     return make_entity(
         conn, entity_id,
         entity_table="supplemental_attributes",
-        entity_type="EmissionsData",
+        entity_type=entity_type,
     )
 
 
@@ -1199,7 +1207,7 @@ def test_emissions_missing_required_basis_rejected(fresh_db):
 
 
 def test_other_supplemental_types_unaffected(fresh_db):
-    make_supplemental_entity(fresh_db, 1)
+    make_supplemental_entity(fresh_db, 1, "GeographicInfo")
     insert_supplemental(
         fresh_db, 1, "GeographicInfo", '{"geo_json": {}, "mass_unit": "whatever"}'
     )
@@ -1283,7 +1291,6 @@ def test_flexible_basis_columns_registered(db):
     expected = {
         ("sources", "r_th"): {"COMPONENT_BASE", "NATURAL_UNITS"},
         ("sources", "x_th"): {"COMPONENT_BASE", "NATURAL_UNITS"},
-        ("facts_control_devices", "voltage_setpoint"): {"COMPONENT_BASE", "NATURAL_UNITS"},
         # Transformer circuits mirror transmission_lines: pu on the component base
         # or natural-units ohm, per the row's parameter_units.
         ("transformer_circuits", "r"): {"COMPONENT_BASE", "NATURAL_UNITS"},
@@ -1418,7 +1425,6 @@ def test_interconnecting_converter_setpoints_one_quantity_each(db):
         ("dc_power_setpoint", "COMPONENT_BASE", "ActivePower", "pu"),
         ("dc_power_setpoint", "NATURAL_UNITS", "ActivePower", "MW"),
         ("dc_voltage_setpoint", None, "Voltage", "kV"),
-        ("ac_voltage_setpoint", None, "Voltage", "kV"),
         ("power_factor_setpoint", None, "PowerFactor", "1"),
     }
 
@@ -1666,12 +1672,27 @@ def _build_series_compensator(conn, base_id, parameter_units):
         "INSERT INTO series_compensators"
         "(id, name, arc_id, continuous_rating, r, x, parameter_units, power_units, base_power) "
         "VALUES (?, ?, ?, 100.0, 0.0, -0.05, ?, 'COMPONENT_BASE', 100.0)",
-        (base_id, f"sa_{base_id}", arc, parameter_units),
+        (base_id, f"sc_{base_id}", arc, parameter_units),
+    )
+
+
+def _build_generic_arc_impedance(conn, base_id, parameter_units):
+    arc = _provision_arc(conn, base_id * 100)
+    make_entity(
+        conn, base_id, entity_table="generic_arc_impedances", entity_type="GenericArcImpedance",
+    )
+    # r < 0 on purpose: unlike transmission_lines, this table carries no r >= 0 CHECK.
+    conn.execute(
+        "INSERT INTO generic_arc_impedances"
+        "(id, name, arc_id, r, x, parameter_units, power_units, base_power) "
+        "VALUES (?, ?, ?, -0.01, 0.1, ?, 'COMPONENT_BASE', 100.0)",
+        (base_id, f"gai_{base_id}", arc, parameter_units),
     )
 
 
 UNIT_BASIS_BUILDERS = {
     "transmission_lines": _build_transmission_line,
+    "generic_arc_impedances": _build_generic_arc_impedance,
     "series_compensators": _build_series_compensator,
     "transformer_circuits": _build_transformer_circuit,
     "three_winding_transformers": _build_three_winding_transformer,

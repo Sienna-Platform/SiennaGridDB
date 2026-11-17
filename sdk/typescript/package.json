@@ -1,21 +1,35 @@
 {
   "name": "@sienna-platform/griddb-tools",
   "version": "0.1.0",
-  "description": "Insert Sienna OpenAPI SDK objects into a SiennaGridDB SQLite database",
+  "description": "CRUD SDK for Sienna OpenAPI SDK objects in a SiennaGridDB SQLite database (create today)",
   "type": "module",
   "license": "BSD-3-Clause",
-  "engines": { "node": ">=22" },
-  "files": ["dist", "data"],
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "data"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "bin": { "griddb-tools": "./dist/cli.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "griddb-tools": "./dist/cli.js"
+  },
   "scripts": {
     "build": "mkdir -p data && cp ../../schema/schema.sql ../../schema/triggers.sql ../../schema/unit_registry.sql ../../schema/views.sql ../../schema/insert_manifest.json data/ && tsc -p tsconfig.json",
     "prepack": "npm run build",
     "test": "npm run build && vitest run"
   },
-  "dependencies": { "better-sqlite3": "^12.4.1" },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1"
+  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.18.0",

@@ -245,6 +245,32 @@ def test_plant_attribute_association_is_stored(conn):
     assert linked == 1
 
 
+def test_investment_attribute_is_stored_and_portfolio_sections_reported(conn):
+    """A portfolio's ExistingDevices lands in supplemental_attributes; its
+    investment_schedule and aggregation have no table, so the report counts them."""
+    doc = golden()
+    thermal_id = first(doc, "ThermalStandard")["id"]
+    attr_id = 1 + max(
+        [o["id"] for objs in doc["components"].values() for o in objs]
+        + [a["id"] for a in doc["supplemental_attributes"]]
+    )
+    doc["supplemental_attributes"].append({"id": attr_id, "existing_devices": ["gen-1"]})
+    doc["supplemental_attribute_associations"].append(
+        {"component_id": thermal_id, "component_type": "ThermalStandard",
+         "attribute_id": attr_id, "attribute_type": "ExistingDevices"}
+    )
+    doc["investment_schedule"] = {"2030": {"gen-1": 100.0}}
+    doc["aggregation"] = "PowerSystems.Area"
+    report = griddb.insert_document(conn, doc)
+    # One object and one type name, not their keys or characters.
+    assert report.unsupported["investment_schedule"] == 1
+    assert report.unsupported["aggregation"] == 1
+    (stored,) = conn.execute(
+        "SELECT TYPE FROM supplemental_attributes WHERE id = ?", (attr_id,)
+    ).fetchone()
+    assert stored == "ExistingDevices"
+
+
 SERVICE_TYPES = {"OnlineReserve", "OfflineReserve", "GroupReserve", "TransmissionInterface"}
 
 
@@ -350,7 +376,7 @@ def test_an_invalid_attribute_id_raises_insert_error(conn, section, row, message
 
 
 def test_a_component_entry_that_is_not_a_list_raises_insert_error(conn):
-    with pytest.raises(griddb.InsertError, match="components.ACBus: not a list"):
+    with pytest.raises(griddb.InsertError, match=r"components.ACBus: not a list"):
         griddb.insert_document(conn, {"components": {"ACBus": {"id": 1}}})
 
 
@@ -421,3 +447,62 @@ def test_cli_build_prints_the_report(tmp_path):
         (FIXTURES / "case14_NATURAL_UNITS.report.json").read_text("utf-8")
     )
     assert json.loads(result.stdout) == expected
+
+
+def test_a_commit_check_failure_rolls_back_and_raises(conn):
+    # load_zone is a deferred foreign key: SQLite checks it only at the commit.
+    bus = dict(lone_bus(golden()), load_zone=999)
+    with pytest.raises(griddb.InsertError, match="commit checks"):
+        griddb.insert_component(conn, "ACBus", bus)
+    assert not conn.in_transaction
+    assert count(conn, "entities") == 0
+    griddb.insert_component(conn, "ACBus", lone_bus(golden()))
+    assert count(conn, "balancing_topologies") == 1
+
+
+def test_a_model_is_stored_with_its_wire_field_names(conn):
+    from power_openapi_models.operations.models import Line
+
+    doc = golden()
+    line = doc["components"]["Line"].pop(0)
+    griddb.insert_document(conn, doc)
+    griddb.insert_model(conn, Line.model_validate(line))
+    stored = conn.execute("SELECT b FROM transmission_lines WHERE id = ?", [line["id"]]).fetchone()
+    assert json.loads(stored[0]) == line["b"]
+
+
+def test_a_non_finite_number_raises(conn, tmp_path):
+    bus = dict(lone_bus(golden()), magnitude=float("inf"))
+    with pytest.raises(griddb.InsertError, match="finite"):
+        griddb.insert_component(conn, "ACBus", bus)
+    path = tmp_path / "nan.json"
+    path.write_text('{"components": {"ACBus": [{"id": 1, "base_voltage": NaN}]}}')
+    with pytest.raises(griddb.InsertError, match="NaN is not a JSON number"):
+        griddb.insert_file(conn, path)
+    assert count(conn, "entities") == 0
+
+
+def test_opening_a_missing_database_creates_no_file(tmp_path):
+    path = tmp_path / "typo.sqlite"
+    with pytest.raises(griddb.GridDBToolsError):
+        griddb.open_database(str(path))
+    assert not path.exists()
+
+
+def test_an_insert_refuses_another_schema_version(conn):
+    conn.execute("PRAGMA user_version = 1")
+    with pytest.raises(griddb.InsertError, match="user_version 1"):
+        griddb.insert_component(conn, "ACBus", lone_bus(golden()))
+
+
+def test_a_failed_build_leaves_no_database(tmp_path):
+    from sienna_griddb_tools.__main__ import main
+
+    doc = golden()
+    doc["components"]["ACBus"][0]["angel"] = 0.1
+    path = tmp_path / "doc.json"
+    path.write_text(json.dumps(doc))
+    out = tmp_path / "out.sqlite"
+    with pytest.raises(griddb.InsertError):
+        main(["build", str(path), str(out), "--strict"])
+    assert not out.exists()

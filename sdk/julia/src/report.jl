@@ -16,6 +16,27 @@ function InsertReport()
     )
 end
 
+"""
+    get_inserted(report) -> Dict{String, Int}
+
+Rows written, by component type or section.
+"""
+get_inserted(report::InsertReport) = report.inserted
+
+"""
+    get_skipped_fields(report) -> Dict{String, Dict{String, Int}}
+
+Fields not written because GridDB has no column for them, by type and field.
+"""
+get_skipped_fields(report::InsertReport) = report.skipped_fields
+
+"""
+    get_unsupported(report) -> Dict{String, Int}
+
+Rows not written because GridDB cannot store them, by type or section.
+"""
+get_unsupported(report::InsertReport) = report.unsupported
+
 function add_inserted!(report::InsertReport, key::AbstractString, n::Int=1)
     report.inserted[key] = get(report.inserted, key, 0) + n
     return report
@@ -33,6 +54,15 @@ end
 
 function add_unsupported!(report::InsertReport, key::AbstractString, n::Int)
     report.unsupported[key] = get(report.unsupported, key, 0) + n
+    return report
+end
+
+function merge_report!(report::InsertReport, other::InsertReport)
+    mergewith!(+, report.inserted, other.inserted)
+    for (type_name, fields) in other.skipped_fields
+        mergewith!(+, get!(report.skipped_fields, type_name, Dict{String, Int}()), fields)
+    end
+    mergewith!(+, report.unsupported, other.unsupported)
     return report
 end
 

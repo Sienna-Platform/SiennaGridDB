@@ -7,6 +7,7 @@
 CREATE VIEW IF NOT EXISTS interface_member_tables (name) AS
 VALUES
     ('transmission_lines'),
+    ('generic_arc_impedances'),
     ('transmission_interchanges'),
     ('discrete_controlled_ac_branches'),
     ('series_compensators'),
@@ -18,6 +19,8 @@ VALUES
 -- Every row of those tables, by id and name.
 CREATE VIEW IF NOT EXISTS branch_names AS
     SELECT id, name FROM transmission_lines
+    UNION ALL
+    SELECT id, name FROM generic_arc_impedances
     UNION ALL
     SELECT id, name FROM transmission_interchanges
     UNION ALL
@@ -56,21 +59,39 @@ ORDER BY
     uc.table_name,
     uc.column_name;
 
+-- Typed columns first: thermal and hydro generators keep their limits in columns,
+-- and the cost tables keep operation_cost in a column. Other types use attributes.
 CREATE VIEW IF NOT EXISTS operational_data AS
+WITH typed (id, active_power_limits, time_limits, ramp_limits, operation_cost) AS (
+    SELECT id, active_power_limits, time_limits, ramp_limits, operation_cost
+    FROM thermal_generators
+    UNION ALL
+    SELECT id, active_power_limits, time_limits, ramp_limits, operation_cost
+    FROM hydro_generators
+    UNION ALL
+    SELECT id, NULL, NULL, ramp_limits, operation_cost FROM storage_units
+    UNION ALL
+    SELECT id, NULL, NULL, NULL, operation_cost FROM renewable_generators
+    UNION ALL
+    SELECT id, NULL, NULL, NULL, operation_cost FROM sources
+    UNION ALL
+    SELECT id, NULL, NULL, NULL, operation_cost FROM virtual_participants
+)
 SELECT
     e.id AS entity_id,
     e.entity_table,
     e.entity_type,
-    json_extract(apl.value, '$.min') AS active_power_limit_min,
+    json_extract(coalesce(t.active_power_limits, apl.value), '$.min') AS active_power_limit_min,
     json_extract(mr.value, '$') AS must_run,
-    json_extract(tl.value, '$.up') AS uptime,
-    json_extract(tl.value, '$.down') AS downtime,
-    json_extract(rl.value, '$.up') AS ramp_up,
-    json_extract(rl.value, '$.down') AS ramp_down,
-    oc.value AS operational_cost,
-    json_type(oc.value) AS operational_cost_type
+    json_extract(coalesce(t.time_limits, tl.value), '$.up') AS uptime,
+    json_extract(coalesce(t.time_limits, tl.value), '$.down') AS downtime,
+    json_extract(coalesce(t.ramp_limits, rl.value), '$.up') AS ramp_up,
+    json_extract(coalesce(t.ramp_limits, rl.value), '$.down') AS ramp_down,
+    coalesce(t.operation_cost, oc.value) AS operational_cost,
+    json_type(coalesce(t.operation_cost, oc.value)) AS operational_cost_type
 FROM
     entities e
+    LEFT JOIN typed t ON t.id = e.id
     LEFT JOIN attributes apl ON e.id = apl.entity_id
     AND apl.name = 'active_power_limits'
     LEFT JOIN attributes mr ON e.id = mr.entity_id
@@ -82,9 +103,10 @@ FROM
     LEFT JOIN attributes oc ON e.id = oc.entity_id
     AND oc.name = 'operation_cost'
 WHERE
-    -- Only include entities that have at least one operational attribute
+    -- Only include entities that have at least one operational value
     (
-        apl.entity_id IS NOT NULL
+        t.id IS NOT NULL
+        OR apl.entity_id IS NOT NULL
         OR mr.entity_id IS NOT NULL
         OR tl.entity_id IS NOT NULL
         OR rl.entity_id IS NOT NULL
@@ -118,8 +140,9 @@ FROM
     JOIN branch_names b ON b.id = sa.entity_id
     AND b.name = d.key;
 
--- direction_mapping names that resolve to no member branch of their interface;
--- empty for valid data.
+-- direction_mapping names that resolve to no member branch of their interface, or
+-- to more than one: names are unique per table, not across branch tables. Empty for
+-- valid data.
 CREATE VIEW IF NOT EXISTS interface_direction_violations AS
 SELECT
     ti.id AS interface_id,
@@ -136,7 +159,18 @@ WHERE
         WHERE
             ibd.interface_id = ti.id
             AND ibd.branch_name = d.key
-    );
+    )
+UNION
+SELECT
+    interface_id,
+    branch_name
+FROM
+    interface_branch_directions
+GROUP BY
+    interface_id,
+    branch_name
+HAVING
+    count(*) > 1;
 
 -- (device, service) pairs a market bid offers into: its cost's
 -- ancillary_service_offers ids. Reads every cost column that can hold a bid,
@@ -201,4 +235,86 @@ WHERE
         WHERE
             sa.service_id = o.service_id
             AND sa.entity_id = o.device_id
+    );
+
+-- Every time series reference in a stored payload (association_id,
+-- *_association_id, fuel_cost_time_series) no association resolves; empty after
+-- a complete insert. test_dangling_view_covers_every_reference_column checks it.
+CREATE VIEW IF NOT EXISTS dangling_time_series_references AS
+WITH
+    payloads (entity_id, source_table, source_column, payload) AS (
+        SELECT entity_id, 'attributes', name, value FROM attributes
+        UNION ALL
+        SELECT id, 'hydro_generators', 'operation_cost', operation_cost FROM hydro_generators
+        UNION ALL
+        SELECT id, 'hydro_reservoirs', 'head_to_volume_factor', head_to_volume_factor
+        FROM hydro_reservoirs
+        UNION ALL
+        SELECT id, 'hydro_reservoirs', 'operation_cost', operation_cost FROM hydro_reservoirs
+        UNION ALL
+        SELECT id, 'plants', 'value', value FROM plants
+        UNION ALL
+        SELECT id, 'point_to_point_bids', 'spread_bid', spread_bid FROM point_to_point_bids
+        UNION ALL
+        SELECT id, 'renewable_generators', 'operation_cost', operation_cost
+        FROM renewable_generators
+        UNION ALL
+        SELECT id, 'reserves', 'variable', variable FROM reserves
+        UNION ALL
+        SELECT id, 'sources', 'operation_cost', operation_cost FROM sources
+        UNION ALL
+        SELECT id, 'storage_technologies', 'operation_costs', operation_costs
+        FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'capital_costs_charge', capital_costs_charge FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'capital_costs_discharge', capital_costs_discharge FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'capital_costs_energy', capital_costs_energy FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_technologies', 'interconnection_cost', interconnection_cost FROM storage_technologies
+        UNION ALL
+        SELECT id, 'storage_units', 'operation_cost', operation_cost FROM storage_units
+        UNION ALL
+        SELECT id, 'supplemental_attributes', 'value', value FROM supplemental_attributes
+        UNION ALL
+        SELECT id, 'supply_technologies', 'capital_costs', capital_costs FROM supply_technologies
+        UNION ALL
+        SELECT id, 'supply_technologies', 'operation_costs', operation_costs
+        FROM supply_technologies
+        UNION ALL
+        SELECT id, 'thermal_generators', 'operation_cost', operation_cost FROM thermal_generators
+        UNION ALL
+        SELECT id, 'transport_technologies', 'capital_costs', capital_costs
+        FROM transport_technologies
+        UNION ALL
+        SELECT id, 'transport_technologies', 'line_loss', line_loss FROM transport_technologies
+        UNION ALL
+        SELECT id, 'virtual_participants', 'operation_cost', operation_cost
+        FROM virtual_participants
+    )
+SELECT
+    p.entity_id,
+    p.source_table,
+    p.source_column,
+    t.fullkey AS path,
+    t.value AS association_id
+FROM
+    payloads p,
+    json_tree(p.payload) t
+WHERE
+    json_valid(p.payload)
+    AND t.type IN ('integer', 'real')
+    -- A bare integer payload has no key: its column (or attribute) names it.
+    AND (
+        coalesce(t.key, p.source_column) IN ('association_id', 'fuel_cost_time_series')
+        OR coalesce(t.key, p.source_column) GLOB '*_association_id'
+    )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            time_series_associations a
+        WHERE
+            a.id = t.value
     );

@@ -1,17 +1,39 @@
-# CLI: julia --project=sdk/julia sdk/julia/bin/build_db.jl <document.json> <out.sqlite> [--strict]
+# CLI: julia --project=sdk/julia sdk/julia/bin/build_db.jl <document.json | bundle dir>
+#   <out.sqlite> [--strict] [--time-series <sidecar.h5>]
+# The sidecar defaults to the document's time_series_storage_file, beside the document;
+# a portfolio's base_system_file goes in first.
 import JSON
 using SiennaGridDBTools
 
+const USAGE = "usage: build_db.jl <document.json | bundle dir> <out.sqlite> [--strict] [--time-series <sidecar.h5>]"
+
 function main(args::Vector{String})
     strict = "--strict" in args
+    sidecar = nothing
+    at = findfirst(==("--time-series"), args)
+    if !isnothing(at)
+        if at == length(args)
+            println(stderr, USAGE)
+            return 2
+        end
+        sidecar = args[at + 1]
+        args = args[setdiff(eachindex(args), (at, at + 1))]
+    end
     positional = filter(a -> !startswith(a, "--"), args)
     if length(positional) != 2
-        println(stderr, "usage: build_db.jl <document.json> <out.sqlite> [--strict]")
+        println(stderr, USAGE)
         return 2
     end
-    doc = JSON.parsefile(positional[1]; dicttype=Dict{String, Any})
-    db = create_database(positional[2])
-    report = insert_document!(db, doc; strict=strict)
+    out = positional[2]
+    db = create_database(out)
+    report = try
+        insert_file!(db, positional[1]; strict=strict, time_series=sidecar)
+    catch
+        # A failed build leaves no schema-only file to block the next run.
+        close(db)
+        rm(out)
+        rethrow()
+    end
     close(db)
     JSON.print(stdout, SiennaGridDBTools.report_dict(report), 2)
     println(stdout)

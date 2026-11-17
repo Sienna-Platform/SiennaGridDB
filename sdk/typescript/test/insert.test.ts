@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,10 +8,15 @@ import {
   insertComponent,
   insertComponents,
   insertDocument,
+  insertFile,
   InsertError,
+  GridDBToolsError,
+  openDatabase,
   type Connection,
   type JsonObject,
 } from "../src/index.js";
+import { featuresHash } from "../src/encode.js";
+import { remapReferences } from "../src/time_series.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../test/fixtures/insert/", import.meta.url));
 const CASES = ["NATURAL_UNITS", "COMPONENT_BASE"];
@@ -136,6 +141,187 @@ test.skipIf(!hasGolden)("non-object entries of an unsupported type are counted",
   const doc = golden();
   (doc.components as Record<string, unknown[]>).AGC = [null, 5, [1]];
   expect(insertDocument(fresh(), doc).unsupported.AGC).toBe(3);
+});
+
+const thermal = (doc: JsonObject): JsonObject => (doc.components as Record<string, JsonObject[]>).ThermalStandard[0];
+const series = (owner: JsonObject, associationId: number, fields: JsonObject = {}): JsonObject => ({
+  association_id: associationId,
+  owner_id: owner.id,
+  owner_type: "ThermalStandard",
+  owner_category: "Component",
+  time_series_type: "SingleTimeSeries",
+  name: "max_active_power",
+  features: { scenario: "base", year: 2030 },
+  uri: "/arrays/a",
+  element_type: "f64",
+  element_shape: [],
+  initial_timestamp: "2030-01-01T00:00:00",
+  resolution: "PT1H",
+  length: 24,
+  ...fields,
+});
+
+test.skipIf(!hasGolden)("a second store minting the same ids lands past the first", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 7), series(gen, 8, { name: "min_active_power" })];
+  const db = fresh();
+  insertDocument(db, doc);
+  const rows = (doc.time_series_associations as JsonObject[]).map((r) => ({ ...r, name: `${String(r.name)}_2` }));
+  insertDocument(db, { components: {}, time_series_associations: rows });
+  const stores = db.prepare("SELECT id, id_offset, values_prefix FROM time_series_stores ORDER BY id").all();
+  expect(stores).toEqual([
+    { id: 1, id_offset: 0, values_prefix: null },
+    { id: 2, id_offset: 8, values_prefix: null },
+  ]);
+  const ids = db.prepare("SELECT store_id, id FROM time_series_associations ORDER BY id").all();
+  expect(ids).toEqual([
+    { store_id: 1, id: 7 },
+    { store_id: 1, id: 8 },
+    { store_id: 2, id: 15 },
+    { store_id: 2, id: 16 },
+  ]);
+});
+
+test.skipIf(!hasGolden)("time series associations and feature sets are stored; values are reported", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 7), series(gen, 8, { name: "min_active_power" })];
+  const db = fresh();
+  const report = insertDocument(db, doc);
+  expect(report.inserted.time_series_associations).toBe(2);
+  expect(report.unsupported.time_series_values).toBe(2);
+  const row = db.prepare("SELECT owner_id, name, features_hash FROM time_series_associations WHERE id = 7").get();
+  expect(row).toEqual({
+    owner_id: gen.id,
+    name: "max_active_power",
+    features_hash: featuresHash({ scenario: "base", year: 2030 }),
+  });
+  // Both rows share one feature set, stored once.
+  const features = db.prepare("SELECT key, value_kind, value_int, value_str FROM feature_sets ORDER BY key").all();
+  expect(features).toEqual([
+    { key: "scenario", value_kind: "str", value_int: null, value_str: "base" },
+    { key: "year", value_kind: "int", value_int: 2030, value_str: null },
+  ]);
+  delete doc.ext;
+  expect(() => insertDocument(fresh(), doc, { strict: true })).toThrow(/time_series_values/);
+});
+
+test.skipIf(!hasGolden)("a mislabelled time series owner raises", () => {
+  const doc = golden();
+  doc.time_series_associations = [series(thermal(doc), 7, { owner_type: "RenewableDispatch" })];
+  const db = fresh();
+  expect(() => insertDocument(db, doc)).toThrow(/is ThermalStandard/);
+  expect(count(db, "entities")).toBe(0);
+});
+
+test.skipIf(!hasGolden)("a series of an unsupported owner is reported", () => {
+  const doc = golden();
+  (doc.components as Record<string, JsonObject[]>).AGC = [{ id: 9001, name: "agc" }];
+  doc.time_series_associations = [series({ id: 9001 }, 7, { owner_type: "AGC" }), series(thermal(doc), 8)];
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.time_series_associations).toBe(1);
+  expect(count(db, "time_series_associations")).toBe(1);
+});
+
+test.skipIf(!hasGolden)("an unsupported series type is reported and strict raises", () => {
+  const doc = golden();
+  const row = series(thermal(doc), 7, { time_series_type: "NonSequentialTimeSeries" });
+  delete row.initial_timestamp;
+  delete row.resolution;
+  doc.time_series_associations = [row];
+  delete doc.ext;
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.NonSequentialTimeSeries).toBe(1);
+  expect(count(db, "time_series_associations")).toBe(0);
+  expect(() => insertDocument(db, doc, { strict: true })).toThrow(/timestamps_uri/);
+});
+
+test.skipIf(!hasGolden)("a plant owns series as a supplemental attribute", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  const plant = { id: 9100, name: "plant1" };
+  (doc.supplemental_attributes as JsonObject[]).push(plant);
+  (doc.supplemental_attribute_associations as JsonObject[]).push({
+    component_id: gen.id,
+    component_type: "ThermalStandard",
+    attribute_id: plant.id,
+    attribute_type: "ThermalPowerPlant",
+  });
+  const owner = { owner_type: "ThermalPowerPlant", owner_category: "SupplementalAttribute" };
+  doc.time_series_associations = [series(plant, 7, owner)];
+  const db = fresh();
+  insertDocument(db, doc);
+  expect(count(db, "time_series_associations")).toBe(1);
+});
+
+// A golden thermal whose fuel cost is the series 7, with a DeterministicSingleTimeSeries 8
+// derived from it: same array, owner, name and features, plus forecast windows.
+function fuelCostSeries(doc: JsonObject): JsonObject {
+  const gen = thermal(doc);
+  const cost = (gen.operation_cost as JsonObject).variable_operation_cost as JsonObject;
+  Object.assign(cost, { variable_cost_type: "FUEL", fuel_cost: null, fuel_cost_time_series: 8 });
+  const derived = series(gen, 8, {
+    time_series_type: "DeterministicSingleTimeSeries",
+    name: "fuel_cost",
+    horizon: "PT24H",
+    interval: "PT24H",
+    count: 1,
+  });
+  doc.time_series_associations = [series(gen, 7, { name: "fuel_cost" }), derived];
+  delete doc.ext;
+  return gen;
+}
+
+test.skipIf(!hasGolden)("a DeterministicSingleTimeSeries is reported and strict raises", () => {
+  const doc = golden();
+  fuelCostSeries(doc);
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.DeterministicSingleTimeSeries).toBe(1);
+  expect(db.prepare("SELECT id FROM time_series_associations").all()).toEqual([{ id: 7 }]);
+  expect(() => insertDocument(fresh(), doc, { strict: true })).toThrow(/transform_single_time_series/);
+});
+
+test.skipIf(!hasGolden)("a reference to a derived series points at its source", () => {
+  const doc = golden();
+  const gen = fuelCostSeries(doc);
+  const db = fresh();
+  insertDocument(db, doc);
+  const stored = db.prepare("SELECT operation_cost FROM thermal_generators WHERE id = ?").get(gen.id) as {
+    operation_cost: string;
+  };
+  expect(stored.operation_cost).toContain('"fuel_cost_time_series":7');
+  expect(db.prepare("SELECT * FROM dangling_time_series_references").all()).toEqual([]);
+  // The caller's document is left as it was.
+  const cost = (gen.operation_cost as JsonObject).variable_operation_cost as JsonObject;
+  expect(cost.fuel_cost_time_series).toBe(8);
+});
+
+test.skipIf(!hasGolden)("a reference no stored series has is reported and strict raises", () => {
+  const doc = golden();
+  const gen = fuelCostSeries(doc);
+  // The payload names 8, but the document holds no series.
+  doc.time_series_associations = [];
+  const db = fresh();
+  expect(insertDocument(db, doc).unsupported.dangling_time_series_references).toBe(1);
+  expect(db.prepare("SELECT association_id FROM dangling_time_series_references").all()).toEqual([
+    { association_id: 8 },
+  ]);
+  expect(() => insertDocument(fresh(), doc, { strict: true })).toThrow(
+    `first: entity ${String(gen.id)} fuel_cost_time_series=8`,
+  );
+});
+
+test("remapReferences copies only what changes", () => {
+  const untouched = { curve: [1, 2], association_id: 3 };
+  const node = { a: untouched, b: [{ fuel_cost_time_series: 8 }], c: 8 };
+  const remap = (ref: number) => (ref === 8 ? 7 : ref);
+  const out = remapReferences(node, remap);
+  expect(out).toEqual({ a: untouched, b: [{ fuel_cost_time_series: 7 }], c: 8 });
+  expect(out.a).toBe(untouched);
+  expect(node.b[0].fuel_cost_time_series).toBe(8);
+  expect(remapReferences(untouched, remap)).toBe(untouched);
+  expect(remapReferences(node, undefined)).toBe(node);
 });
 
 const ENTRY_LISTS = [
@@ -324,4 +510,125 @@ test("misspelled field", () => {
     /numbr/,
   );
   expect(insertComponent(db, "Area", area(902, "c", { numbr: null })).skipped_fields).toEqual({});
+});
+
+test.skipIf(!hasGolden)("a portfolio file brings its base system first", () => {
+  const dir = mkdtempSync(join(tmpdir(), "b-"));
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 7)];
+  mkdirSync(join(dir, "base_system"));
+  writeFileSync(join(dir, "base_system", "system.json"), JSON.stringify(doc));
+  const portfolio = {
+    base_system_file: "base_system",
+    aggregation: "PowerSystems.Area",
+    investment_schedule: { "2030": { "gen-1": 100.0 } },
+    components: {},
+    time_series_associations: [series(gen, 7, { name: "fuel_price" })],
+  };
+  writeFileSync(join(dir, "portfolio.json"), JSON.stringify(portfolio));
+  const db = fresh();
+  const report = insertFile(db, dir);
+  expect(report.inserted.time_series_associations).toBe(2);
+  expect(report.unsupported.aggregation).toBe(1);
+  expect(report.unsupported.investment_schedule).toBe(1);
+  expect(db.prepare("SELECT id FROM time_series_associations ORDER BY id").pluck().all()).toEqual([7, 14]);
+});
+
+test.skipIf(!hasGolden)("ids already stored are named", () => {
+  const db = fresh();
+  insertDocument(db, golden());
+  expect(() => insertDocument(db, golden())).toThrow(/ids are already in the database/);
+});
+
+test.skipIf(!hasGolden)("a commit check failure rolls back and throws", () => {
+  const db = fresh();
+  // load_zone is a deferred foreign key: SQLite checks it only at the commit.
+  const bus = { ...loneBus(golden()), load_zone: 999 };
+  expect(() => insertComponent(db, "ACBus", bus)).toThrow(/commit checks/);
+  expect(db.inTransaction).toBe(false);
+  expect(count(db, "entities")).toBe(0);
+  insertComponent(db, "ACBus", loneBus(golden()));
+  expect(count(db, "balancing_topologies")).toBe(1);
+});
+
+test.skipIf(!hasGolden)("a non-finite number throws", () => {
+  const db = fresh();
+  const bus = { ...loneBus(golden()), magnitude: Infinity };
+  expect(() => insertComponent(db, "ACBus", bus)).toThrow(InsertError);
+  expect(count(db, "entities")).toBe(0);
+});
+
+test("opening a missing database creates no file", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "o-")), "typo.sqlite");
+  expect(() => openDatabase(path)).toThrow(GridDBToolsError);
+  expect(existsSync(path)).toBe(false);
+});
+
+test.skipIf(!hasGolden)("an insert refuses another schema version", () => {
+  const db = fresh();
+  db.pragma("user_version = 1");
+  expect(() => insertComponent(db, "ACBus", loneBus(golden()))).toThrow(/user_version 1/);
+});
+
+test.skipIf(!hasGolden)("an association id below one throws", () => {
+  const doc = golden();
+  doc.time_series_associations = [series(thermal(doc), 0)];
+  const db = fresh();
+  expect(() => insertDocument(db, doc)).toThrow(/ids start at 1/);
+  expect(count(db, "entities")).toBe(0);
+});
+
+test.skipIf(!hasGolden)("each store tags only its own rows, past the first store's ids", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 2), series(gen, 3, { name: "min_active_power" })];
+  const db = fresh();
+  insertDocument(db, doc, { timeSeries: "/data/first.h5" });
+  const rows = [series(gen, 2, { name: "a" }), series(gen, 3, { name: "b" })];
+  insertDocument(db, { components: {}, time_series_associations: rows }, { timeSeries: "/data/second.h5" });
+  expect(db.prepare("SELECT id, store_id FROM time_series_associations ORDER BY id").raw().all()).toEqual([
+    [2, 1],
+    [3, 1],
+    [5, 2],
+    [6, 2],
+  ]);
+  expect(db.prepare("SELECT sidecar FROM time_series_stores ORDER BY id").pluck().all()).toEqual([
+    "/data/first.h5",
+    "/data/second.h5",
+  ]);
+});
+
+test.skipIf(!hasGolden)("a dangling reference names the document's own id", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 2), series(gen, 3, { name: "min_active_power" })];
+  const db = fresh();
+  insertDocument(db, doc);
+  // Stored past offset 3, the plant's 7 would read 10; the report names the 7.
+  const second: JsonObject = {
+    components: {},
+    supplemental_attributes: [{ id: 9200, name: "p", fuel_cost_time_series: 7 }],
+    supplemental_attribute_associations: [
+      { component_id: gen.id, component_type: "ThermalStandard", attribute_id: 9200, attribute_type: "ThermalPowerPlant" },
+    ],
+    time_series_associations: [],
+  };
+  expect(() => insertDocument(db, second, { strict: true })).toThrow(/fuel_cost_time_series=7/);
+});
+
+test.skipIf(!hasGolden)("insertFile hashes a feature written as 2030.0 as a Float, as infrastore does", () => {
+  const doc = golden();
+  const gen = thermal(doc);
+  doc.time_series_associations = [series(gen, 2, { features: { year: 2030 } })];
+  const dir = mkdtempSync(join(tmpdir(), "f-"));
+  const path = join(dir, "doc.json");
+  writeFileSync(path, JSON.stringify(doc).replace('"year":2030', '"year":2030.0'));
+  const db = fresh();
+  insertFile(db, path);
+  // Python's features_hash({"year": 2030.0}); {"year": 2030} hashes as c8bf77ad...
+  expect(db.prepare("SELECT features_hash FROM time_series_associations").pluck().get()).toBe(
+    "0764c17f209f974613560105a34c01b0a6509eab34158863b0f4c9720a68d176",
+  );
+  expect(db.prepare("SELECT value_kind, value_float FROM feature_sets").raw().get()).toEqual(["float", 2030]);
 });

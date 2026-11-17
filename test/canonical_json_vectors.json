@@ -1,0 +1,25 @@
+{
+  "description": "RFC 8785 (JCS) canonical JSON vectors. Every SDK and scripts/_common.py must turn each input into the expected text: keys in UTF-16 code-unit order, ECMAScript number form (1.0 -> 1, 1e16 -> 10000000000000000, -0.0 -> 0), no whitespace. The expected text is what JSON.stringify writes with sorted keys.",
+  "vectors": [
+    {
+      "input": "{\"b\":1.0,\"a\":[1e16,1e-7,-0.0,0.1,123.456,1e21,1e20,1.5e300,5e-324,2030.0,-1.25e-8,0.000001,1.7976931348623157e308]}",
+      "expected": "{\"a\":[10000000000000000,1e-7,0,0.1,123.456,1e+21,100000000000000000000,1.5e+300,5e-324,2030,-1.25e-8,0.000001,1.7976931348623157e+308],\"b\":1}"
+    },
+    {
+      "input": "{\"\u00e9\":1,\"e\":2,\"\ud83d\ude00\":3,\"\uff61\":4,\"Z\":5,\"\":6}",
+      "expected": "{\"\":6,\"Z\":5,\"e\":2,\"\u00e9\":1,\"\ud83d\ude00\":3,\"\uff61\":4}"
+    },
+    {
+      "input": "{\"s\":\"line\\nbreak \\\"q\\\" \\\\ \\u0001\\u001f\\u007f / \u00e9 \ud83d\ude00 \\u2028\"}",
+      "expected": "{\"s\":\"line\\nbreak \\\"q\\\" \\\\ \\u0001\\u001f\u007f / \u00e9 \ud83d\ude00 \u2028\"}"
+    },
+    {
+      "input": "{\"nested\":{\"y\":{\"b\":true,\"a\":null},\"x\":[{\"k\":0},[],{}]}}",
+      "expected": "{\"nested\":{\"x\":[{\"k\":0},[],{}],\"y\":{\"a\":null,\"b\":true}}}"
+    },
+    {
+      "input": "[0,-0,1,-1,100,1e2,0.5,-0.5,3.0e0,4.5E+1,2e-6,9007199254740991]",
+      "expected": "[0,0,1,-1,100,100,0.5,-0.5,3,45,0.000002,9007199254740991]"
+    }
+  ]
+}

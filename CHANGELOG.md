@@ -6,6 +6,68 @@ schema itself through `PRAGMA user_version`, bumped on every schema or registry 
 
 ## [Unreleased]
 
+Built from SiennaSchemas v0.5.0.
+
+### Schema
+
+- `PRAGMA user_version = 15`.
+- Generated JSON defaults use RFC 8785 text, as the SDKs write it (`"fixed":0`, not `0.0`).
+- A regulated bus is a bus ID (SiennaSchemas #108). A nullable `remote_regulated_bus` column,
+  a foreign key to `balancing_topologies`, replaces `regulated_bus_number` and
+  `remote_bus_control` on the devices that regulate voltage. It cannot equal the device's own
+  bus. `transformer_circuits` gets `regulated_bus` and `regulated_bus_orientation`. On
+  `two_terminal_hvdc_lines`, `remote_regulated_bus_from` and `remote_regulated_bus_to` are
+  attributes, and their bus cannot be deleted.
+- The AC voltage setpoint is on the bus (SiennaSchemas #101, #102):
+  `balancing_topologies.voltage_setpoint`, in pu of `base_voltage`. It is gone from
+  `facts_control_devices` (with its `parameter_units`), `interconnecting_converters` and the
+  VSC attributes.
+- `series_compensators` is a fixed device (SiennaSchemas #124): a `bypassed` 0/1 column replaces
+  `control_mode`, `reactance_limits` and `active_power_flow_setpoint`.
+- `discrete_controlled_ac_branches` gets `rating_b` and `rating_c` (SiennaSchemas #111).
+- `generic_arc_impedances` drops `parameter_units`: `r` and `x` are always pu (SiennaSchemas #126).
+- `time_series_associations.per_unit_of`, and `per_unit_of` is a reserved feature key
+  (SiennaSchemas #112, infrastore 0.17).
+- A portfolio has no `financial_data` section: SiennaSchemas moves its discount, inflation and
+  interest rates into each technology's `financial_data` column, and the base year to the
+  consuming model. The insert SDKs no longer report the section.
+- `storage_technologies.storage_tech` defaults to `OTHER_CHEM`, following the schema.
+- `entity_type_tables` pairs each entity type with its table, and an `entities` row must use
+  that pair. `entity_types` is STRICT and its rows cannot change.
+- The type labels on `attributes`, `supplemental_attributes`, `plants` and
+  `supplemental_attribute_associations` must equal the owner's `entity_type`.
+- An id attribute (`out_of_area_load_ids`, the HydroReservoir turbine and reservoir lists, the
+  VSC `remote_regulated_bus_from` and `remote_regulated_bus_to`) names only rows of its target
+  table, on insert and update.
+- Deleting a transformer deletes its circuits. A name owned by another row cannot be taken,
+  so `INSERT OR REPLACE` cannot delete a row without its delete triggers.
+- `time_series_stores.id` is AUTOINCREMENT; `time_series_associations.id` must be above 0.
+- `feature_sets` keeps a value only in the column its `value_kind` names; attribute names
+  that differ only in case collide; `json_valid` on the capital cost columns and
+  `percentiles_json`; an interchange needs two different areas.
+- `operational_data` reads the typed limit and cost columns. `interface_direction_violations`
+  lists a name that matches two members.
+
+### Insert SDKs
+
+- A document that fails its commit checks (a deferred foreign key) rolls back and raises
+  `InsertError`; before, the transaction stayed open and later inserts were lost on close.
+- An insert refuses a database whose `user_version` differs from the manifest's.
+- NaN and Infinity raise in every SDK; Python stored them as NULL or invalid JSON.
+- Python `insert_model` stores the wire field names (`from`, not `from_`).
+- The series id offset is read inside the savepoint, and each store tags only its own rows.
+  A time series association id below 1 raises.
+- A dangling-reference report names the id in the document, not the stored one.
+- `open_database` does not create a missing file; a failed CLI build deletes its output.
+- Julia waits 5 s on a locked database and has `get_inserted`, `get_skipped_fields` and
+  `get_unsupported`. The TypeScript CLI accepts `--time-series`.
+- Every SDK writes JSON text in RFC 8785 (JCS) form, so a document stores the same bytes from
+  any SDK, and the parity dumps compare that text as stored.
+- TypeScript `insertFile` and the new `parseJson` keep a feature written as `2030.0` a Float
+  in `features_hash`, as infrastore does.
+- The time series extensions need InfraStore 0.17 (Julia `InfraStore = "0.17"`, Python
+  `infrastore>=0.17.0`).
+
 ## [0.4.0] - 2026-11-02
 
 Built from SiennaSchemas v0.4.0. `PRAGMA user_version = 7`.

@@ -1,7 +1,10 @@
 # sienna-griddb-tools (Python)
 
-Insert Sienna OpenAPI SDK objects (`power-openapi-models`) into a SiennaGridDB SQLite
-database. The SQL comes from the bundled insert manifest; this package only binds values.
+The Python CRUD SDK for SiennaGridDB: it stores Sienna OpenAPI SDK objects
+(`power-openapi-models`) in a SiennaGridDB SQLite database. Today it implements create
+(insert); read, update and delete come next. It is not a general database client: use
+SQLite directly for anything else. The SQL comes from the bundled insert manifest; this
+package only binds values.
 
 ```python
 from power_openapi_models.document import read_document
@@ -16,3 +19,4 @@ print(report.to_json())   # inserted / skipped_fields / unsupported
   written. Pass `strict=True` to raise instead.
 - Cost payloads must be in `NATURAL_UNITS`; the database rejects anything else.
 - CLI: `python3 -m sienna_griddb_tools build system.json system.sqlite`.
+- A portfolio, its base system first, each with its time series: `griddb.insert_file(conn, "portfolio_dir")`, or `build portfolio_dir out.sqlite`.

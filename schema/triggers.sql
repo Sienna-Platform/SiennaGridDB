@@ -194,6 +194,27 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS check_generic_arc_impedances_entity_exists BEFORE
+INSERT
+    ON generic_arc_impedances
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+            AND entity_table = 'generic_arc_impedances'
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.id must exist in entities with entity_table generic_arc_impedances before insert'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS check_transmission_interchanges_entity_exists BEFORE
 INSERT
     ON transmission_interchanges
@@ -817,6 +838,19 @@ SELECT
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS prevent_generic_arc_impedances_id_update BEFORE
+UPDATE
+    OF id ON generic_arc_impedances
+    WHEN NEW.id IS NOT OLD.id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.id cannot change; delete the row and insert it again'
+    );
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS prevent_transmission_interchanges_id_update BEFORE
 UPDATE
     OF id ON transmission_interchanges
@@ -1229,6 +1263,17 @@ WHERE
 
 END;
 
+CREATE TRIGGER IF NOT EXISTS delete_generic_arc_impedances_entity
+AFTER
+    DELETE ON generic_arc_impedances FOR EACH ROW
+BEGIN
+DELETE FROM
+    entities
+WHERE
+    id = OLD.id;
+
+END;
+
 CREATE TRIGGER IF NOT EXISTS delete_transmission_interchanges_entity
 AFTER
     DELETE ON transmission_interchanges FOR EACH ROW
@@ -1493,6 +1538,1353 @@ WHERE
 
 END;
 
+-- A name belongs to one row. These triggers fire before the UNIQUE index, so
+-- INSERT OR REPLACE cannot delete the other row without its delete triggers.
+
+CREATE TRIGGER IF NOT EXISTS check_planning_regions_name_owner_insert BEFORE
+INSERT
+    ON planning_regions
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            planning_regions
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: planning_regions.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_planning_regions_name_owner_update BEFORE
+UPDATE
+    OF name ON planning_regions
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            planning_regions
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: planning_regions.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_thermal_generators_name_owner_insert BEFORE
+INSERT
+    ON thermal_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            thermal_generators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: thermal_generators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_thermal_generators_name_owner_update BEFORE
+UPDATE
+    OF name ON thermal_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            thermal_generators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: thermal_generators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_renewable_generators_name_owner_insert BEFORE
+INSERT
+    ON renewable_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            renewable_generators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: renewable_generators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_renewable_generators_name_owner_update BEFORE
+UPDATE
+    OF name ON renewable_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            renewable_generators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: renewable_generators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_generators_name_owner_insert BEFORE
+INSERT
+    ON hydro_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            hydro_generators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: hydro_generators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_generators_name_owner_update BEFORE
+UPDATE
+    OF name ON hydro_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            hydro_generators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: hydro_generators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_storage_units_name_owner_insert BEFORE
+INSERT
+    ON storage_units
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            storage_units
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: storage_units.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_storage_units_name_owner_update BEFORE
+UPDATE
+    OF name ON storage_units
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            storage_units
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: storage_units.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_name_owner_insert BEFORE
+INSERT
+    ON hydro_reservoirs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            hydro_reservoirs
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: hydro_reservoirs.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_name_owner_update BEFORE
+UPDATE
+    OF name ON hydro_reservoirs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            hydro_reservoirs
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: hydro_reservoirs.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_loads_name_owner_insert BEFORE
+INSERT
+    ON loads
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            loads
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: loads.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_loads_name_owner_update BEFORE
+UPDATE
+    OF name ON loads
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            loads
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: loads.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_lines_name_owner_insert BEFORE
+INSERT
+    ON transmission_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_lines
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transmission_lines.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_lines_name_owner_update BEFORE
+UPDATE
+    OF name ON transmission_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_lines
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transmission_lines.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_generic_arc_impedances_name_owner_insert BEFORE
+INSERT
+    ON generic_arc_impedances
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            generic_arc_impedances
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: generic_arc_impedances.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_generic_arc_impedances_name_owner_update BEFORE
+UPDATE
+    OF name ON generic_arc_impedances
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            generic_arc_impedances
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: generic_arc_impedances.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_interchanges_name_owner_insert BEFORE
+INSERT
+    ON transmission_interchanges
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interchanges
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transmission_interchanges.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_interchanges_name_owner_update BEFORE
+UPDATE
+    OF name ON transmission_interchanges
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interchanges
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transmission_interchanges.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_reserves_name_owner_insert BEFORE
+INSERT
+    ON reserves
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            reserves
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: reserves.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_reserves_name_owner_update BEFORE
+UPDATE
+    OF name ON reserves
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            reserves
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: reserves.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_interfaces_name_owner_insert BEFORE
+INSERT
+    ON transmission_interfaces
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interfaces
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transmission_interfaces.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transmission_interfaces_name_owner_update BEFORE
+UPDATE
+    OF name ON transmission_interfaces
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transmission_interfaces
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transmission_interfaces.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_discrete_controlled_ac_branches_name_owner_insert BEFORE
+INSERT
+    ON discrete_controlled_ac_branches
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            discrete_controlled_ac_branches
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: discrete_controlled_ac_branches.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_discrete_controlled_ac_branches_name_owner_update BEFORE
+UPDATE
+    OF name ON discrete_controlled_ac_branches
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            discrete_controlled_ac_branches
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: discrete_controlled_ac_branches.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_series_compensators_name_owner_insert BEFORE
+INSERT
+    ON series_compensators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            series_compensators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: series_compensators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_series_compensators_name_owner_update BEFORE
+UPDATE
+    OF name ON series_compensators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            series_compensators
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: series_compensators.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_winding_transformers_name_owner_insert BEFORE
+INSERT
+    ON two_winding_transformers
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            two_winding_transformers
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: two_winding_transformers.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_winding_transformers_name_owner_update BEFORE
+UPDATE
+    OF name ON two_winding_transformers
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            two_winding_transformers
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: two_winding_transformers.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_three_winding_transformers_name_owner_insert BEFORE
+INSERT
+    ON three_winding_transformers
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            three_winding_transformers
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: three_winding_transformers.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_three_winding_transformers_name_owner_update BEFORE
+UPDATE
+    OF name ON three_winding_transformers
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            three_winding_transformers
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: three_winding_transformers.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_name_owner_insert BEFORE
+INSERT
+    ON two_terminal_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            two_terminal_hvdc_lines
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: two_terminal_hvdc_lines.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_name_owner_update BEFORE
+UPDATE
+    OF name ON two_terminal_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            two_terminal_hvdc_lines
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: two_terminal_hvdc_lines.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_tmodel_hvdc_lines_name_owner_insert BEFORE
+INSERT
+    ON tmodel_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            tmodel_hvdc_lines
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: tmodel_hvdc_lines.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_tmodel_hvdc_lines_name_owner_update BEFORE
+UPDATE
+    OF name ON tmodel_hvdc_lines
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            tmodel_hvdc_lines
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: tmodel_hvdc_lines.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_synchronous_condensers_name_owner_insert BEFORE
+INSERT
+    ON synchronous_condensers
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            synchronous_condensers
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: synchronous_condensers.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_synchronous_condensers_name_owner_update BEFORE
+UPDATE
+    OF name ON synchronous_condensers
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            synchronous_condensers
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: synchronous_condensers.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_fixed_admittance_name_owner_insert BEFORE
+INSERT
+    ON fixed_admittance
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            fixed_admittance
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: fixed_admittance.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_fixed_admittance_name_owner_update BEFORE
+UPDATE
+    OF name ON fixed_admittance
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            fixed_admittance
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: fixed_admittance.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_switched_admittance_name_owner_insert BEFORE
+INSERT
+    ON switched_admittance
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            switched_admittance
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: switched_admittance.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_switched_admittance_name_owner_update BEFORE
+UPDATE
+    OF name ON switched_admittance
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            switched_admittance
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: switched_admittance.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_sources_name_owner_insert BEFORE
+INSERT
+    ON sources
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            sources
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: sources.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_sources_name_owner_update BEFORE
+UPDATE
+    OF name ON sources
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            sources
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: sources.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_interconnecting_converters_name_owner_insert BEFORE
+INSERT
+    ON interconnecting_converters
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            interconnecting_converters
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: interconnecting_converters.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_interconnecting_converters_name_owner_update BEFORE
+UPDATE
+    OF name ON interconnecting_converters
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            interconnecting_converters
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: interconnecting_converters.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_facts_control_devices_name_owner_insert BEFORE
+INSERT
+    ON facts_control_devices
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            facts_control_devices
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: facts_control_devices.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_facts_control_devices_name_owner_update BEFORE
+UPDATE
+    OF name ON facts_control_devices
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            facts_control_devices
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: facts_control_devices.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_balancing_topologies_name_owner_insert BEFORE
+INSERT
+    ON balancing_topologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            balancing_topologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: balancing_topologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_balancing_topologies_name_owner_update BEFORE
+UPDATE
+    OF name ON balancing_topologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            balancing_topologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: balancing_topologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_supply_technologies_name_owner_insert BEFORE
+INSERT
+    ON supply_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            supply_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: supply_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_supply_technologies_name_owner_update BEFORE
+UPDATE
+    OF name ON supply_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            supply_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: supply_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_storage_technologies_name_owner_insert BEFORE
+INSERT
+    ON storage_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            storage_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: storage_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_storage_technologies_name_owner_update BEFORE
+UPDATE
+    OF name ON storage_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            storage_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: storage_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transport_technologies_name_owner_insert BEFORE
+INSERT
+    ON transport_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transport_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transport_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_transport_technologies_name_owner_update BEFORE
+UPDATE
+    OF name ON transport_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            transport_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: transport_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_demand_technologies_name_owner_insert BEFORE
+INSERT
+    ON demand_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            demand_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: demand_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_demand_technologies_name_owner_update BEFORE
+UPDATE
+    OF name ON demand_technologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            demand_technologies
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: demand_technologies.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_trading_hubs_name_owner_insert BEFORE
+INSERT
+    ON trading_hubs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            trading_hubs
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: trading_hubs.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_trading_hubs_name_owner_update BEFORE
+UPDATE
+    OF name ON trading_hubs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            trading_hubs
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: trading_hubs.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_virtual_participants_name_owner_insert BEFORE
+INSERT
+    ON virtual_participants
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            virtual_participants
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: virtual_participants.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_virtual_participants_name_owner_update BEFORE
+UPDATE
+    OF name ON virtual_participants
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            virtual_participants
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: virtual_participants.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_point_to_point_bids_name_owner_insert BEFORE
+INSERT
+    ON point_to_point_bids
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            point_to_point_bids
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: point_to_point_bids.name is used by another row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_point_to_point_bids_name_owner_update BEFORE
+UPDATE
+    OF name ON point_to_point_bids
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            point_to_point_bids
+        WHERE
+            name = NEW.name
+            AND id IS NOT NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'UNIQUE constraint failed: point_to_point_bids.name is used by another row'
+    );
+
+END;
+
 -- An arc_domain table's arc must connect topologies of that domain (entity_types.is_dc),
 -- on an insert or update of the branch and on an update of the arc's endpoints.
 -- A foreign key can't express this, since arcs reference entities generically
@@ -1563,6 +2955,76 @@ SELECT
     RAISE(
         ABORT,
         'arcs row is the transmission_lines.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_generic_arc_impedances_arc_domain_insert BEFORE
+INSERT
+    ON generic_arc_impedances
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_generic_arc_impedances_arc_domain_update BEFORE
+UPDATE
+    OF arc_id ON generic_arc_impedances
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            arcs a
+            JOIN entities e ON e.id IN (a.from_id, a.to_id)
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            a.id = NEW.arc_id
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'generic_arc_impedances.arc_id must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_generic_arc_impedances_arc_domain_endpoints BEFORE
+UPDATE
+    OF from_id, to_id ON arcs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            generic_arc_impedances t,
+            entities e
+            JOIN entity_types et ON et.name = e.entity_type
+        WHERE
+            t.arc_id = NEW.id
+            AND e.id IN (NEW.from_id, NEW.to_id)
+            AND et.is_dc <> 0
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'arcs row is the generic_arc_impedances.arc_id of a branch, so its endpoints must connect AC topologies (entity_types.is_dc = 0); use tmodel_hvdc_lines for DC-network branches'
     );
 
 END;
@@ -1917,8 +3379,9 @@ SELECT
 
 END;
 
--- A row listed in an attribute_references id array cannot be deleted: the array
--- lives in attributes, where a foreign key cannot reach it.
+-- An attribute_references id array lists only rows of its target table, and a
+-- listed row cannot be deleted. The array lives in attributes, where a foreign
+-- key cannot reach it.
 CREATE TRIGGER IF NOT EXISTS restrict_loads_delete_planning_regions_out_of_area_load_ids BEFORE
 DELETE ON loads
     WHEN EXISTS (
@@ -1929,7 +3392,7 @@ DELETE ON loads
             json_each(a.value) j
         WHERE
             a.TYPE IN ('Area')
-            AND a.name = 'out_of_area_load_ids'
+            AND lower(a.name) = 'out_of_area_load_ids'
             AND j.value = OLD.id
     )
 BEGIN
@@ -1937,6 +3400,476 @@ SELECT
     RAISE(
         ABORT,
         'loads row is listed in planning_regions.out_of_area_load_ids; remove it from the list first'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_planning_regions_out_of_area_load_ids_targets_insert BEFORE
+INSERT
+    ON attributes
+    WHEN NEW.TYPE IN ('Area')
+    AND lower(NEW.name) = 'out_of_area_load_ids'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'loads'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'planning_regions.out_of_area_load_ids lists an id that is not a loads row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_planning_regions_out_of_area_load_ids_targets_update BEFORE
+UPDATE
+    OF TYPE, name, value ON attributes
+    WHEN NEW.TYPE IN ('Area')
+    AND lower(NEW.name) = 'out_of_area_load_ids'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'loads'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'planning_regions.out_of_area_load_ids lists an id that is not a loads row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS restrict_hydro_generators_delete_hydro_reservoirs_upstream_turbines BEFORE
+DELETE ON hydro_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('HydroReservoir')
+            AND lower(a.name) = 'upstream_turbines'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_generators row is listed in hydro_reservoirs.upstream_turbines; remove it from the list first'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_upstream_turbines_targets_insert BEFORE
+INSERT
+    ON attributes
+    WHEN NEW.TYPE IN ('HydroReservoir')
+    AND lower(NEW.name) = 'upstream_turbines'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'hydro_generators'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs.upstream_turbines lists an id that is not a hydro_generators row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_upstream_turbines_targets_update BEFORE
+UPDATE
+    OF TYPE, name, value ON attributes
+    WHEN NEW.TYPE IN ('HydroReservoir')
+    AND lower(NEW.name) = 'upstream_turbines'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'hydro_generators'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs.upstream_turbines lists an id that is not a hydro_generators row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS restrict_hydro_generators_delete_hydro_reservoirs_downstream_turbines BEFORE
+DELETE ON hydro_generators
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('HydroReservoir')
+            AND lower(a.name) = 'downstream_turbines'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_generators row is listed in hydro_reservoirs.downstream_turbines; remove it from the list first'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_downstream_turbines_targets_insert BEFORE
+INSERT
+    ON attributes
+    WHEN NEW.TYPE IN ('HydroReservoir')
+    AND lower(NEW.name) = 'downstream_turbines'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'hydro_generators'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs.downstream_turbines lists an id that is not a hydro_generators row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_downstream_turbines_targets_update BEFORE
+UPDATE
+    OF TYPE, name, value ON attributes
+    WHEN NEW.TYPE IN ('HydroReservoir')
+    AND lower(NEW.name) = 'downstream_turbines'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'hydro_generators'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs.downstream_turbines lists an id that is not a hydro_generators row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS restrict_hydro_reservoirs_delete_hydro_reservoirs_upstream_reservoirs BEFORE
+DELETE ON hydro_reservoirs
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('HydroReservoir')
+            AND lower(a.name) = 'upstream_reservoirs'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs row is listed in hydro_reservoirs.upstream_reservoirs; remove it from the list first'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_upstream_reservoirs_targets_insert BEFORE
+INSERT
+    ON attributes
+    WHEN NEW.TYPE IN ('HydroReservoir')
+    AND lower(NEW.name) = 'upstream_reservoirs'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'hydro_reservoirs'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs.upstream_reservoirs lists an id that is not a hydro_reservoirs row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_hydro_reservoirs_upstream_reservoirs_targets_update BEFORE
+UPDATE
+    OF TYPE, name, value ON attributes
+    WHEN NEW.TYPE IN ('HydroReservoir')
+    AND lower(NEW.name) = 'upstream_reservoirs'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'hydro_reservoirs'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'hydro_reservoirs.upstream_reservoirs lists an id that is not a hydro_reservoirs row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS restrict_balancing_topologies_delete_two_terminal_hvdc_lines_remote_regulated_bus_from BEFORE
+DELETE ON balancing_topologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+            AND lower(a.name) = 'remote_regulated_bus_from'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'balancing_topologies row is listed in two_terminal_hvdc_lines.remote_regulated_bus_from; remove it from the list first'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_remote_regulated_bus_from_targets_insert BEFORE
+INSERT
+    ON attributes
+    WHEN NEW.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+    AND lower(NEW.name) = 'remote_regulated_bus_from'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'balancing_topologies'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.remote_regulated_bus_from lists an id that is not a balancing_topologies row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_remote_regulated_bus_from_targets_update BEFORE
+UPDATE
+    OF TYPE, name, value ON attributes
+    WHEN NEW.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+    AND lower(NEW.name) = 'remote_regulated_bus_from'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'balancing_topologies'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.remote_regulated_bus_from lists an id that is not a balancing_topologies row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS restrict_balancing_topologies_delete_two_terminal_hvdc_lines_remote_regulated_bus_to BEFORE
+DELETE ON balancing_topologies
+    WHEN EXISTS (
+        SELECT
+            1
+        FROM
+            attributes a,
+            json_each(a.value) j
+        WHERE
+            a.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+            AND lower(a.name) = 'remote_regulated_bus_to'
+            AND j.value = OLD.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'balancing_topologies row is listed in two_terminal_hvdc_lines.remote_regulated_bus_to; remove it from the list first'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_remote_regulated_bus_to_targets_insert BEFORE
+INSERT
+    ON attributes
+    WHEN NEW.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+    AND lower(NEW.name) = 'remote_regulated_bus_to'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'balancing_topologies'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.remote_regulated_bus_to lists an id that is not a balancing_topologies row'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS check_two_terminal_hvdc_lines_remote_regulated_bus_to_targets_update BEFORE
+UPDATE
+    OF TYPE, name, value ON attributes
+    WHEN NEW.TYPE IN ('TwoTerminalGenericHVDCLine', 'TwoTerminalLCCLine', 'TwoTerminalVSCLine')
+    AND lower(NEW.name) = 'remote_regulated_bus_to'
+    AND EXISTS (
+        SELECT
+            1
+        FROM
+            json_each(NEW.value) j
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    entities e
+                WHERE
+                    e.id = j.value
+                    AND e.entity_table = 'balancing_topologies'
+            )
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'two_terminal_hvdc_lines.remote_regulated_bus_to lists an id that is not a balancing_topologies row'
     );
 
 END;
@@ -2550,7 +4483,8 @@ END;
 -- composite economic quantities ($/MWh, MMBtu/MWh) must not require a schema
 -- migration. But a row that uses a REGISTERED quantity-type name must pair it
 -- with a registered unit -- a typo'd or contradictory unit on a known quantity
--- is a defect, not a new vocabulary.
+-- is a defect, not a new vocabulary. A COMPONENT_BASE series is per-unit, so
+-- quantity_kind alone says what it measures and units may be omitted.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS validate_time_series_associations_units_insert BEFORE
 INSERT
@@ -2565,15 +4499,21 @@ INSERT
             name = NEW.quantity_kind
     )
     AND (
-        NEW.units IS NULL
-        OR NOT EXISTS (
-            SELECT
-                1
-            FROM
-                allowed_units au
-            WHERE
-                au.quantity_kind = NEW.quantity_kind
-                AND au.unit = NEW.units
+        (
+            NEW.units IS NULL
+            AND NEW.unit_system IS NOT 'component_base'
+        )
+        OR (
+            NEW.units IS NOT NULL
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_kind = NEW.quantity_kind
+                    AND au.unit = NEW.units
+            )
         )
     )
 BEGIN
@@ -2598,15 +4538,21 @@ UPDATE
             name = NEW.quantity_kind
     )
     AND (
-        NEW.units IS NULL
-        OR NOT EXISTS (
-            SELECT
-                1
-            FROM
-                allowed_units au
-            WHERE
-                au.quantity_kind = NEW.quantity_kind
-                AND au.unit = NEW.units
+        (
+            NEW.units IS NULL
+            AND NEW.unit_system IS NOT 'component_base'
+        )
+        OR (
+            NEW.units IS NOT NULL
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    allowed_units au
+                WHERE
+                    au.quantity_kind = NEW.quantity_kind
+                    AND au.unit = NEW.units
+            )
         )
     )
 BEGIN
@@ -2991,7 +4937,8 @@ END;
 -- Time Series Association Owner-Domain Triggers
 -- owner_id references entities (both categories share the entities id-space
 -- here, unlike infrastore's independent streams), but a 'SupplementalAttribute'
--- owner must actually be a supplemental attribute.
+-- owner must actually be a supplemental attribute: a supplemental_attributes row,
+-- or a plants row, where plant-type attributes live.
 -- =============================================================================
 CREATE TRIGGER IF NOT EXISTS enforce_time_series_associations_owner_domain BEFORE
 INSERT
@@ -3005,11 +4952,19 @@ INSERT
         WHERE
             id = NEW.owner_id
     )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            plants
+        WHERE
+            id = NEW.owner_id
+    )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = ''SupplementalAttribute''.'
+        'time_series_associations.owner_id must exist in supplemental_attributes or plants when owner_category = ''SupplementalAttribute''.'
     );
 
 END;
@@ -3027,11 +4982,19 @@ UPDATE
         WHERE
             id = NEW.owner_id
     )
+    AND NOT EXISTS (
+        SELECT
+            1
+        FROM
+            plants
+        WHERE
+            id = NEW.owner_id
+    )
 BEGIN
 SELECT
     RAISE(
         ABORT,
-        'time_series_associations.owner_id must exist in supplemental_attributes when owner_category = ''SupplementalAttribute''.'
+        'time_series_associations.owner_id must exist in supplemental_attributes or plants when owner_category = ''SupplementalAttribute''.'
     );
 
 END;
@@ -3326,53 +5289,6 @@ SELECT
             'attributes.name is an exempt identifier, so a unit is optional -- but a supplied unit and quantity_kind must still be a registered allowed_units pair.'
         )
     END;
-
-END;
-
--- =============================================================================
--- Time Series Data Validation Triggers
--- Dense values are located by uri: each static_time_series row must belong to
--- an array some association row declares via uri. Ingest order is therefore
--- association first, values second -- an orphan array is a loader bug surfaced
--- loudly, not data to keep.
--- =============================================================================
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists BEFORE
-INSERT
-    ON static_time_series
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_associations
-        WHERE
-            uri = NEW.uri
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'static_time_series.uri must exist in time_series_associations before insertion.'
-    );
-
-END;
-
-CREATE TRIGGER IF NOT EXISTS check_static_time_series_association_exists_update BEFORE
-UPDATE
-    OF uri ON static_time_series
-    WHEN NOT EXISTS (
-        SELECT
-            1
-        FROM
-            time_series_associations
-        WHERE
-            uri = NEW.uri
-    )
-BEGIN
-SELECT
-    RAISE(
-        ABORT,
-        'static_time_series.uri must exist in time_series_associations before insertion.'
-    );
 
 END;
 
@@ -3788,5 +5704,322 @@ SELECT
         ABORT,
         'interconnecting_converters.bus must be an AC topology (entity_types.is_dc = 0) and dc_bus a DC bus (is_dc = 1)'
     );
+
+END;
+
+
+-- =============================================================================
+-- Entity Type Triggers
+-- Every entities row pairs a type with the table that holds that type's rows
+-- (entity_type_tables). Without the check, a generator row could carry a bus type
+-- and pass the topology checks that read entities.entity_type.
+-- =============================================================================
+
+CREATE TRIGGER IF NOT EXISTS enforce_entities_type_table_insert BEFORE
+INSERT
+    ON entities
+    WHEN NOT EXISTS (
+        SELECT
+            1
+        FROM
+            entity_type_tables
+        WHERE
+            entity_type = NEW.entity_type
+            AND entity_table = NEW.entity_table
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'entities.entity_type must be a type of entities.entity_table (see entity_type_tables)'
+    );
+
+END;
+
+-- The vocabulary is fixed: a changed flag or table would break the rows already stored.
+CREATE TRIGGER IF NOT EXISTS prevent_entity_types_update BEFORE
+UPDATE
+    ON entity_types
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'entity_types rows cannot change; the schema files define them'
+    );
+
+END;
+
+-- The vocabulary is fixed: a changed flag or table would break the rows already stored.
+CREATE TRIGGER IF NOT EXISTS prevent_entity_type_tables_update BEFORE
+UPDATE
+    ON entity_type_tables
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'entity_type_tables rows cannot change; the schema files define them'
+    );
+
+END;
+
+
+-- =============================================================================
+-- Type Label Triggers
+-- A row that repeats its owner's type must state the owner's entity_type. The
+-- attribute unit exemptions and the emissions checks select rows by this label.
+-- =============================================================================
+
+CREATE TRIGGER IF NOT EXISTS enforce_attributes_owner_type_insert BEFORE
+INSERT
+    ON attributes
+    WHEN NEW.TYPE IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.entity_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'attributes.TYPE must be the entity_type of entities row attributes.entity_id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_attributes_owner_type_update BEFORE
+UPDATE
+    OF entity_id, TYPE ON attributes
+    WHEN NEW.TYPE IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.entity_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'attributes.TYPE must be the entity_type of entities row attributes.entity_id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attributes_own_type_insert BEFORE
+INSERT
+    ON supplemental_attributes
+    WHEN NEW.TYPE IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attributes.TYPE must be the entity_type of entities row supplemental_attributes.id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attributes_own_type_update BEFORE
+UPDATE
+    OF id, TYPE ON supplemental_attributes
+    WHEN NEW.TYPE IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attributes.TYPE must be the entity_type of entities row supplemental_attributes.id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_plants_own_type_insert BEFORE
+INSERT
+    ON plants
+    WHEN NEW.TYPE IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'plants.TYPE must be the entity_type of entities row plants.id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_plants_own_type_update BEFORE
+UPDATE
+    OF id, TYPE ON plants
+    WHEN NEW.TYPE IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'plants.TYPE must be the entity_type of entities row plants.id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_component_type_insert BEFORE
+INSERT
+    ON supplemental_attribute_associations
+    WHEN NEW.component_type IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.component_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.component_type must be the entity_type of entities row supplemental_attribute_associations.component_id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_component_type_update BEFORE
+UPDATE
+    OF component_id, component_type ON supplemental_attribute_associations
+    WHEN NEW.component_type IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.component_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.component_type must be the entity_type of entities row supplemental_attribute_associations.component_id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_attribute_type_insert BEFORE
+INSERT
+    ON supplemental_attribute_associations
+    WHEN NEW.attribute_type IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.attribute_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.attribute_type must be the entity_type of entities row supplemental_attribute_associations.attribute_id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_attribute_type_update BEFORE
+UPDATE
+    OF attribute_id, attribute_type ON supplemental_attribute_associations
+    WHEN NEW.attribute_type IS NOT (
+        SELECT
+            entity_type
+        FROM
+            entities
+        WHERE
+            id = NEW.attribute_id
+    )
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.attribute_type must be the entity_type of entities row supplemental_attribute_associations.attribute_id'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_distinct BEFORE
+INSERT
+    ON supplemental_attribute_associations
+    WHEN NEW.component_id = NEW.attribute_id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.component_id and attribute_id must differ'
+    );
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS enforce_supplemental_attribute_associations_distinct_update BEFORE
+UPDATE
+    OF component_id, attribute_id ON supplemental_attribute_associations
+    WHEN NEW.component_id = NEW.attribute_id
+BEGIN
+SELECT
+    RAISE(
+        ABORT,
+        'supplemental_attribute_associations.component_id and attribute_id must differ'
+    );
+
+END;
+
+
+-- =============================================================================
+-- Transformer Circuit Triggers
+-- A transformer owns its circuits, but the foreign key runs from the transformer
+-- to the circuit. Deleting the transformer deletes its circuits. Their arcs stay:
+-- an arc can carry other branches.
+-- =============================================================================
+CREATE TRIGGER IF NOT EXISTS delete_two_winding_transformers_circuit
+AFTER
+    DELETE ON two_winding_transformers FOR EACH ROW
+BEGIN
+DELETE FROM
+    transformer_circuits
+WHERE
+    id = OLD.circuit;
+
+END;
+
+CREATE TRIGGER IF NOT EXISTS delete_three_winding_transformers_circuits
+AFTER
+    DELETE ON three_winding_transformers FOR EACH ROW
+BEGIN
+DELETE FROM
+    transformer_circuits
+WHERE
+    id IN (OLD.primary_circuit, OLD.secondary_circuit, OLD.tertiary_circuit);
 
 END;
