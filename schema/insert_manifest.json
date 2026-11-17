@@ -4784,7 +4784,7 @@
       "table": "virtual_participants"
     }
   },
-  "schema_user_version": 15,
+  "schema_user_version": 500,
   "supplemental_attributes": {
     "attribute_sql": "INSERT INTO supplemental_attributes (id, TYPE, value) VALUES (?, ?, ?)",
     "plant_sql": "INSERT INTO plants (id, name, TYPE, value) VALUES (?, ?, ?, ?)",

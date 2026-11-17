@@ -741,3 +741,10 @@ def test_series_stores_per_unit_of(fresh_db):
     assert fresh_db.execute("SELECT per_unit_of FROM time_series_associations").fetchone() == (
         "max_active_power",
     )
+
+
+def test_user_version_encodes_the_schema_release(fresh_db):
+    tag = (SCHEMA_DIR.parent / ".schema-version").read_text().strip()
+    major, minor, patch = (int(part) for part in tag.lstrip("v").split("."))
+    found = fresh_db.execute("PRAGMA user_version").fetchone()[0]
+    assert found == major * 10000 + minor * 100 + patch

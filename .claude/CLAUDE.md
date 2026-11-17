@@ -48,7 +48,7 @@ Cross-repo paths are **flags with `../` defaults, not a required layout**: `gene
 
 - `schema/unit_registry.sql` is checksum-sealed: the canonical byte representation (with `\x1f/\x1e/\x1d` separators) must hash-match the seal. The generator refuses `(quantity_kind, unit)` pairs absent from `units.json`.
 - Cost fields are registered as JSON-path "columns" (`operation_cost.fixed`, …) and the `attributes` rows are attribute-name conventions rather than physical columns — the registry covers more than literal columns.
-- Bump `PRAGMA user_version` on any schema or registry change.
+- `PRAGMA user_version` encodes `.schema-version` as MAJOR*10000 + MINOR*100 + PATCH. `bump_version.py` sets it; a test enforces it.
 
 ## Commands
 
