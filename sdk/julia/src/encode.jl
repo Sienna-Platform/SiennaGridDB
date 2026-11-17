@@ -15,17 +15,124 @@ const ENCODINGS = Dict{String, Encoding}(
     "features_hash" => FeaturesHashEncoding(),
 )
 
+"""
+RFC 8785 (JCS) text, the form the three SDKs write: keys in UTF-16 code-unit order,
+numbers as ECMAScript writes them (1.0 -> 1), no whitespace.
+"""
 function canonical_json(value)
-    try
-        return JSON.json(value)
-    catch e
-        throw(json_error(e))
-    end
+    io = IOBuffer()
+    write_json(io, value)
+    return String(take!(io))
 end
 
-# JSON.jl throws an ArgumentError for NaN and Inf.
-json_error(e::ArgumentError) = EncodeError("$(e.msg): GridDB stores finite numbers only")
-json_error(e) = e
+write_json(io::IO, ::Nothing) = print(io, "null")
+function write_json(io::IO, v::Bool)
+    if v
+        print(io, "true")
+    else
+        print(io, "false")
+    end
+    return nothing
+end
+write_json(io::IO, v::Integer) = print(io, v)
+write_json(io::IO, v::AbstractFloat) = print(io, es_number(Float64(v)))
+write_json(io::IO, v::AbstractString) = write_string(io, v)
+function write_json(io::IO, v::AbstractVector)
+    print(io, '[')
+    for (i, x) in enumerate(v)
+        if i > 1
+            print(io, ',')
+        end
+        write_json(io, x)
+    end
+    print(io, ']')
+    return nothing
+end
+function write_json(io::IO, d::AbstractDict)
+    entries = sort!([(String(k), v) for (k, v) in d]; by=e -> transcode(UInt16, e[1]))
+    print(io, '{')
+    for (i, (k, v)) in enumerate(entries)
+        if i > 1
+            print(io, ',')
+        end
+        write_string(io, k)
+        print(io, ':')
+        write_json(io, v)
+    end
+    print(io, '}')
+    return nothing
+end
+write_json(::IO, v) = throw(EncodeError("not a JSON value: $(repr(v))"))
+
+# ECMAScript escapes only these; JSON.jl also escapes DEL, so it cannot write the text.
+const SHORT_ESCAPES = Dict(
+    '"' => "\\\"",
+    '\\' => "\\\\",
+    '\b' => "\\b",
+    '\f' => "\\f",
+    '\n' => "\\n",
+    '\r' => "\\r",
+    '\t' => "\\t",
+)
+
+function write_string(io::IO, s::AbstractString)
+    print(io, '"')
+    for c in s
+        if haskey(SHORT_ESCAPES, c)
+            print(io, SHORT_ESCAPES[c])
+        elseif c < ' '
+            print(io, "\\u", string(UInt32(c); base=16, pad=4))
+        else
+            print(io, c)
+        end
+    end
+    print(io, '"')
+    return nothing
+end
+
+"""
+ECMAScript Number::toString, from the shortest round-trip digits `string` gives.
+"""
+function es_number(x::Float64)
+    if !isfinite(x)
+        throw(EncodeError("$x: GridDB stores finite numbers only"))
+    end
+    if iszero(x)
+        return "0"
+    end
+    sign = ""
+    if signbit(x)
+        sign = "-"
+    end
+    parts = split(string(abs(x)), 'e')
+    exponent = 0
+    if length(parts) == 2
+        exponent = parse(Int, parts[2])
+    end
+    whole, fraction = split(parts[1], '.')
+    all_digits = whole * fraction
+    digits = lstrip(all_digits, '0')
+    # n: where the decimal point sits relative to the first significant digit.
+    n = length(whole) + exponent - (length(all_digits) - length(digits))
+    digits = rstrip(digits, '0')
+    k = length(digits)
+    if k <= n <= 21
+        return sign * digits * "0"^(n - k)
+    elseif 0 < n <= 21
+        return sign * digits[1:n] * "." * digits[(n + 1):end]
+    elseif -6 < n <= 0
+        return sign * "0." * "0"^(-n) * digits
+    end
+    e = n - 1
+    mark = "-"
+    if e >= 0
+        mark = "+"
+    end
+    if k == 1
+        return "$sign$(digits)e$mark$(abs(e))"
+    end
+    return "$sign$(digits[1]).$(digits[2:end])e$mark$(abs(e))"
+end
 
 """
 What the int encoder accepts: an integer or integral float, not a `Bool`, in Int64.

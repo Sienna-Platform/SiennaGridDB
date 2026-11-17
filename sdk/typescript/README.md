@@ -14,7 +14,9 @@ const report = insertDocument(db, readDocument("system.json"));
 console.log(JSON.stringify(report, null, 2));
 ```
 
-Any plain JSON object works; zod-parsed SDK objects are plain objects. Fields GridDB
+Any plain JSON object works; zod-parsed SDK objects are plain objects. A feature written
+as `2030.0` hashes as a Float only in a document read by `insertFile` or `parseJson`;
+`JSON.parse` turns it into the Int `2030`. Fields GridDB
 has no column for yet are counted in `report.skipped_fields`; pass `{ strict: true }`
 to throw. CLI: `griddb-tools build system.json system.sqlite`.
 A portfolio and its base system: `insertFile(db, "portfolio_dir")`, or the CLI with the directory.

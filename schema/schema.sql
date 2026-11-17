@@ -1,6 +1,6 @@
 -- Requires SQLite >= 3.45. Test-only: drops every table below, so never run
 -- against a live dataset.
-PRAGMA user_version = 14; -- bump on every schema or registry change
+PRAGMA user_version = 15; -- bump on every schema or registry change
 
 DROP TABLE IF EXISTS prime_mover_types;
 
@@ -627,7 +627,7 @@ CREATE TABLE hydro_generators (
     outflow_limits TEXT NULL CHECK (json_valid(outflow_limits)),
     conversion_factor REAL NULL DEFAULT 1.0 CHECK (conversion_factor > 0),
     travel_time REAL NULL CHECK (travel_time >= 0),
-    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_GEN","fixed":0.0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('HYDRO_GEN', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
+    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_GEN","fixed":0,"variable_operation_cost":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('HYDRO_GEN', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID', 'MARKET_BID_TIME_SERIES')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type'), '') IN ('COST', 'FUEL')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR ifnull(json_extract(operation_cost, '$.variable_operation_cost.value_curve.curve_type'), '') IN ('INPUT_OUTPUT', 'INCREMENTAL', 'AVERAGE_RATE', 'TIME_SERIES_INPUT_OUTPUT', 'TIME_SERIES_INCREMENTAL', 'TIME_SERIES_AVERAGE_RATE')) CHECK (json_extract(operation_cost, '$.cost_type') IN ('MARKET_BID', 'MARKET_BID_TIME_SERIES', 'IMPORT_EXPORT_TIME_SERIES') OR json_extract(operation_cost, '$.variable_operation_cost.variable_cost_type') <> 'FUEL' OR (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost') IS NOT NULL) <> (json_extract(operation_cost, '$.variable_operation_cost.fuel_cost_time_series') IS NOT NULL)),
     production_cost TEXT GENERATED ALWAYS AS (json_extract(operation_cost, '$.variable_operation_cost')) VIRTUAL,
     time_at_status REAL NOT NULL DEFAULT 600000.0
 ) STRICT;
@@ -693,7 +693,7 @@ CREATE TABLE hydro_reservoirs (
     level_targets REAL NULL,
     intake_elevation REAL NOT NULL DEFAULT 0.0,
     head_to_volume_factor TEXT NOT NULL CHECK (json_valid(head_to_volume_factor)),
-    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_RES","level_shortage_cost":0.0,"level_surplus_cost":0.0,"spillage_cost":0.0}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('HYDRO_RES', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES')),
+    operation_cost TEXT NOT NULL DEFAULT '{"cost_type":"HYDRO_RES","level_shortage_cost":0,"level_surplus_cost":0,"spillage_cost":0}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('HYDRO_RES', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES')),
     level_data_type TEXT NOT NULL DEFAULT 'USABLE_VOLUME' CHECK (level_data_type IN ('USABLE_VOLUME', 'TOTAL_VOLUME', 'HEAD', 'ENERGY')),
     evaporative_loss REAL NOT NULL DEFAULT 0.0 CHECK (evaporative_loss >= 0)
 ) STRICT;
@@ -740,7 +740,7 @@ CREATE TABLE transmission_lines (
     r REAL NOT NULL CHECK (r >= 0),
     x REAL NOT NULL,
     b TEXT NULL CHECK (json_valid(b)),
-    g TEXT NOT NULL DEFAULT '{"from":0.0,"to":0.0}' CHECK (json_valid(g)),
+    g TEXT NOT NULL DEFAULT '{"from":0,"to":0}' CHECK (json_valid(g)),
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
@@ -939,7 +939,7 @@ CREATE TABLE two_winding_transformers (
     id INTEGER PRIMARY KEY REFERENCES entities (id) ON DELETE CASCADE,
     name TEXT NOT NULL UNIQUE,
     circuit INTEGER NOT NULL REFERENCES transformer_circuits (id) ON DELETE CASCADE,
-    magnetizing_shunt TEXT NOT NULL DEFAULT '{"imag":0.0,"real":0.0}' CHECK (json_valid(magnetizing_shunt)),
+    magnetizing_shunt TEXT NOT NULL DEFAULT '{"imag":0,"real":0}' CHECK (json_valid(magnetizing_shunt)),
     shunt_location TEXT NOT NULL DEFAULT 'PRIMARY' CHECK (shunt_location IN ('PRIMARY', 'SECONDARY', 'SPLIT'))
 ) STRICT;
 CREATE UNIQUE INDEX idx_two_winding_transformers_circuit ON two_winding_transformers (circuit);
@@ -968,7 +968,7 @@ CREATE TABLE three_winding_transformers (
     base_power_12 REAL NULL CHECK (base_power_12 > 0),
     base_power_23 REAL NULL CHECK (base_power_23 > 0),
     base_power_31 REAL NULL CHECK (base_power_31 > 0),
-    magnetizing_shunt TEXT NOT NULL DEFAULT '{"imag":0.0,"real":0.0}' CHECK (json_valid(magnetizing_shunt)),
+    magnetizing_shunt TEXT NOT NULL DEFAULT '{"imag":0,"real":0}' CHECK (json_valid(magnetizing_shunt)),
     shunt_location TEXT NOT NULL DEFAULT 'PRIMARY' CHECK (shunt_location IN ('PRIMARY', 'STAR')),
     CHECK (primary_circuit <> secondary_circuit AND primary_circuit <> tertiary_circuit AND secondary_circuit <> tertiary_circuit),
     CHECK ((r_12 IS NULL) + (x_12 IS NULL) + (r_23 IS NULL) + (x_23 IS NULL) + (r_31 IS NULL) + (x_31 IS NULL) + (base_power_12 IS NULL) + (base_power_23 IS NULL) + (base_power_31 IS NULL) IN (0, 9))
@@ -1116,14 +1116,14 @@ CREATE TABLE sources (
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     active_power REAL NOT NULL DEFAULT 0.0,
     reactive_power REAL NOT NULL DEFAULT 0.0,
-    active_power_limits TEXT NOT NULL DEFAULT '{"max":0.0,"min":0.0}' CHECK (json_valid(active_power_limits)),
-    reactive_power_limits TEXT NOT NULL DEFAULT '{"max":0.0,"min":0.0}' CHECK (json_valid(reactive_power_limits)),
+    active_power_limits TEXT NOT NULL DEFAULT '{"max":0,"min":0}' CHECK (json_valid(active_power_limits)),
+    reactive_power_limits TEXT NOT NULL DEFAULT '{"max":0,"min":0}' CHECK (json_valid(reactive_power_limits)),
     internal_voltage REAL NOT NULL DEFAULT 1.0 CHECK (internal_voltage >= 0),
     internal_angle REAL NOT NULL DEFAULT 0.0,
     r_th REAL NOT NULL DEFAULT 0.0,
     x_th REAL NOT NULL DEFAULT 0.0,
     parameter_units TEXT NOT NULL DEFAULT 'COMPONENT_BASE' CHECK (parameter_units IN ('NATURAL_UNITS', 'COMPONENT_BASE')),
-    operation_cost TEXT NOT NULL DEFAULT '{"ancillary_service_offers":[],"cost_type":"IMPORTEXPORT","energy_export_weekly_limit":1000000.0,"energy_import_weekly_limit":1000000.0,"export_offer_curves":null,"import_offer_curves":null}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('IMPORTEXPORT', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES'))
+    operation_cost TEXT NOT NULL DEFAULT '{"ancillary_service_offers":[],"cost_type":"IMPORTEXPORT","energy_export_weekly_limit":1000000,"energy_import_weekly_limit":1000000,"export_offer_curves":null,"import_offer_curves":null}' CHECK (json_valid(operation_cost)) CHECK (ifnull(json_extract(operation_cost, '$.cost_type'), '') IN ('IMPORTEXPORT', 'IMPORT_EXPORT_TIME_SERIES', 'MARKET_BID_TIME_SERIES'))
 ) STRICT;
 CREATE INDEX idx_sources_bus ON sources (bus);
 CREATE INDEX idx_sources_remote_regulated_bus ON sources (remote_regulated_bus);
@@ -1147,7 +1147,7 @@ CREATE TABLE interconnecting_converters (
     base_power REAL NOT NULL CHECK (base_power > 0),
     power_units TEXT NOT NULL CHECK (power_units IN ('COMPONENT_BASE', 'NATURAL_UNITS')),
     power_factor_weighting_fraction REAL NOT NULL DEFAULT 1.0 CHECK (power_factor_weighting_fraction >= 0),
-    voltage_limits TEXT NOT NULL DEFAULT '{"max":999.9,"min":0.0}' CHECK (json_valid(voltage_limits)),
+    voltage_limits TEXT NOT NULL DEFAULT '{"max":999.9,"min":0}' CHECK (json_valid(voltage_limits)),
     available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
     active_power REAL NOT NULL,
     rating REAL NOT NULL,
@@ -1261,8 +1261,8 @@ CREATE TABLE storage_technologies (
     min_discharge_fraction REAL NOT NULL DEFAULT 0.0,
     losses REAL NOT NULL DEFAULT 1.0,
     capital_costs_charge TEXT NULL CHECK (json_valid(capital_costs_charge)),
-    capital_costs_discharge TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}' CHECK (json_valid(capital_costs_discharge)),
-    capital_costs_energy TEXT NOT NULL DEFAULT '{"curve_type": "INPUT_OUTPUT", "function_data": {"function_type": "LINEAR", "proportional_term": 0, "constant_term": 0}}' CHECK (json_valid(capital_costs_energy)),
+    capital_costs_discharge TEXT NOT NULL DEFAULT '{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}' CHECK (json_valid(capital_costs_discharge)),
+    capital_costs_energy TEXT NOT NULL DEFAULT '{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}' CHECK (json_valid(capital_costs_energy)),
     interconnection_cost REAL NOT NULL DEFAULT 0.0,
     operation_costs TEXT NOT NULL DEFAULT '{"cost_type":"THERMAL","fixed":0,"shut_down":0,"start_up":0,"variable":{"power_units":"NATURAL_UNITS","value_curve":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}},"variable_cost_type":"COST","vom_cost":{"curve_type":"INPUT_OUTPUT","function_data":{"constant_term":0,"function_type":"LINEAR","proportional_term":0}}}}' CHECK (json_valid(operation_costs)),
     financial_data TEXT NOT NULL CHECK (json_valid(financial_data))

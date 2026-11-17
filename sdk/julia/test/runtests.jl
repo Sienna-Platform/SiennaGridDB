@@ -54,6 +54,14 @@ first_of(doc, type_name) = deepcopy(doc["components"][type_name][1])
         @test_throws G.EncodeError G.features_hash(Dict{String, Any}("a" => big(2)^63))
     end
 
+    @testset "canonical_json writes the RFC 8785 vectors" begin
+        vectors = load_json(joinpath(REPO_ROOT, "test", "canonical_json_vectors.json"))
+        for v in vectors["vectors"]
+            @test G.canonical_json(JSON.parse(v["input"])) == v["expected"]
+        end
+        @test_throws G.EncodeError G.canonical_json(Dict{String, Any}("a" => NaN))
+    end
+
     @testset "create and open" begin
         mktempdir() do dir
             path = joinpath(dir, "a.sqlite")

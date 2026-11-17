@@ -89,16 +89,44 @@ function u64(n: number | bigint): Buffer {
   return b;
 }
 
-/** The kind a feature value hashes as. JSON.parse cannot tell 1.0 from 1, so a safe integer is "int". */
-export function featureKind(value: unknown): string {
+// JSON.parse turns 2030.0 into 2030. parseJson records, per parsed object, the keys whose
+// number token has a fraction or exponent, so a feature map hashes them as Float.
+const floatTokens = new WeakMap<object, Set<string>>();
+
+type Reviver = (this: object, key: string, value: unknown, context?: { source?: string }) => unknown;
+
+/** JSON.parse that keeps 2030.0 a Float in feature maps (needs JSON.parse source text access). */
+export function parseJson(text: string): unknown {
+  const reviver: Reviver = function (key, value, context) {
+    const source = context?.source;
+    if (typeof value === "number" && source !== undefined && /[.eE]/.test(source)) {
+      const keys = floatTokens.get(this) ?? new Set<string>();
+      keys.add(key);
+      floatTokens.set(this, keys);
+    }
+    return value;
+  };
+  return (JSON.parse as (text: string, reviver: Reviver) => unknown)(text, reviver);
+}
+
+/**
+ * The kind features[key] hashes as. A number parsed by parseJson from a token like 2030.0 is
+ * "float"; any other safe integer is "int", since an object built in code cannot tell 1.0 from 1.
+ */
+export function featureKind(features: JsonObject, key: string): string {
+  const value = features[key];
   if (typeof value === "boolean") return "bool";
-  if (typeof value === "number") return Number.isSafeInteger(value) ? "int" : "float";
+  if (typeof value === "number") {
+    if (Number.isSafeInteger(value) && !floatTokens.get(features)?.has(key)) return "int";
+    return "float";
+  }
   if (typeof value === "string") return "str";
   return typeof value;
 }
 
-function featureBytes(value: unknown): Buffer {
-  const kind = featureKind(value);
+function featureBytes(features: JsonObject, key: string): Buffer {
+  const value = features[key];
+  const kind = featureKind(features, key);
   if (kind === "bool") return Buffer.from([0x62, value ? 1 : 0]);
   if (kind === "int") {
     const b = Buffer.alloc(9, 0x69);
@@ -121,13 +149,12 @@ function featureBytes(value: unknown): Buffer {
 
 /**
  * infrastore's features_hash (crates/infrastore-core/src/hash.rs), lowercase hex. Keys go in
- * UTF-8 byte order. JSON.parse cannot tell 1.0 from 1, so a safe integer (|x| < 2^53) hashes
- * as Int and every other number as Float.
+ * UTF-8 byte order. Numbers hash as featureKind says.
  */
 export function featuresHash(features: JsonObject): string {
   const keys = Object.keys(features).map((k) => [k, Buffer.from(k, "utf8")] as const);
   keys.sort((a, b) => Buffer.compare(a[1], b[1]));
   const hash = createHash("sha256").update("features\0").update(u64(keys.length));
-  for (const [key, raw] of keys) hash.update(u64(raw.length)).update(raw).update(featureBytes(features[key]));
+  for (const [key, raw] of keys) hash.update(u64(raw.length)).update(raw).update(featureBytes(features, key));
   return hash.digest("hex");
 }

@@ -10,8 +10,8 @@ import {
   openDatabase,
   seedVocabulary,
 } from "../src/index.js";
-import { canonicalJson, encode, featuresHash, valueAt } from "../src/encode.js";
-import { EncodeError } from "../src/errors.js";
+import { canonicalJson, encode, featuresHash, parseJson, valueAt } from "../src/encode.js";
+import { EncodeError, type JsonObject } from "../src/errors.js";
 import { loadManifest } from "../src/manifest.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "griddb-"));
@@ -42,13 +42,10 @@ describe("encodings", () => {
   });
 });
 
-test("featuresHash matches the golden vectors", () => {
+test("featuresHash matches the golden vectors, integral floats included", () => {
   const path = new URL("../../../test/features_hash_vectors.json", import.meta.url);
-  const { vectors } = JSON.parse(readFileSync(path, "utf-8"));
-  for (const v of vectors) {
-    if (v.integral_float) continue;
-    expect(featuresHash(v.features)).toBe(v.hash);
-  }
+  const { vectors } = parseJson(readFileSync(path, "utf-8")) as { vectors: { features: JsonObject; hash: string }[] };
+  for (const v of vectors) expect(featuresHash(v.features)).toBe(v.hash);
   expect(() => featuresHash({ a: null })).toThrow(EncodeError);
 });
 
@@ -101,4 +98,10 @@ test("openDatabase checks user_version and enables foreign keys", () => {
   raw.pragma("user_version = 99");
   raw.close();
   expect(() => openDatabase(path)).toThrow(/user_version 99/);
+});
+
+test("canonicalJson writes the RFC 8785 vectors", () => {
+  const path = new URL("../../../test/canonical_json_vectors.json", import.meta.url);
+  const { vectors } = JSON.parse(readFileSync(path, "utf-8")) as { vectors: { input: string; expected: string }[] };
+  for (const v of vectors) expect(canonicalJson(JSON.parse(v.input))).toBe(v.expected);
 });

@@ -112,3 +112,11 @@ def test_features_hash_tells_int_from_float_and_bool():
         features_hash({"a": None})
     with pytest.raises(EncodeError):
         features_hash({"a": 2**63})
+
+
+def test_canonical_json_writes_the_rfc_8785_vectors():
+    from sienna_griddb_tools.encode import canonical_json
+
+    path = Path(__file__).resolve().parents[3] / "test" / "canonical_json_vectors.json"
+    for v in json.loads(path.read_text("utf-8"))["vectors"]:
+        assert canonical_json(json.loads(v["input"])) == v["expected"]

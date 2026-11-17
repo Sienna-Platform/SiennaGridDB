@@ -2,3 +2,4 @@ export { createDatabase, openDatabase, seedVocabulary, type Connection } from ".
 export { InsertReport } from "./report.js";
 export { insertComponent, insertComponents, insertDocument, insertFile, type InsertOptions } from "./insert.js";
 export { GridDBToolsError, InsertError, type JsonObject } from "./errors.js";
+export { parseJson } from "./encode.js";
