@@ -1,7 +1,7 @@
 {
   "description": "The rules for choosing a disposition (column, attribute, skip, ...) for a schema property. scripts/generate_sql_schema.py enforces the result recorded in sql_codegen_map.json, not this file. The per-table entries below are the original proposal those dispositions came from.",
   "dispositions": {
-    "column": "Add a real column to schema.sql. Requires a user_version bump.",
+    "column": "Add a real column to schema.sql.",
     "attribute": "Persist via the generic `attributes` table. Must also be added to this table's `attribute_channel` in sql_codegen_map.json.",
     "rename": "A column already exists under a different name. Add to this table's `renames` in sql_codegen_map.json; no DDL change.",
     "decomposed": "The value is already stored, split across two or more existing columns. Needs a split/join rule in the mapper; no DDL change.",

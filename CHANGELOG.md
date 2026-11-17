@@ -2,15 +2,23 @@
 
 All notable changes to SiennaGridDB are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project versions the
-schema itself through `PRAGMA user_version`, bumped on every schema or registry change.
+schema itself through `PRAGMA user_version`. From 0.5.0 it encodes the SiennaSchemas
+release as MAJOR*10000 + MINOR*100 + PATCH.
 
 ## [Unreleased]
 
-Built from SiennaSchemas v0.5.0.
+## [0.5.0] - 2026-11-16
+
+Built from SiennaSchemas v0.5.0. `PRAGMA user_version = 500`.
 
 ### Schema
 
-- `PRAGMA user_version = 15`.
+- `PRAGMA user_version = 500`. `user_version` now tracks the SiennaSchemas release in
+  `.schema-version`, as MAJOR*10000 + MINOR*100 + PATCH (v0.5.0 is 500). Before, it was a
+  counter that each schema change incremented: v0.4.0 had 7, and `main` reached 15 before
+  this release. `bump_version.py` sets the value from the schema tag, and a test makes sure
+  that the built database agrees with `.schema-version`. The SDKs refuse a database that has
+  a counter value.
 - Generated JSON defaults use RFC 8785 text, as the SDKs write it (`"fixed":0`, not `0.0`).
 - A regulated bus is a bus ID (SiennaSchemas #108). A nullable `remote_regulated_bus` column,
   a foreign key to `balancing_topologies`, replaces `regulated_bus_number` and
@@ -245,7 +253,8 @@ consumer. Every later schema or registry change bumps it from here.
 - 14 of 52 tables are not `STRICT`, so declared numeric columns on those tables accept
   text.
 
-[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Sienna-Platform/SiennaGridDB/compare/v0.1.0...v0.2.0

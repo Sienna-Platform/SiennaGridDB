@@ -3,8 +3,8 @@
 
   python3 .github/scripts/bump_version.py v0.2.0 v0.3.0
 
-Bumps pyproject.toml by the same level as the schema release, increments
-PRAGMA user_version, and adds the release heading to CHANGELOG.md. Prints the
+Bumps pyproject.toml by the same level as the schema release, sets
+PRAGMA user_version to the schema tag (MAJOR*10000 + MINOR*100 + PATCH), and adds the release heading to CHANGELOG.md. Prints the
 new version. GridDB mirrors the schema's bump LEVEL, not its number; the
 numbers drift apart once a hand-bumped GridDB-only fix ships.
 """
@@ -61,14 +61,13 @@ def main() -> int:
     new = bumped(current, old_tag, new_tag)
     substitute(pyproject, rf'^version = "{re.escape(current)}"$', f'version = "{new}"')
 
-    user_version = 0
-
-    def increment(match: re.Match) -> str:
-        nonlocal user_version
-        user_version = int(match.group(2)) + 1
-        return f"{match.group(1)}{user_version}"
-
-    substitute(REPO_ROOT / "schema" / "schema.sql", r"^(PRAGMA user_version = )(\d+)", increment)
+    major, minor, patch = parse_tag(new_tag)
+    user_version = major * 10000 + minor * 100 + patch
+    substitute(
+        REPO_ROOT / "schema" / "schema.sql",
+        r"^(PRAGMA user_version = )\d+",
+        lambda match: f"{match.group(1)}{user_version}",
+    )
 
     # Entries already under [Unreleased] land under the new heading.
     changelog = REPO_ROOT / "CHANGELOG.md"
