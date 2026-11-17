@@ -4,7 +4,7 @@ import PowerOpenAPIModels
 import SiennaGridDBTools
 import SQLite
 
-# PowerOpenAPIModels 0.2 is a re-export umbrella: the document container lives in
+# PowerOpenAPIModels 0.5 is a re-export umbrella: the document container lives in
 # PowerCoreOpenAPIModels, and the model supertype and encoder in InfrastructureCoreOpenAPIModels.
 const PowerCore = PowerOpenAPIModels.PowerCoreOpenAPIModels
 const InfraCore = PowerOpenAPIModels.InfrastructureCoreOpenAPIModels
