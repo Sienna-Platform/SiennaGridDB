@@ -39,7 +39,7 @@ def one(conn, sql, params=()):
 
 
 def test_an_entity_type_must_belong_to_its_table(fresh_db):
-    with pytest.raises(sqlite3.IntegrityError, match="must be a type of entities.entity_table"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"must be a type of entities.entity_table"):
         fresh_db.execute(
             "INSERT INTO entities (id, entity_table, entity_type) "
             "VALUES (40, 'thermal_generators', 'ACBus')"
@@ -55,7 +55,7 @@ def test_the_entity_type_vocabulary_is_fixed(fresh_db):
 
 def test_an_attribute_states_its_owners_type(filled, document):
     thermal = first_id(document, "ThermalStandard")
-    with pytest.raises(sqlite3.IntegrityError, match="attributes.TYPE must be the entity_type"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"attributes.TYPE must be the entity_type"):
         filled.execute(
             "INSERT INTO attributes (entity_id, TYPE, name, value) "
             "VALUES (?, 'TwoTerminalGenericHVDCLine', 'loss', '5')",
@@ -143,13 +143,13 @@ def test_replace_cannot_take_another_rows_name(filled, document):
     ]
     copied = ", ".join("9001" if c == "id" else c for c in columns)
     make_entity(filled, 9001, "thermal_generators", "ThermalStandard")
-    with pytest.raises(sqlite3.IntegrityError, match="thermal_generators.name is used by another row"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"thermal_generators.name is used by another row"):
         filled.execute(
             f"INSERT OR REPLACE INTO thermal_generators ({', '.join(columns)}) "
             f"SELECT {copied} FROM thermal_generators WHERE id = ?",
             (standard["id"],),
         )
-    with pytest.raises(sqlite3.IntegrityError, match="thermal_generators.name is used by another row"):
+    with pytest.raises(sqlite3.IntegrityError, match=r"thermal_generators.name is used by another row"):
         filled.execute(
             "UPDATE OR REPLACE thermal_generators SET name = ? WHERE id = ?",
             (multistart["name"], standard["id"]),

@@ -376,7 +376,7 @@ def test_an_invalid_attribute_id_raises_insert_error(conn, section, row, message
 
 
 def test_a_component_entry_that_is_not_a_list_raises_insert_error(conn):
-    with pytest.raises(griddb.InsertError, match="components.ACBus: not a list"):
+    with pytest.raises(griddb.InsertError, match=r"components.ACBus: not a list"):
         griddb.insert_document(conn, {"components": {"ACBus": {"id": 1}}})
 
 

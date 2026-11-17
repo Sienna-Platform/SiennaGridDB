@@ -266,7 +266,7 @@ def test_a_missing_sidecar_is_reported_by_path_and_strict_raises(conn, tmp_path)
     gone = str(tmp_path / "gone.h5")
     report = griddb.insert_document(conn, doc, time_series=gone)
     assert report.unsupported["time_series_values"] == 2
-    with pytest.raises(griddb.InsertError, match="gone.h5 not found"):
+    with pytest.raises(griddb.InsertError, match=r"gone.h5 not found"):
         griddb.insert_document(conn, doc, strict=True, time_series=gone)
 
 
@@ -279,7 +279,7 @@ def test_the_cli_reports_a_named_sidecar_that_is_missing(tmp_path, capsys):
     path.write_text(json.dumps(doc))
     assert main(["build", str(path), str(tmp_path / "out.sqlite")]) == 0
     assert json.loads(capsys.readouterr().out)["unsupported"]["time_series_values"] == 2
-    with pytest.raises(griddb.InsertError, match="gone.h5 not found"):
+    with pytest.raises(griddb.InsertError, match=r"gone.h5 not found"):
         main(["build", str(path), str(tmp_path / "strict.sqlite"), "--strict"])
 
 
